@@ -80,14 +80,12 @@ async function rpcView(code: string) {
 
 export async function loadRoom(code: string) { return rpcView(code); }
 
-export async function createOrLoadRoom(code: string, hostName: string, playerPin: string) {
+export async function createOrLoadRoom(code: string, hostName: string) {
   const normalizedCode = roomCodeValue(code);
   const normalizedHostName = textValue(hostName) || "Host";
-  const normalizedPlayerPin = textValue(playerPin);
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
-  if (!/^\d{4}$/.test(normalizedPlayerPin)) throw new Error("PIN ผู้เล่นต้องเป็นตัวเลข 4 หลัก");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("create_room", { p_code: normalizedCode, p_host_name: normalizedHostName, p_player_pin: normalizedPlayerPin });
+  const { data, error } = await client().rpc("create_room", { p_code: normalizedCode, p_host_name: normalizedHostName });
   if (error) {
     const existing = await rpcView(normalizedCode);
     if (existing) return existing;
@@ -96,15 +94,13 @@ export async function createOrLoadRoom(code: string, hostName: string, playerPin
   return asRoom(data);
 }
 
-export async function joinOrCreateDemo(code: string, name: string, pin: string) {
+export async function joinOrCreateDemo(code: string, name: string) {
   const normalizedCode = roomCodeValue(code);
   const normalizedName = textValue(name);
-  const normalizedPin = textValue(pin);
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   if (!normalizedName) throw new Error("กรุณาระบุชื่อผู้เล่น");
-  if (!/^\d{4}$/.test(normalizedPin)) throw new Error("PIN ผู้เล่นต้องเป็นตัวเลข 4 หลัก");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("join_room", { p_code: normalizedCode, p_name: normalizedName, p_pin: normalizedPin });
+  const { data, error } = await client().rpc("join_room", { p_code: normalizedCode, p_name: normalizedName });
   if (error) throw error;
   const room = asRoom(data);
   const requested = String((data as Json).playerId ?? (data as Json).player_id ?? "");

@@ -145,10 +145,8 @@ not implement it without an explicit rule update.
 - Players must be able to return on the same device automatically through a
   secure session.
 - Players must be able to reclaim their existing player identity on a new device
-  with room code, their name, and their PIN. Reclaiming MUST preserve role,
-  hearts, and game history.
-- PIN values MUST NOT appear in URLs, browser storage, logs, or database rows in
-  plain text.
+  with the room code and their name. Reclaiming MUST preserve role, hearts, and
+  game history.
 - A disconnected player becomes offline; they are never automatically removed,
   reset, or killed for disconnecting.
 

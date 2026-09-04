@@ -10,7 +10,7 @@ do $$ begin create type public.winning_team as enum ('city','killers'); exceptio
 create table if not exists public.rooms (
   id uuid primary key default gen_random_uuid(), code text unique not null check (code ~ '^[A-Z0-9]{6}$'),
   host_user_id uuid not null references auth.users(id), host_name text not null,
-  host_pin_hash text not null, player_pin_hash text not null,
+  player_pin_hash text not null,
   phase public.room_phase not null default 'lobby',
   attack_limit integer not null default 2 check (attack_limit in (2,3)),
   approved_attacks_in_window integer not null default 0 check (approved_attacks_in_window >= 0),
@@ -18,6 +18,8 @@ create table if not exists public.rooms (
   police_check_at timestamptz, pending_bomber_id uuid, winner public.winning_team,
   created_at timestamptz not null default now(), closed_at timestamptz
 );
+-- Existing installations may still have the retired Host PIN hash.
+alter table public.rooms drop column if exists host_pin_hash;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
   user_id uuid not null references auth.users(id), name text not null, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
@@ -159,11 +161,12 @@ begin
     'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id);
 end $$;
 
-create or replace function public.create_room(p_code text,p_host_name text,p_host_pin text,p_player_pin text) returns jsonb language plpgsql security definer set search_path=public as $$
+drop function if exists public.create_room(text,text,text,text);
+create or replace function public.create_room(p_code text,p_host_name text,p_player_pin text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms;
 begin
-  if auth.uid() is null or p_host_pin !~ '^[0-9]{4}$' or p_player_pin !~ '^[0-9]{4}$' then raise exception 'invalid credentials'; end if;
-  insert into public.rooms(code,host_user_id,host_name,host_pin_hash,player_pin_hash) values(upper(trim(p_code)),auth.uid(),trim(p_host_name),crypt(p_host_pin,gen_salt('bf')),crypt(p_player_pin,gen_salt('bf'))) returning * into r;
+  if auth.uid() is null or p_player_pin !~ '^[0-9]{4}$' then raise exception 'invalid credentials'; end if;
+  insert into public.rooms(code,host_user_id,host_name,player_pin_hash) values(upper(trim(p_code)),auth.uid(),trim(p_host_name),crypt(p_player_pin,gen_salt('bf'))) returning * into r;
   perform public.add_event(r.id,'system','ห้องถูกสร้างแล้ว รอผู้เล่นเข้าร่วม'); return public.get_room_view(r.code);
 end $$;
 
@@ -269,7 +272,7 @@ declare r public.rooms; me public.players; police public.player_secrets; target 
 create or replace function public.close_room(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;
 
-revoke execute on function public.create_room(text,text,text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) from public, anon;
-grant execute on function public.create_room(text,text,text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) to authenticated;
+revoke execute on function public.create_room(text,text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) from public, anon;
+grant execute on function public.create_room(text,text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) to authenticated;
 revoke execute on function public.start_due_accusations() from public, anon, authenticated;
 grant execute on function public.start_due_accusations() to service_role;

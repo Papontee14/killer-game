@@ -53,7 +53,7 @@ function Ended({ room, host = false, winner }: { room: RoomState | boolean; host
 }
 function Waiting({ room }: { room: RoomState }) { return <main className="lobby-waiting-screen"><div className="waiting-grid" /><Skull className="waiting-skull" size={56} /><div className="waiting-copy"><span className="section-kicker">KILLER // ROOM {room.code}</span><h1>KILLER</h1><p>รอ Host แจกบทบาทอยู่...</p><div className="waiting-status"><span /> WAITING FOR HOST</div></div></main>; }
 
-export function HostRoom({ code, name, pin, playerPin }: { code: string; name?: string; pin?: string; playerPin?: string }) {
+export function HostRoom({ code, name, playerPin }: { code: string; name?: string; playerPin?: string }) {
   const router = useRouter();
   const [room, , run, setRoom] = useRoom(code);
   const [error, setError] = useState("");
@@ -63,10 +63,10 @@ export function HostRoom({ code, name, pin, playerPin }: { code: string; name?: 
   const [accusationAt, setAccusationAtInput] = useState("");
   const hostCredentials = readRoomCredentials(`host:${code}`);
   const hostName = name || hostCredentials?.name || "Host";
-  const hostPin = pin || hostCredentials?.pin || "";
   const sharedPlayerPin = playerPin || hostCredentials?.playerPin || "";
-  useEffect(() => { if (!room && !leaving && hostPin && sharedPlayerPin) createOrLoadRoom(code, hostName, hostPin, sharedPlayerPin).then(setRoom).catch((e) => setError(e instanceof Error ? e.message : "เปิดห้องไม่ได้")); }, [room, code, hostName, hostPin, sharedPlayerPin, leaving, setRoom]);
+  useEffect(() => { if (!room && !leaving && sharedPlayerPin) createOrLoadRoom(code, hostName, sharedPlayerPin).then(setRoom).catch((e) => setError(e instanceof Error ? e.message : "เปิดห้องไม่ได้")); }, [room, code, hostName, sharedPlayerPin, leaving, setRoom]);
   if (!room) return <main className="loading-screen"><Hourglass /> {error || "กำลังเชื่อมต่อห้อง..."}</main>;
+  if (room.viewerRole !== "host") return <main className="loading-screen"><Shield size={24} /> เฉพาะผู้สร้างห้องเท่านั้นที่เข้าถึงหน้าควบคุมได้</main>;
   const act = (operation: Promise<RoomState>) => { setError(""); operation.catch((e) => setError(e instanceof Error ? e.message : "ดำเนินการไม่สำเร็จ")); };
   const pending = room.evidences.filter((evidence) => evidence.status === "pending");
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);

@@ -1,5 +1,5 @@
 /** Credentials live only in this tab's JS memory; they never enter a URL or browser storage. */
-type RoomCredentials = { name: string; pin: string; playerPin?: string };
+type RoomCredentials = { name: string; pin?: string; playerPin?: string };
 const sessions = new Map<string, RoomCredentials>();
 
 export function rememberRoomCredentials(key: string, credentials: RoomCredentials) {

@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Keep Next's generated cache outside the OneDrive `.next` reparse point.
-  distDir: ".next-killer",
+  // Keep the local build cache outside the OneDrive `.next` reparse point.
+  // Vercel's Next.js runtime expects the standard `.next` directory.
+  distDir: process.env.VERCEL ? ".next" : ".next-killer",
 };
 
 export default nextConfig;

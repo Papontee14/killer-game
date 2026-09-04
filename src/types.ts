@@ -48,6 +48,7 @@ export type RoomEvent = {
 };
 
 export type RoomState = {
+  viewerRole: "host" | "player";
   code: string;
   hostName: string;
   phase: RoomPhase;

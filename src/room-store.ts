@@ -4,6 +4,14 @@ import type { Evidence, PrivatePlayerState, RoomState, Role, Team } from "./type
 /** Supabase is the authority. This adapter intentionally has no localStorage fallback. */
 type Json = Record<string, unknown>;
 
+function textValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function roomCodeValue(value: unknown) {
+  return textValue(value).toUpperCase();
+}
+
 function client() {
   const supabase = getSupabaseBrowser();
   if (!supabase) throw new Error("ยังไม่ได้ตั้งค่า Supabase");
@@ -34,6 +42,7 @@ function asRoom(value: unknown): RoomState {
     status: item.status as Evidence["status"], decisionAt: item.decisionAt ? String(item.decisionAt) : item.decision_at ? String(item.decision_at) : undefined,
   }));
   return {
+    viewerRole: ((data.viewerRole ?? data.viewer_role) === "host" ? "host" : "player"),
     code: String(data.code), hostName: String(data.hostName ?? data.host_name ?? "Host"), phase: data.phase as RoomState["phase"],
     createdAt: String(data.createdAt ?? data.created_at), attackLimit: Number(data.attackLimit ?? data.attack_limit ?? 2),
     attacksThisHour: Number(data.attacksThisHour ?? data.approvedAttacksInWindow ?? data.approved_attacks_in_window ?? 0),
@@ -51,8 +60,10 @@ function asRoom(value: unknown): RoomState {
 }
 
 async function rpcView(code: string) {
+  const normalizedCode = roomCodeValue(code);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("get_room_view", { p_code: code.toUpperCase() });
+  const { data, error } = await client().rpc("get_room_view", { p_code: normalizedCode });
   if (error) throw error;
   if (!data) return null;
   const room = asRoom(data);
@@ -69,11 +80,16 @@ async function rpcView(code: string) {
 
 export async function loadRoom(code: string) { return rpcView(code); }
 
-export async function createOrLoadRoom(code: string, hostName: string, hostPin: string, playerPin: string) {
+export async function createOrLoadRoom(code: string, hostName: string, playerPin: string) {
+  const normalizedCode = roomCodeValue(code);
+  const normalizedHostName = textValue(hostName) || "Host";
+  const normalizedPlayerPin = textValue(playerPin);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
+  if (!/^\d{4}$/.test(normalizedPlayerPin)) throw new Error("PIN ผู้เล่นต้องเป็นตัวเลข 4 หลัก");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("create_room", { p_code: code.toUpperCase(), p_host_name: hostName.trim(), p_host_pin: hostPin, p_player_pin: playerPin });
+  const { data, error } = await client().rpc("create_room", { p_code: normalizedCode, p_host_name: normalizedHostName, p_player_pin: normalizedPlayerPin });
   if (error) {
-    const existing = await rpcView(code);
+    const existing = await rpcView(normalizedCode);
     if (existing) return existing;
     throw error;
   }
@@ -81,19 +97,27 @@ export async function createOrLoadRoom(code: string, hostName: string, hostPin: 
 }
 
 export async function joinOrCreateDemo(code: string, name: string, pin: string) {
+  const normalizedCode = roomCodeValue(code);
+  const normalizedName = textValue(name);
+  const normalizedPin = textValue(pin);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
+  if (!normalizedName) throw new Error("กรุณาระบุชื่อผู้เล่น");
+  if (!/^\d{4}$/.test(normalizedPin)) throw new Error("PIN ผู้เล่นต้องเป็นตัวเลข 4 หลัก");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("join_room", { p_code: code.toUpperCase(), p_name: name.trim(), p_pin: pin });
+  const { data, error } = await client().rpc("join_room", { p_code: normalizedCode, p_name: normalizedName, p_pin: normalizedPin });
   if (error) throw error;
   const room = asRoom(data);
   const requested = String((data as Json).playerId ?? (data as Json).player_id ?? "");
-  const player = room.players.find((item) => item.id === requested) ?? room.players.find((item) => item.name.toLowerCase() === name.trim().toLowerCase());
+  const player = room.players.find((item) => item.id === requested) ?? room.players.find((item) => item.name.toLowerCase() === normalizedName.toLowerCase());
   if (!player) throw new Error("เข้าห้องไม่สำเร็จ");
   return { room, playerId: player.id };
 }
 
 async function mutate(code: string, fn: string, args: Json = {}) {
+  const normalizedCode = roomCodeValue(code);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   await ensureAnonymousSession();
-  const { error } = await client().rpc(fn, { p_code: code.toUpperCase(), ...args });
+  const { error } = await client().rpc(fn, { p_code: normalizedCode, ...args });
   if (error) throw error;
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
@@ -108,8 +132,10 @@ export function resolvePoliceCheck(code: string, targetId: string) { return muta
 export function reporterAbility(code: string, targetId: string) { return mutate(code, "use_reporter", { p_target_id: targetId }); }
 export function setAccusationAt(code: string, accusationAt: string) { return mutate(code, "set_accusation_at", { p_at: accusationAt }); }
 export async function heartbeat(code: string) {
+  const normalizedCode = roomCodeValue(code);
+  if (!normalizedCode) return;
   await ensureAnonymousSession();
-  const { error } = await client().rpc("heartbeat", { p_code: code.toUpperCase() });
+  const { error } = await client().rpc("heartbeat", { p_code: normalizedCode });
   if (error) throw error;
 }
 
@@ -129,7 +155,7 @@ export async function submitEvidence(code: string, targetId: string, imageData: 
   const storagePath = `${userId}/${crypto.randomUUID()}.jpg`;
   const uploaded = await supabase.storage.from("evidence").upload(storagePath, dataUrlToBlob(imageData), { contentType: "image/jpeg", upsert: false });
   if (uploaded.error) throw uploaded.error;
-  const { error } = await supabase.rpc("submit_evidence", { p_code: code.toUpperCase(), p_target_id: targetId, p_storage_path: storagePath, p_captured_at: capturedAt });
+  const { error } = await supabase.rpc("submit_evidence", { p_code: roomCodeValue(code), p_target_id: targetId, p_storage_path: storagePath, p_captured_at: capturedAt });
   if (error) { await supabase.storage.from("evidence").remove([storagePath]); throw error; }
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");

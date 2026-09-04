@@ -242,7 +242,12 @@ declare r public.rooms; me public.players; s public.player_secrets; target publi
 begin
   select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into s from public.player_secrets where player_id=me.id;
   select * into target from public.players where id=p_target_id and room_id=r.id;
-  if not found or r.phase<>'active' or not s.is_active_killer or me.health='dead' or target.health='dead' or target.id=me.id or p_storage_path not like auth.uid()::text||'/%' or p_captured_at > now() or p_captured_at < now()-interval '2 minutes' then raise exception 'evidence is not allowed or is stale'; end if;
+  if not found or r.phase<>'active' or not s.is_active_killer or me.health='dead' or target.health='dead' or target.id=me.id or nullif(trim(p_storage_path),'') is null or p_storage_path not like auth.uid()::text||'/%' or not exists (
+    select 1 from storage.objects o
+    where o.bucket_id='evidence' and o.name=p_storage_path
+      and coalesce(o.metadata->>'mimetype','') like 'image/%'
+      and coalesce(o.metadata->>'size','') ~ '^[1-9][0-9]*$'
+  ) or p_captured_at > now() or p_captured_at < now()-interval '2 minutes' then raise exception 'evidence is not allowed, missing, or stale'; end if;
   insert into public.evidence(room_id,killer_id,target_id,storage_path,captured_at) values(r.id,me.id,target.id,p_storage_path,p_captured_at);
   perform public.add_event(r.id,'warning','มีหลักฐานการโจมตีใหม่รอการตรวจ'); return public.get_room_view(r.code);
 end $$;

@@ -143,21 +143,21 @@ export async function heartbeat(code: string) {
   if (error) throw error;
 }
 
-function dataUrlToBlob(dataUrl: string) {
-  const match = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
-  if (!match) throw new Error("รูปหลักฐานไม่ถูกต้อง");
-  const bytes = Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0));
-  return new Blob([bytes], { type: match[1] });
+function imageExtension(image: Blob) {
+  const subtype = image.type.toLowerCase().split("/")[1];
+  const extensions: Record<string, string> = { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp", gif: "gif", heic: "heic", heif: "heif" };
+  return extensions[subtype] ?? "img";
 }
 
-export async function submitEvidence(code: string, targetId: string, imageData: string, capturedAt: string) {
+export async function submitEvidence(code: string, targetId: string, image: File | Blob, capturedAt: string) {
+  if (!targetId || !capturedAt || !image.type.startsWith("image/") || image.size <= 0) throw new Error("กรุณาถ่ายรูปหลักฐานก่อนส่ง");
   await ensureAnonymousSession();
   const supabase = client();
   const session = await supabase.auth.getSession();
   const userId = session.data.session?.user.id;
   if (!userId) throw new Error("เซสชันหมดอายุ กรุณาเข้าใหม่");
-  const storagePath = `${userId}/${crypto.randomUUID()}.jpg`;
-  const uploaded = await supabase.storage.from("evidence").upload(storagePath, dataUrlToBlob(imageData), { contentType: "image/jpeg", upsert: false });
+  const storagePath = `${userId}/${crypto.randomUUID()}.${imageExtension(image)}`;
+  const uploaded = await supabase.storage.from("evidence").upload(storagePath, image, { contentType: image.type, upsert: false });
   if (uploaded.error) throw uploaded.error;
   const { error } = await supabase.rpc("submit_evidence", { p_code: roomCodeValue(code), p_target_id: targetId, p_storage_path: storagePath, p_captured_at: capturedAt });
   if (error) { await supabase.storage.from("evidence").remove([storagePath]); throw error; }

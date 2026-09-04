@@ -3,14 +3,17 @@ export type RoomPhase = "lobby" | "active" | "police-check" | "bomb-resolution" 
 export type HealthState = "alive" | "critical" | "dead";
 export type EvidenceStatus = "pending" | "approved" | "rejected";
 export type WinningTeam = "city" | "killers" | null;
+export type Team = "city" | "killers";
 
 export type PrivatePlayerState = {
   playerId: string;
-  role: Role;
+  initialRole: Role;
+  currentRole: Role;
+  team: Team;
+  isActiveKiller: boolean;
   hearts: number;
   maxHearts: number;
   hasUsedAbility: boolean;
-  isKillerSide: boolean;
 };
 
 export type Player = {
@@ -27,7 +30,10 @@ export type Evidence = {
   id: string;
   killerId: string;
   targetId: string;
-  imageData: string;
+  storagePath: string;
+  /** Local-only preview; never persisted by the repository. */
+  imageData?: string;
+  capturedAt: string;
   createdAt: string;
   status: EvidenceStatus;
   decisionAt?: string;
@@ -44,13 +50,11 @@ export type RoomEvent = {
 export type RoomState = {
   code: string;
   hostName: string;
-  hostPin: string;
-  playerPin: string;
   phase: RoomPhase;
   createdAt: string;
   attackLimit: number;
   attacksThisHour: number;
-  attackHour: number;
+  quotaWindowStart: string;
   policeCheckAt?: string;
   players: Player[];
   privateStates: Record<string, PrivatePlayerState>;
@@ -58,6 +62,7 @@ export type RoomState = {
   events: RoomEvent[];
   winner: WinningTeam;
   bombTargets: string[];
+  pendingBomberId?: string;
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

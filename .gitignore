@@ -3,6 +3,9 @@ node_modules
 .next-backup
 .next-build-backup
 .next-verify*
+.next-stale*
+.next-final
+.next-killer
 out
 *.tsbuildinfo
 .env*.local

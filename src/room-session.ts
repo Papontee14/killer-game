@@ -1,5 +1,5 @@
-/** The display name lives only in this tab's JS memory; it never enters a URL or browser storage. */
-type RoomCredentials = { name: string };
+/** Credentials stay out of URLs and persistent browser storage. Supabase owns the durable session. */
+type RoomCredentials = { name: string; reclaimToken?: string };
 const sessions = new Map<string, RoomCredentials>();
 
 export function rememberRoomCredentials(key: string, credentials: RoomCredentials) {

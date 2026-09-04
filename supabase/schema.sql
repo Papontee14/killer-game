@@ -26,7 +26,7 @@ alter table public.rooms drop column if exists host_pin_hash;
 alter table public.rooms drop column if exists player_pin_hash;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
-  user_id uuid not null references auth.users(id), name text not null, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
+  user_id uuid not null references auth.users(id), name text not null, reclaim_token_hash text, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
   health public.health_state not null default 'alive', joined_at timestamptz not null default now(), unique(room_id, user_id)
 );
 create unique index if not exists players_room_name_lower on public.players(room_id, lower(name));
@@ -59,7 +59,8 @@ alter table public.rooms
   add column if not exists pending_bomber_id uuid,
   add column if not exists closed_at timestamptz;
 alter table public.players
-  add column if not exists last_seen_at timestamptz not null default now();
+  add column if not exists last_seen_at timestamptz not null default now(),
+  add column if not exists reclaim_token_hash text;
 alter table public.player_secrets
   add column if not exists initial_role text not null default 'villager',
   add column if not exists role_current text not null default 'villager',
@@ -170,31 +171,43 @@ drop function if exists public.create_room(text,text,text);
 create or replace function public.create_room(p_code text,p_host_name text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms;
 begin
-  if auth.uid() is null then raise exception 'invalid credentials'; end if;
+  if auth.uid() is null or trim(p_host_name)='' or char_length(trim(p_host_name))>24 then raise exception 'invalid credentials or host name'; end if;
   insert into public.rooms(code,host_user_id,host_name) values(upper(trim(p_code)),auth.uid(),trim(p_host_name)) returning * into r;
   perform public.add_event(r.id,'system','ห้องถูกสร้างแล้ว รอผู้เล่นเข้าร่วม'); return public.get_room_view(r.code);
 end $$;
 
+drop function if exists public.join_room(text,text);
 drop function if exists public.join_room(text,text,text);
-create or replace function public.join_room(p_code text,p_name text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; p public.players;
+create or replace function public.join_room(p_code text,p_name text,p_reclaim_token text default null) returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.rooms; p public.players; issued_token text;
 begin
-  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null;
+  if auth.uid() is null or trim(p_name)='' or char_length(trim(p_name))>24 then raise exception 'invalid credentials or player name'; end if;
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
   if not found then raise exception 'invalid room'; end if;
   select * into p from public.players where room_id=r.id and lower(name)=lower(trim(p_name)) limit 1;
-  if found then update public.players set user_id=auth.uid(),is_online=true,last_seen_at=now() where id=p.id returning * into p;
+  if found and p.user_id=auth.uid() then
+    if p.reclaim_token_hash is null then
+      issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
+      update public.players set reclaim_token_hash=md5(issued_token),is_online=true,last_seen_at=now() where id=p.id returning * into p;
+    else update public.players set is_online=true,last_seen_at=now() where id=p.id returning * into p; end if;
+  elsif found and p.reclaim_token_hash is not null and p.reclaim_token_hash=md5(trim(coalesce(p_reclaim_token,''))) then
+    update public.players set user_id=auth.uid(),is_online=true,last_seen_at=now() where id=p.id returning * into p;
+  elsif found then raise exception 'player name is already in use; enter reclaim token';
   elsif r.phase <> 'lobby' then raise exception 'game already started';
-  else insert into public.players(room_id,user_id,name) values(r.id,auth.uid(),trim(p_name)) returning * into p; end if;
-  return jsonb_build_object('playerId',p.id) || public.get_room_view(r.code);
+  else
+    issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
+    insert into public.players(room_id,user_id,name,reclaim_token_hash) values(r.id,auth.uid(),trim(p_name),md5(issued_token)) returning * into p;
+  end if;
+  return jsonb_build_object('playerId',p.id,'reclaimToken',issued_token) || public.get_room_view(r.code);
 end $$;
 
 create or replace function public.start_game(p_code text,p_role_counts jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; p public.players; roles text[] := '{}'; item record; idx integer := 1; role text; mh integer;
 begin
-  select * into r from public.rooms where code=upper(trim(p_code)) for update;
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
   if not found or r.host_user_id<>auth.uid() or r.phase<>'lobby' then raise exception 'not allowed'; end if;
   for item in select key,value::int amount from jsonb_each_text(p_role_counts) loop
-    if item.key not in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo','villager') or item.amount<0 then raise exception 'invalid roles'; end if;
+    if item.key not in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo','villager') or item.amount<0 or (item.key in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo') and item.amount>1) or (item.key='villager' and item.amount>20) then raise exception 'invalid roles'; end if;
     for idx in 1..item.amount loop roles := array_append(roles,item.key); end loop;
   end loop;
   if array_length(roles,1) <> (select count(*) from public.players where room_id=r.id) or (select count(*) from unnest(roles) x where x='killer')<>1 or (select count(*) from unnest(roles) x where x='police')<1 then raise exception 'invalid player count or required roles'; end if;
@@ -212,21 +225,21 @@ end $$;
 create or replace function public.submit_evidence(p_code text,p_target_id uuid,p_storage_path text,p_captured_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; s public.player_secrets; target public.players;
 begin
-  select * into r from public.rooms where code=upper(trim(p_code)) for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into s from public.player_secrets where player_id=me.id;
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into s from public.player_secrets where player_id=me.id;
   select * into target from public.players where id=p_target_id and room_id=r.id;
-  if not found or r.phase<>'active' or not s.is_active_killer or me.health='dead' or target.health='dead' or p_storage_path not like auth.uid()::text||'/%' or p_captured_at > now() or p_captured_at < now()-interval '2 minutes' then raise exception 'evidence is not allowed or is stale'; end if;
+  if not found or r.phase<>'active' or not s.is_active_killer or me.health='dead' or target.health='dead' or target.id=me.id or p_storage_path not like auth.uid()::text||'/%' or p_captured_at > now() or p_captured_at < now()-interval '2 minutes' then raise exception 'evidence is not allowed or is stale'; end if;
   insert into public.evidence(room_id,killer_id,target_id,storage_path,captured_at) values(r.id,me.id,target.id,p_storage_path,p_captured_at);
   perform public.add_event(r.id,'warning','มีหลักฐานการโจมตีใหม่รอการตรวจ'); return public.get_room_view(r.code);
 end $$;
 
 create or replace function public.reject_evidence(p_code text,p_evidence_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; e public.evidence;
-begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; select * into e from public.evidence where id=p_evidence_id and room_id=r.id for update; if not found or e.status<>'pending' then raise exception 'not allowed'; end if; update public.evidence set status='rejected',decision_at=now() where id=e.id; perform public.add_event(r.id,'warning','หลักฐานถูกปฏิเสธ'); return public.get_room_view(r.code); end $$;
+begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; select * into e from public.evidence where id=p_evidence_id and room_id=r.id for update; if not found or e.status<>'pending' then raise exception 'not allowed'; end if; update public.evidence set status='rejected',decision_at=now() where id=e.id; perform public.add_event(r.id,'warning','หลักฐานถูกปฏิเสธ'); return public.get_room_view(r.code); end $$;
 
 create or replace function public.approve_evidence(p_code text,p_evidence_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; e public.evidence; k public.player_secrets; t public.player_secrets; target public.players; new_hearts integer; window_start timestamptz; detective public.player_secrets;
 begin
-  select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; if not found then raise exception 'not allowed'; end if;
+  select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found then raise exception 'not allowed'; end if;
   select * into e from public.evidence where id=p_evidence_id and room_id=r.id for update; if not found or e.status<>'pending' or r.phase<>'active' then raise exception 'evidence is no longer pending'; end if;
   if e.captured_at > now() or e.captured_at < now()-interval '2 minutes' then raise exception 'evidence expired'; end if;
   select s.* into k from public.player_secrets s where s.player_id=e.killer_id and s.is_active_killer for update; if k.player_id is null then raise exception 'killer is not active'; end if; select * into t from public.player_secrets where player_id=e.target_id for update; select * into target from public.players where id=e.target_id and room_id=r.id for update;
@@ -238,8 +251,9 @@ begin
   new_hearts := greatest(0,t.hearts-1); update public.evidence set status='approved',decision_at=now() where id=e.id;
   update public.rooms set approved_attacks_in_window=r.approved_attacks_in_window+1,quota_window_start=r.quota_window_start where id=r.id;
   if t.initial_role='killer-wife' and new_hearts=0 then
-    update public.player_secrets set role_current='killer',team='killers',is_active_killer=true,hearts=0,max_hearts=0 where player_id=t.player_id; update public.rooms set attack_limit=3 where id=r.id;
+    update public.player_secrets set role_current='killer',team='killers',is_active_killer=true,hearts=0,max_hearts=0 where player_id=t.player_id; update public.players set health='alive' where id=target.id; update public.rooms set attack_limit=3 where id=r.id;
     perform public.add_event(r.id,'ability','Killer has eliminated Killer''s Wife. There are now two Killers.');
+    perform public.add_event(r.id,'attack','target is still alive',e.killer_id);
   else
     update public.player_secrets set hearts=new_hearts where player_id=t.player_id; update public.players set health=case when new_hearts=0 then 'dead'::health_state when new_hearts=1 then 'critical'::health_state else 'alive'::health_state end where id=target.id;
     perform public.add_event(r.id,'warning',case when new_hearts=0 then target.name||' ถูกกำจัด' else 'คุณถูกโจมตีและเสียหัวใจ 1 ดวง' end,case when new_hearts=0 then null else target.id end);
@@ -253,7 +267,7 @@ end $$;
 create or replace function public.resolve_bomb(p_code text,p_target_ids uuid[]) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; target_id uuid; p public.players; s public.player_secrets; remaining boolean; police_without_detective boolean := false; detective public.player_secrets;
 begin
-  select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; if not found or r.phase<>'bomb-resolution' or coalesce(array_length(p_target_ids,1),0)>2 then raise exception 'not allowed'; end if;
+  select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase<>'bomb-resolution' or coalesce(array_length(p_target_ids,1),0)>2 then raise exception 'not allowed'; end if;
   foreach target_id in array coalesce(p_target_ids,'{}') loop select * into p from public.players where public.players.id=target_id and room_id=r.id for update; if not found or p.health='dead' then raise exception 'bomb target must be alive'; end if; select * into s from public.player_secrets where player_id=p.id for update; update public.player_secrets set hearts=0 where player_id=p.id; update public.players set health='dead' where public.players.id=p.id; perform public.add_event(r.id,'bomb',p.name||' ถูกกำจัดจากระเบิด'); if s.role_current='police' then select ds.* into detective from public.player_secrets ds join public.players dp on dp.id=ds.player_id where dp.room_id=r.id and ds.role_current='detective' and dp.health<>'dead' limit 1; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else police_without_detective := true; end if; end if; end loop;
   if police_without_detective then update public.rooms set phase='ended',winner='killers' where id=r.id; perform public.add_event(r.id,'winner','ฝ่าย Killer ชนะ'); else select exists(select 1 from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.is_active_killer and p.health<>'dead') into remaining; if not remaining then update public.rooms set phase='ended',winner='city' where id=r.id; perform public.add_event(r.id,'winner','ฝ่ายเมืองชนะ'); else update public.rooms set phase='active',pending_bomber_id=null where id=r.id; end if; end if;
   return public.get_room_view(r.code);
@@ -261,25 +275,25 @@ end $$;
 
 create or replace function public.use_reporter(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; target public.players; reporter public.player_secrets; inspected public.player_secrets;
-begin select * into r from public.rooms where code=upper(trim(p_code)) for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into reporter from public.player_secrets where player_id=me.id for update; select * into target from public.players where id=p_target_id and room_id=r.id; select * into inspected from public.player_secrets where player_id=target.id;
+begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into reporter from public.player_secrets where player_id=me.id for update; select * into target from public.players where id=p_target_id and room_id=r.id; select * into inspected from public.player_secrets where player_id=target.id;
   if not found or r.phase<>'active' or me.health='dead' or reporter.role_current<>'reporter' or reporter.has_used_ability or target.id=me.id or target.health='dead' then raise exception 'reporter ability unavailable'; end if;
   update public.player_secrets set has_used_ability=true where player_id=me.id; perform public.add_event(r.id,'ability','Reporter has used an ability.'); perform public.add_event(r.id,'ability','คุณถูกตรวจบทบาท — บทบาทเริ่มต้นของเป้าหมายคือ '||inspected.initial_role,me.id); perform public.add_event(r.id,'ability','คุณถูกตรวจบทบาท',target.id); return public.get_room_view(r.code);
 end $$;
 
-create or replace function public.heartbeat(p_code text) returns void language sql security definer set search_path=public as $$ update public.players set is_online=true,last_seen_at=now() where room_id=(select id from public.rooms where code=upper(trim(p_code))) and user_id=auth.uid() $$;
+create or replace function public.heartbeat(p_code text) returns void language sql security definer set search_path=public as $$ update public.players set is_online=true,last_seen_at=now() where room_id=(select id from public.rooms where code=upper(trim(p_code)) and closed_at is null) and user_id=auth.uid() $$;
 create or replace function public.set_accusation_at(p_code text,p_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; if not found or r.phase not in ('lobby','active') then raise exception 'not allowed'; end if; update public.rooms set police_check_at=p_at where id=r.id; return public.get_room_view(r.code); end $$;
+declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active') then raise exception 'not allowed'; end if; update public.rooms set police_check_at=p_at where id=r.id; return public.get_room_view(r.code); end $$;
 create or replace function public.start_due_accusations() returns integer language plpgsql security definer set search_path=public as $$
 declare changed integer; begin if auth.role()<>'service_role' then raise exception 'cron only'; end if; with due as (update public.rooms set phase='police-check' where phase='active' and police_check_at is not null and police_check_at<=now() returning id) insert into public.room_events(room_id,type,message) select id,'warning','ถึงเวลาตำรวจชี้ตัวแล้ว' from due; get diagnostics changed = row_count; return changed; end $$;
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
-  if not found or r.phase<>'police-check' or me.health='dead' or police.role_current<>'police' or target_player.health='dead' then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city' else 'killers' end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
+declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
+  if not found or r.phase<>'police-check' or me.health='dead' or police.role_current<>'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city' else 'killers' end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
 
 create or replace function public.close_room(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;
+declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;
 
-revoke execute on function public.create_room(text,text),public.join_room(text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) from public, anon;
-grant execute on function public.create_room(text,text),public.join_room(text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) to authenticated;
+revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) from public, anon;
+grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) to authenticated;
 revoke execute on function public.start_due_accusations() from public, anon, authenticated;
 grant execute on function public.start_due_accusations() to service_role;
 

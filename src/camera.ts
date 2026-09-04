@@ -1,4 +1,4 @@
-/** Capture an actual live frame. File-input capture remains the mobile fallback. */
+/** Capture an actual live frame; evidence submissions do not accept gallery files. */
 export async function captureLivePhoto() {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("อุปกรณ์นี้ไม่รองรับกล้อง");
   const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });

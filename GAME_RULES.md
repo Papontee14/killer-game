@@ -145,8 +145,9 @@ not implement it without an explicit rule update.
 - Players must be able to return on the same device automatically through a
   secure session.
 - Players must be able to reclaim their existing player identity on a new device
-  with the room code and their name. Reclaiming MUST preserve role, hearts, and
-  game history.
+  with the room code, their name, and their one-time-issued reclaim token.
+  Reclaiming MUST preserve role, hearts, and game history without allowing a
+  different player who only knows the name to take over the identity.
 - A disconnected player becomes offline; they are never automatically removed,
   reset, or killed for disconnecting.
 

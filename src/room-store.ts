@@ -94,19 +94,27 @@ export async function createOrLoadRoom(code: string, hostName: string) {
   return asRoom(data);
 }
 
-export async function joinOrCreateDemo(code: string, name: string) {
+export async function joinOrCreateDemo(code: string, name: string, reclaimToken?: string) {
   const normalizedCode = roomCodeValue(code);
   const normalizedName = textValue(name);
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   if (!normalizedName) throw new Error("กรุณาระบุชื่อผู้เล่น");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("join_room", { p_code: normalizedCode, p_name: normalizedName });
+  const { data, error } = await client().rpc("join_room", {
+    p_code: normalizedCode,
+    p_name: normalizedName,
+    p_reclaim_token: textValue(reclaimToken) || null,
+  });
   if (error) throw error;
   const room = asRoom(data);
   const requested = String((data as Json).playerId ?? (data as Json).player_id ?? "");
   const player = room.players.find((item) => item.id === requested) ?? room.players.find((item) => item.name.toLowerCase() === normalizedName.toLowerCase());
   if (!player) throw new Error("เข้าห้องไม่สำเร็จ");
-  return { room, playerId: player.id };
+  return {
+    room,
+    playerId: player.id,
+    reclaimToken: textValue((data as Json).reclaimToken ?? (data as Json).reclaim_token) || undefined,
+  };
 }
 
 async function mutate(code: string, fn: string, args: Json = {}) {

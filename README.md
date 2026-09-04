@@ -13,6 +13,6 @@ npm run dev
 
 ## Supabase production
 
-ตั้งค่า `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` และ `CRON_SECRET` ให้ครบใน Vercel Production แล้วรัน [supabase/schema.sql](./supabase/schema.sql) ใน Supabase SQL Editor รูปถูกอัปโหลดไป private Storage และ Host ได้ signed URL อายุสั้นเท่านั้น ทุก mutation เรียก security-definer RPC. `vercel.json` ตั้ง cron ให้เรียก `/api/cron/accusation` ทุก 1 นาที; Vercel จะส่ง `Authorization: Bearer <CRON_SECRET>` ให้เมื่อกำหนด `CRON_SECRET` ไว้ใน Project Environment Variables.
+ตั้งค่า `NEXT_PUBLIC_SUPABASE_URL` และ `NEXT_PUBLIC_SUPABASE_ANON_KEY` ให้ครบใน Vercel Production แล้วรัน [supabase/schema.sql](./supabase/schema.sql) ใน Supabase SQL Editor รูปถูกอัปโหลดไป private Storage และ Host ได้ signed URL อายุสั้นเท่านั้น ทุก mutation เรียก security-definer RPC. เมื่อถึงเวลาชี้ตัว ระบบจะเปลี่ยนห้องจาก `active` เป็น `police-check` ตอนที่สมาชิกห้องโหลดสถานะจาก Supabase โดยใช้เวลาจากฐานข้อมูล จึงไม่ต้องใช้ Vercel Cron หรือ service-role key.
 
 โมเดลข้อมูลแยก `rooms`, `players`, `player_secrets`, `evidence` และ `room_events` พร้อม RLS ไม่ให้ผู้เล่นอ่านบทบาทหรือหัวใจของคนอื่น

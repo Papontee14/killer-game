@@ -66,6 +66,10 @@ alter table public.player_secrets
   add column if not exists role_current text not null default 'villager',
   add column if not exists team text not null default 'city' check (team in ('city','killers')),
   add column if not exists is_active_killer boolean not null default false;
+-- Older deployments had a required `role` column. The game now stores the
+-- initial and transformed roles separately; leaving the retired column in
+-- place makes start_game fail because its insert quite correctly omits it.
+alter table public.player_secrets drop column if exists role;
 alter table public.evidence
   add column if not exists captured_at timestamptz not null default now();
 
@@ -139,12 +143,23 @@ language sql security definer set search_path=public as $$ insert into public.ro
 revoke execute on function public.add_event(uuid,text,text,uuid), public.room_for_code(text) from public, anon, authenticated;
 
 create or replace function public.get_room_view(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb;
+declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb; changed_room_id uuid;
 begin
   select * into r from public.rooms where code=upper(trim(p_code)) limit 1;
   if not found then return null; end if;
   is_host := r.host_user_id=auth.uid();
   if not is_host then select * into me from public.players p where p.room_id=r.id and p.user_id=auth.uid() limit 1; if not found then return null; end if; end if;
+  if r.phase='active' and r.police_check_at is not null and r.police_check_at<=now() then
+    update public.rooms set phase='police-check'
+      where id=r.id and phase='active' and police_check_at is not null and police_check_at<=now()
+      returning id into changed_room_id;
+    if changed_room_id is not null then
+      r.phase := 'police-check'::public.room_phase;
+      perform public.add_event(r.id,'warning','ถึงเวลาตำรวจชี้ตัวแล้ว');
+    else
+      select * into r from public.rooms where id=r.id;
+    end if;
+  end if;
   viewer_role := case when is_host then 'host' else 'player' end;
   select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'name',p.name,'joinedAt',p.joined_at,'isOnline',p.is_online and p.last_seen_at > now()-interval '90 seconds','health',p.health,
     'heartsVisibleToHost',case when is_host then coalesce(s.hearts,0) else 0 end,'maxHearts',case when is_host then coalesce(s.max_hearts,0) else 0 end) order by p.joined_at), '[]'::jsonb)
@@ -283,8 +298,7 @@ end $$;
 create or replace function public.heartbeat(p_code text) returns void language sql security definer set search_path=public as $$ update public.players set is_online=true,last_seen_at=now() where room_id=(select id from public.rooms where code=upper(trim(p_code)) and closed_at is null) and user_id=auth.uid() $$;
 create or replace function public.set_accusation_at(p_code text,p_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active') then raise exception 'not allowed'; end if; update public.rooms set police_check_at=p_at where id=r.id; return public.get_room_view(r.code); end $$;
-create or replace function public.start_due_accusations() returns integer language plpgsql security definer set search_path=public as $$
-declare changed integer; begin if auth.role()<>'service_role' then raise exception 'cron only'; end if; with due as (update public.rooms set phase='police-check' where phase='active' and police_check_at is not null and police_check_at<=now() returning id) insert into public.room_events(room_id,type,message) select id,'warning','ถึงเวลาตำรวจชี้ตัวแล้ว' from due; get diagnostics changed = row_count; return changed; end $$;
+drop function if exists public.start_due_accusations();
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
   if not found or r.phase<>'police-check' or me.health='dead' or police.role_current<>'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city' else 'killers' end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
@@ -294,8 +308,6 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 
 revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) from public, anon;
 grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.close_room(text) to authenticated;
-revoke execute on function public.start_due_accusations() from public, anon, authenticated;
-grant execute on function public.start_due_accusations() to service_role;
 
 -- Make newly created RPC functions available to the REST API immediately.
 notify pgrst, 'reload schema';

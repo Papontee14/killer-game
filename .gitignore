@@ -1,0 +1,10 @@
+node_modules
+.next
+.next-backup
+.next-build-backup
+.next-verify*
+out
+*.tsbuildinfo
+.env*.local
+*.log
+.DS_Store

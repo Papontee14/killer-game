@@ -1,0 +1,10 @@
+{
+  "name": "Killer - เกมล่าบทบาทลับ",
+  "short_name": "Killer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
+  "lang": "th",
+  "orientation": "portrait"
+}

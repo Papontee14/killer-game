@@ -62,9 +62,9 @@ export function LandingGame() {
               <Brand />
             </h1>
             <h2>
-              ไว้ใจใคร…
+              ทริปบางแสนนี้…
               <br />
-              <span>ได้จริงหรือเปล่า?</span>
+              <span>พี่ไว้ใจใครได้บ้าง?</span>
             </h2>
             <p>
               เมื่อคนใกล้ตัวอาจเป็น Killer

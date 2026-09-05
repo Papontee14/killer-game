@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { presentEvent } from "../src/event-presentation.ts";
 const labels = {
   killer: "Killer",
-  "killer-wife": "เมีย Killer",
-  police: "ตำรวจ",
-  reporter: "นักข่าว",
+  "killer-wife": "Killer's Wife",
+  police: "Police",
+  reporter: "Reporter",
   bomber: "Bomber",
-  detective: "นักสืบ",
-  athlete: "นักกีฬา",
-  sumo: "ซูโม่",
-  villager: "ชาวบ้าน",
+  detective: "Detective",
+  athlete: "Athlete",
+  sumo: "Sumo",
+  villager: "Villager",
 };
 const cases = [
   [
@@ -80,7 +80,7 @@ const cases = [
   [
     "ability",
     "บทบาทเริ่มต้นของ นนท์ คือ killer-wife",
-    "บทบาทเริ่มต้นของนนท์คือ เมีย Killer",
+    "บทบาทเริ่มต้นของนนท์คือ Killer's Wife",
     "info",
     "search",
   ],
@@ -161,7 +161,7 @@ test("role translation preserves names including embedded delimiters and HTML", 
   };
   assert.equal(
     presentEvent(event, labels).message,
-    `บทบาทเริ่มต้นของ${name}คือ นักสืบ`,
+    `บทบาทเริ่มต้นของ${name}คือ Detective`,
   );
   assert.equal(event.message, `บทบาทเริ่มต้นของ ${name} คือ detective`);
 });

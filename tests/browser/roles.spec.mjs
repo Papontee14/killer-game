@@ -109,7 +109,7 @@ async function openPlayer(page, role, displayName = role, reclaimToken = "") {
   });
   if (role === "host") {
     await page.goto("/room/ABCDEF/host");
-    await expect(page.getByText("ภาพรวมภารกิจ")).toBeVisible();
+    await expect(page.locator(".host-layout")).toBeVisible();
     return;
   }
   await page.goto("/");
@@ -127,10 +127,37 @@ async function openPlayer(page, role, displayName = role, reclaimToken = "") {
       exact: true,
     })
     .click();
+  const playerScreen = page.locator(".player-hero, .lobby-waiting-screen");
+  await expect(playerScreen).toBeVisible();
+  if (await page.locator(".lobby-waiting-screen").isVisible()) return;
   await expect(page.getByRole("button", { name: "เข้าใจแล้ว" })).toBeVisible();
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
   await expect(page.locator(".player-hero")).toBeVisible();
 }
+
+test("player lobby waiting screen fits a small phone without page scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby'");
+  await openPlayer(page, "outsider", "mobile-lobby-player");
+  const waitingScreen = page.locator(".lobby-waiting-screen");
+  await expect(waitingScreen).toBeVisible();
+  expect(
+    await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pageWidth: document.scrollingElement?.scrollWidth,
+      pageHeight: document.scrollingElement?.scrollHeight,
+    })),
+  ).toEqual({
+    viewportWidth: 360,
+    viewportHeight: 640,
+    pageWidth: 360,
+    pageHeight: 640,
+  });
+  await expect(page.locator(".waiting-roster")).toHaveCSS("overflow-y", "auto");
+});
 
 test("Killer opens the device camera, converts its photo, and sends it to Host", async ({
   page,
@@ -351,6 +378,21 @@ test("all nine role variants keep public roster private at 360px", async ({
     try {
       const page = await context.newPage();
       await openPlayer(page, role);
+      const roleArt = {
+        killer: "/roles/killer.png",
+        "killer-wife": "/roles/killer-wife.png",
+        police: "/roles/police.png",
+        reporter: "/roles/reporter.png",
+        bomber: "/roles/bomber.png",
+        detective: "/roles/detective.png",
+        athlete: "/roles/athlete-male.png",
+        sumo: "/roles/sumo-male.png",
+        villager: "/roles/villager-1-male.png",
+      };
+      await expect(page.locator(".player-hero-art")).toHaveAttribute(
+        "src",
+        roleArt[role],
+      );
       const health = page.locator(".personal-health .hearts svg");
       await expect(health).toHaveCount(
         role === "killer"
@@ -366,6 +408,7 @@ test("all nine role variants keep public roster private at 360px", async ({
         .getByRole("button", { name: "ผู้เล่น", exact: true })
         .click();
       await expect(page.locator(".tab-content .player-card")).toHaveCount(9);
+      await expect(page.locator(".tab-content .role-thumb")).toHaveCount(0);
       await expect(page.locator(".tab-content .hearts")).toHaveCount(0);
       expect(
         await page.evaluate(
@@ -379,10 +422,20 @@ test("all nine role variants keep public roster private at 360px", async ({
         .click();
       await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
       await expect(page.getByRole("dialog").locator("details")).toHaveCount(9);
+      await expect(page.getByRole("dialog").locator(".role-thumb-rules")).toHaveCount(9);
     } finally {
       await context.close();
     }
   }
+});
+
+test("Host role setup shows artwork without adding private data to the room", async ({
+  page,
+}) => {
+  await db.exec("update public.rooms set phase='lobby'");
+  await openPlayer(page, "host");
+  await expect(page.locator(".role-control")).toHaveCount(9);
+  await expect(page.locator(".role-control .role-thumb-control")).toHaveCount(9);
 });
 
 test("active Killer with a legacy wife role displays Killer", async ({ page }) => {
@@ -444,6 +497,23 @@ test("Host can resolve zero-person bomb and download archive before closing", as
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
   expect((await download).suggestedFilename()).toContain("killer-ABCDEF");
   await expect(page).toHaveURL("/");
+});
+
+test("Host can close an ended room without downloading evidence images", async ({
+  page,
+}) => {
+  await openPlayer(page, "host");
+  await page.getByRole("button", { name: "จบเกม", exact: true }).click();
+  await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
+  await expect(page.locator(".game-ended-notice")).toBeVisible();
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  await page.getByRole("button", { name: "ดาวน์โหลดข้อมูลและปิดห้อง" }).click();
+  await page
+    .getByRole("button", { name: "ปิดห้องโดยไม่ดาวน์โหลดรูป" })
+    .click();
+  await expect(page).toHaveURL("/");
+  expect(downloads).toBe(0);
 });
 
 test("responsive Thai entry and Host navigation produce review screenshots", async ({
@@ -513,7 +583,7 @@ test("new-device recovery restores the same character, not an extra player", asy
   );
   await openPlayer(page, "outsider", "sumo", token);
   await expect(page.locator(".personal-health h2")).toContainText("3");
-  await expect(page.locator(".player-hero h1")).toHaveText("ซูโม่");
+  await expect(page.locator(".player-hero h1")).toHaveText("Sumo");
   expect(
     (await db.query("select count(*)::int n from public.players")).rows[0].n,
   ).toBe(9);
@@ -553,9 +623,9 @@ test("Detective privately receives Police role after Police death", async ({
   await expect(
     page.getByRole("heading", { name: "บทบาทของคุณเปลี่ยนแล้ว" }),
   ).toBeVisible({ timeout: 20000 });
-  await expect(page.getByRole("dialog")).toContainText("นักสืบ → ตำรวจ");
+  await expect(page.getByRole("dialog")).toContainText("Detective → Police");
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
-  await expect(page.locator(".player-hero h1")).toHaveText("ตำรวจ");
+  await expect(page.locator(".player-hero h1")).toHaveText("Police");
 });
 
 test("player summary stays readable until manual exit, even after closure and reload at 360px", async ({ page }) => {
@@ -574,11 +644,13 @@ test("player summary stays readable until manual exit, even after closure and re
   await expect(summary).toBeVisible({ timeout: 20000 });
   await expect(summary.locator(".game-ended-notice")).toContainText("จบเกมโดยไม่มีผู้ชนะ");
   await expect(summary.locator(".end-game-player")).toHaveCount(Object.keys(f.players).length);
+  await expect(summary.locator(".end-game-role-caption")).toHaveCount(Object.keys(f.players).length);
+  await expect(summary.locator(".role-thumb-endgame")).toHaveCount(Object.keys(f.players).length);
   for (const role of Object.keys(f.players).filter((role) => role !== "sumo"))
     await expect(summary.locator(".end-game-player-details strong", { hasText: role })).toHaveCount(role === "killer" ? 2 : 1);
-  await expect(summary).toContainText("นักสืบ → ตำรวจ");
+  await expect(summary).toContainText("Detective → Police");
   const converted = summary.locator(".end-game-player", { hasText: "killer-wife" });
-  await expect(converted).toContainText("เมีย Killer → Killer");
+  await expect(converted).toContainText("Killer's Wife → Killer");
   await expect(converted).toContainText("ฝ่าย Killer");
   await expect(page.locator(".player-hero")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);

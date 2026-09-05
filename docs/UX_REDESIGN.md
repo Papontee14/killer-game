@@ -25,7 +25,7 @@ The real application remains on `/`, `/room/[code]`, and `/room/[code]/host`. Ro
 | Leave / recover | Name-confirmed departure, recovery explanation, new-device restoration of the same player |
 | System states | Offline/stale data with retry, permission denial, expired photo, empty lists, action errors in Thai, spectator state, closed-room state |
 
-The archive now includes `game-summary.json` alongside evidence images, even if there are no images. A failed close can be retried without forcing another download of already removed images. Archives are Host-only; no player result screen reveals the full roster of roles.
+The archive now includes `game-summary.json` alongside evidence images, even if there are no images. A failed close can be retried without forcing another download of already removed images. Archives are Host-only; after the game ends, every authorized player can see the initial role of every player in the result screen.
 
 ## Database deployment
 

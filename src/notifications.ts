@@ -37,10 +37,17 @@ export async function showGenericNotification(
     return;
 
   const title = 'KILLER';
-  const options: NotificationOptions = {
+  const options: NotificationOptions & { renotify: boolean; vibrate: number[] } = {
     body: message,
     tag: 'killer-event',
-    icon: '/manifest.webmanifest',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    // Ask the OS for a visible, audible notification while the device is locked.
+    // Android still decides whether the lock screen itself is illuminated.
+    silent: false,
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [200, 100, 200],
   };
 
   try {

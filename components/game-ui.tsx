@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   Check,
@@ -21,6 +22,7 @@ import {
   type Role,
   type RoomPhase,
 } from "@/src/types";
+import { ROLE_ART, roleArtAlt } from "@/src/role-art";
 export const PHASE_LABELS: Record<RoomPhase, string> = {
   lobby: "ห้องรอ",
   active: "กำลังเล่น",
@@ -117,6 +119,14 @@ export function Rules({ onClose }: { onClose: () => void }) {
         {(Object.keys(ROLE_LABELS) as Role[]).map((role) => (
           <details key={role}>
             <summary>
+              <Image
+                className="role-thumb role-thumb-rules"
+                src={ROLE_ART[role]}
+                width={2048}
+                height={2048}
+                alt=""
+                aria-hidden="true"
+              />
               <Shield size={17} />
               <b>{ROLE_LABELS[role]}</b>
               <span>
@@ -279,7 +289,13 @@ export function RoleReveal({
       onClose={onClose}
     >
       <div className={`role-reveal ${role === "killer" ? "killer" : ""}`}>
-        <div className="role-reveal-art" />
+        <Image
+          className="role-reveal-art"
+          src={ROLE_ART[role]}
+          width={2048}
+          height={2048}
+          alt={roleArtAlt(role)}
+        />
         <span className="section-kicker">
           <LockKeyhole size={14} /> เฉพาะคุณเท่านั้น
         </span>

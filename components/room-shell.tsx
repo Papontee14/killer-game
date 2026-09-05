@@ -68,6 +68,7 @@ import {
   type Role,
   type RoomState,
 } from "@/src/types";
+import { ROLE_ART, roleArtAlt } from "@/src/role-art";
 import { downloadEvidenceArchive } from "@/src/evidence-download";
 import {
   getNotificationPermission,
@@ -427,6 +428,13 @@ function PlayerCard({
   return (
     <div className={`player-card ${player.health === "dead" ? "is-dead" : ""}`}>
       <span className="avatar">{player.name.slice(0, 1)}</span>
+      {visibleState && (
+        <img
+          className="role-thumb role-thumb-player"
+          src={ROLE_ART[state.currentRole]}
+          alt={roleArtAlt(state.currentRole)}
+        />
+      )}
       <div className="player-meta">
         <strong>{player.name}</strong>
         <small>
@@ -484,7 +492,7 @@ function Events({
             resolvedRoom.viewerRole === "host" && event.playerId
               ? (resolvedRoom.players.find(
                   (player) => player.id === event.playerId,
-                )?.name ?? "???????")
+                )?.name ?? "ไม่ทราบชื่อ")
               : undefined;
           const presentation = presentEvent(event, ROLE_LABELS, recipientName);
           const Icon = EVENT_ICONS[presentation.icon];
@@ -500,9 +508,9 @@ function Events({
                 <small className="event-visibility">
                   {event.playerId
                     ? recipientName
-                      ? `??????????: ${recipientName}`
-                      : "????????"
-                    : "??????????"}
+                      ? `ส่วนตัวถึง: ${recipientName}`
+                      : "เฉพาะคุณ · ส่วนตัว"
+                    : "ประกาศห้อง"}
                 </small>
                 <p>{presentation.message}</p>
                 <time dateTime={event.createdAt}>
@@ -586,7 +594,9 @@ function PlayerEndGameSummary({
             <div>
               <span className="section-kicker">เฉลยบทบาท</span>
               <h2 id="end-game-roster-title">บทบาทของผู้เล่นทุกคน</h2>
-              <p className="muted">ผู้เล่นทั้งหมด {room.players.length} คน</p>
+              <p className="muted">
+                ผู้เล่นทั้งหมด {room.players.length} คน · แสดงบทบาทเริ่มต้นของทุกคน
+              </p>
             </div>
           </div>
           <ul className="end-game-roster">
@@ -594,18 +604,30 @@ function PlayerEndGameSummary({
               const summary = summaries.get(player.id);
               return (
                 <li key={player.id} className="end-game-player">
+                  {summary?.initialRole && (
+                    <img
+                      className="role-thumb role-thumb-endgame"
+                      src={ROLE_ART[summary.initialRole]}
+                      alt={roleArtAlt(summary.initialRole)}
+                    />
+                  )}
                   <div className="end-game-player-details">
                     <strong>
                       {player.name}{player.id === playerId ? " (คุณ)" : ""}
                     </strong>
                     <span>
-                      {summary?.currentRole ? (
+                      {summary?.initialRole ? (
                         <>
-                          {summary.initialRole && summary.initialRole !== summary.currentRole
-                            ? `${ROLE_LABELS[summary.initialRole]} → `
-                            : ""}
-                          {ROLE_LABELS[summary.currentRole]}
+                          <small className="end-game-role-caption">เริ่มต้น</small>
+                          <span className="end-game-role-value">
+                            {ROLE_LABELS[summary.initialRole]}
+                            {summary.currentRole && summary.initialRole !== summary.currentRole
+                              ? ` → ${ROLE_LABELS[summary.currentRole]}`
+                              : ""}
+                          </span>
                         </>
+                      ) : summary?.currentRole ? (
+                        ROLE_LABELS[summary.currentRole]
                       ) : summary ? "ยังไม่ได้รับบทบาท" : "ยังไม่มีข้อมูลเฉลยบทบาท"}
                     </span>
                   </div>
@@ -725,6 +747,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
     title: string;
     detail: string;
     action: () => void;
+    alternateAction?: () => void;
   } | null>(null);
   const [largeImage, setLargeImage] = useState("");
   const [archiveReady, setArchiveReady] = useState(false);
@@ -827,37 +850,44 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         Math.min(role === "villager" ? 20 : 1, current[role] + delta),
       ),
     }));
+  const closeEndedRoom = (downloadImages: boolean) => {
+    void (async () => {
+      if (busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
+      setError("");
+      try {
+        if (downloadImages && !archiveReady) {
+          await downloadEvidenceArchive(room);
+          setArchiveReady(true);
+        }
+        await closeRoom(room.code);
+        setLeaving(true);
+        clearActiveRoom();
+        forgetRoomCredentials(`host:${room.code}`);
+        router.replace("/");
+      } catch (e) {
+        setError(
+          errorMessage(
+            e,
+            downloadImages
+              ? "ดาวน์โหลดหรือปิดห้องไม่สำเร็จ กรุณาลองใหม่"
+              : "ปิดห้องไม่สำเร็จ กรุณาลองใหม่",
+          ),
+        );
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    })();
+  };
   const finish = () =>
     setConfirmation({
-      title: "ดาวน์โหลดข้อมูลและปิดห้อง",
+      title: "ปิดห้องหลังจบเกม",
       detail:
-        "จะดาวน์โหลดบันทึกเกมและรูปหลักฐานก่อนปิดห้อง รูปหลักฐานในห้องจะถูกลบหลังปิด หากไม่สำเร็จคุณสามารถลองใหม่ได้",
-      action: () => {
-        void (async () => {
-          if (busyRef.current) return;
-          busyRef.current = true;
-          setBusy(true);
-          setError("");
-          try {
-            if (!archiveReady) {
-              await downloadEvidenceArchive(room);
-              setArchiveReady(true);
-            }
-            await closeRoom(room.code);
-            setLeaving(true);
-            clearActiveRoom();
-            forgetRoomCredentials(`host:${room.code}`);
-            router.replace("/");
-          } catch (e) {
-            setError(
-              errorMessage(e, "ดาวน์โหลดหรือปิดห้องไม่สำเร็จ กรุณาลองใหม่"),
-            );
-          } finally {
-            busyRef.current = false;
-            setBusy(false);
-          }
-        })();
-      },
+        "เลือกดาวน์โหลดบันทึกเกมพร้อมรูปหลักฐาน หรือปิดห้องทันทีโดยไม่ดาวน์โหลดรูปก็ได้ รูปหลักฐานในห้องจะถูกลบหลังปิดห้อง",
+      action: () => closeEndedRoom(true),
+      alternateAction: () => closeEndedRoom(false),
     });
   const leave = () =>
     setConfirmation({
@@ -982,6 +1012,12 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               <div className="role-grid">
                 {(Object.keys(DEFAULT_ROLE_COUNTS) as Role[]).map((role) => (
                   <div className="role-control" key={role}>
+                    <img
+                      className="role-thumb role-thumb-control"
+                      src={ROLE_ART[role]}
+                      alt=""
+                      aria-hidden="true"
+                    />
                     <div>
                       <strong>{ROLE_LABELS[role]}</strong>
                       <small>{ROLE_HEARTS[role] || "ไม่มี"} หัวใจ</small>
@@ -1349,6 +1385,19 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           >
             ยืนยันดำเนินการ
           </button>
+          {confirmation.alternateAction && (
+            <button
+              className="danger-action"
+              onClick={() => {
+                const action = confirmation.alternateAction;
+                if (!action) return;
+                setConfirmation(null);
+                action();
+              }}
+            >
+              ปิดห้องโดยไม่ดาวน์โหลดรูป
+            </button>
+          )}
           <button
             className="secondary-action"
             onClick={() => setConfirmation(null)}
@@ -1785,6 +1834,12 @@ export function PlayerRoom({
             </span>
           </div>
           <div className={`player-hero ${isKiller ? "is-killer" : ""}`}>
+            <img
+              className="player-hero-art"
+              src={ROLE_ART[me.currentRole]}
+              alt=""
+              aria-hidden="true"
+            />
             <span className="section-kicker">บทบาทส่วนตัวของคุณ</span>
             <h1>{ROLE_LABELS[me.currentRole]}</h1>
             <p>{ROLE_DETAILS[me.currentRole]}</p>

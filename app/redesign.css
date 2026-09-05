@@ -475,6 +475,15 @@ svg {
   align-items: flex-start;
   gap: 18px;
 }
+.host-nav-art {
+  width: 54px;
+  height: 54px;
+  border: 1px solid #46514f;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: center top;
+  opacity: 0.9;
+}
 .nav-brand > span:last-child {
   font-size: 10px;
   color: var(--muted);
@@ -554,10 +563,35 @@ svg {
   gap: 8px;
 }
 .role-control {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   gap: 12px;
   padding: 13px;
+  background: var(--panel);
+}
+.role-control::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #111c1799 32%, var(--panel) 51%);
+}
+.role-control > :not(.role-thumb-control) {
+  position: relative;
+  z-index: 1;
+}
+.role-control > div:not(.stepper) {
+  min-width: 0;
+  margin-left: 27%;
+}
+.role-control .stepper {
+  margin-left: auto;
 }
 .role-control strong {
   font-size: 13px;
@@ -651,6 +685,9 @@ svg {
 .danger-action {
   padding: 12px 16px;
 }
+.game-dialog > .danger-action + .danger-action {
+  margin-top: 12px;
+}
 .large-evidence {
   max-width: 100%;
   max-height: 70svh;
@@ -675,9 +712,28 @@ svg {
   gap: 10px;
 }
 .player-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 14px;
   gap: 12px;
   min-height: 74px;
+  background: var(--panel);
+}
+.player-card:has(.role-thumb-player)::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #111c1799 27%, var(--panel) 48%);
+}
+.player-card > :not(.role-thumb-player) {
+  position: relative;
+  z-index: 1;
+}
+.player-card:has(.role-thumb-player) .avatar {
+  margin-left: 24%;
 }
 .avatar {
   width: 40px;
@@ -742,9 +798,28 @@ svg {
   font-size: 25px;
 }
 .player-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 27px;
   background:
     radial-gradient(ellipse at top right, #32452970, transparent 60%), #142016;
+}
+.player-hero > :not(.player-hero-art) {
+  position: relative;
+  z-index: 1;
+}
+.player-hero-art {
+  position: absolute;
+  z-index: -1;
+  top: -12%;
+  right: -4%;
+  width: 47%;
+  height: 124%;
+  object-fit: cover;
+  object-position: center top;
+  opacity: 0.28;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 100%);
 }
 .player-hero.is-killer {
   background:
@@ -981,15 +1056,90 @@ svg {
   margin-bottom: 6px;
 }
 .rules-roles details {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
 }
 .rules-roles summary {
+  position: relative;
+  z-index: 1;
   min-height: 56px;
   display: flex;
   align-items: center;
   gap: 9px;
+  padding-left: 108px;
   cursor: pointer;
   font-size: 13px;
+}
+.rules-roles summary > :not(.role-thumb-rules) {
+  position: relative;
+  z-index: 1;
+}
+.role-thumb {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+  object-position: center top;
+  border: 1px solid #40533e;
+  background: #0b140e;
+}
+.role-thumb-rules {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: -10px;
+  width: 30%;
+  height: 56px;
+  border: 0;
+  border-radius: 0;
+  opacity: 0.55;
+  object-position: center 35%;
+}
+.rules-roles details::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #111c17d9 24%, var(--panel) 39%);
+}
+.rules-roles details > p {
+  position: relative;
+  z-index: 1;
+  margin: 0 12px 14px 108px;
+  padding: 12px 14px;
+  border-left: 2px solid var(--acid);
+  border-radius: 0 8px 8px 0;
+  background: #142018;
+}
+.rules-roles details[open] .role-thumb-rules {
+  opacity: 0.7;
+}
+.role-thumb-control {
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 -13px;
+  width: 40%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  opacity: 0.68;
+  object-position: center 35%;
+}
+.role-thumb-player {
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 -14px;
+  width: 36%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  opacity: 0.64;
+  object-position: center 35%;
 }
 .rules-roles summary > span {
   margin-left: auto;
@@ -1046,10 +1196,22 @@ svg {
 .role-reveal-art {
   position: absolute;
   inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.role-reveal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   z-index: -1;
-  background:
-    linear-gradient(0deg, #0b160ef5 5%, #0b160e15 100%),
-    url("/killer-night.png") 70% 30% / cover;
+  background: linear-gradient(0deg, #0b160ef5 5%, #0b160e20 100%);
+}
+.role-reveal > :not(.role-reveal-art) {
+  position: relative;
+  z-index: 1;
 }
 .role-reveal h2 {
   font-size: 44px;
@@ -1099,12 +1261,26 @@ svg {
     linear-gradient(#061009bb, #061009f5),
     url("/killer-night.png") center/cover;
   min-height: 100svh;
-  height: auto !important;
-  padding: 60px 20px !important;
-  overflow: auto !important;
+  height: 100svh !important;
+  padding: max(16px, env(safe-area-inset-top)) 16px
+    max(16px, env(safe-area-inset-bottom)) !important;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  isolation: isolate;
 }
 .waiting-copy {
   position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: 1;
+  display: grid;
+  width: min(100%, 420px);
+  max-height: calc(100svh - 32px);
+  min-width: 0;
+  justify-items: center;
+  align-content: center;
+  overflow: hidden;
 }
 .waiting-copy h1 {
   font-family: Impact, "Arial Black", sans-serif !important;
@@ -1117,7 +1293,12 @@ svg {
 .waiting-roster {
   border-radius: 12px;
   background: #0d1912eb;
-  max-height: 40svh;
+  width: 100%;
+  max-height: min(31svh, 280px);
+  margin-top: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .waiting-copy .connection-status {
   justify-content: center;
@@ -1475,10 +1656,10 @@ svg {
     font-size: 16px;
   }
   .waiting-roster {
-    max-height: 42svh;
+    max-height: min(31svh, 250px);
   }
   .waiting-roster .player-card {
-    min-height: 58px;
+    min-height: 42px;
   }
   .toast {
     bottom: 90px;
@@ -1599,9 +1780,25 @@ svg {
   gap: 6px;
   overflow-wrap: anywhere;
 }
+.role-thumb-endgame {
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+}
 .end-game-player-details > span {
   font-size: 13px;
   color: var(--muted);
+}
+.end-game-role-caption {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--acid);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.end-game-role-value {
+  display: block;
 }
 .end-game-team {
   flex-shrink: 0;

@@ -108,14 +108,14 @@ export type RoomState = {
 
 export const ROLE_LABELS: Record<Role, string> = {
   killer: "Killer",
-  "killer-wife": "เมีย Killer",
-  police: "ตำรวจ",
-  reporter: "นักข่าว",
+  "killer-wife": "Killer's Wife",
+  police: "Police",
+  reporter: "Reporter",
   bomber: "Bomber",
-  detective: "นักสืบ",
-  athlete: "นักกีฬา",
-  sumo: "ซูโม่",
-  villager: "ชาวบ้าน",
+  detective: "Detective",
+  athlete: "Athlete",
+  sumo: "Sumo",
+  villager: "Villager",
 };
 
 export const ROLE_HEARTS: Record<Role, number> = {

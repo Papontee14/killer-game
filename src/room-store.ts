@@ -37,7 +37,7 @@ function asPrivateState(value: Json): PrivatePlayerState {
   return {
     playerId: String(value.playerId ?? value.player_id),
     initialRole,
-    currentRole,
+    currentRole: isActiveKiller ? "killer" : currentRole,
     team: String(value.team ?? (isActiveKiller ? "killers" : "city")) as Team,
     isActiveKiller,
     hearts: Number(value.hearts ?? 0),
@@ -75,6 +75,7 @@ function asRoom(value: unknown): RoomState {
   return {
     viewerRole:
       (data.viewerRole ?? data.viewer_role) === "host" ? "host" : "player",
+    playerId: data.playerId ? String(data.playerId) : undefined,
     code: String(data.code),
     hostName: String(data.hostName ?? data.host_name ?? "Host"),
     phase: data.phase as RoomState["phase"],
@@ -142,6 +143,14 @@ function asRoom(value: unknown): RoomState {
           : undefined,
     })),
     winner: (data.winner ?? null) as RoomState["winner"],
+    endGameSummary: data.phase === "ended"
+      ? ((data.endGameSummary ?? []) as Array<Json>).map((item) => ({
+          playerId: String(item.playerId),
+          initialRole: (item.initialRole ?? null) as Role | null,
+          currentRole: (item.currentRole ?? null) as Role | null,
+          team: (item.team ?? null) as Team | null,
+        }))
+      : [],
     bombTargets: (
       (data.bombTargets ?? data.bomb_targets ?? []) as unknown[]
     ).map(String),
@@ -326,6 +335,10 @@ export async function submitEvidence(
   const session = await supabase.auth.getSession();
   const userId = session.data.session?.user.id;
   if (!userId) throw new Error("เซสชันหมดอายุ กรุณาเข้าใหม่");
+  const current = await rpcView(code);
+  if (!current) throw new Error("ไม่พบห้องนี้");
+  if (current.attacksThisHour >= current.attackLimit)
+    throw new Error("hourly approved attack quota reached");
   const storagePath = `${userId}/${crypto.randomUUID()}.${imageExtension(image)}`;
   const uploaded = await supabase.storage
     .from("evidence")

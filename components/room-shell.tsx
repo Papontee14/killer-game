@@ -12,6 +12,12 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bomb,
+  CircleX,
+  CircleStop,
+  Search,
+  VenetianMask,
+  Play,
   AlertTriangle,
   Bell,
   BellOff,
@@ -71,7 +77,7 @@ import {
   notifyRoomParticipants,
 } from "@/src/notifications";
 
-import { LiveCamera } from "./live-camera";
+import { NativeCamera } from "./native-camera";
 import { KillerProgress } from "./killer-progress";
 import {
   Brand,
@@ -84,6 +90,24 @@ import {
   ROLE_DETAILS,
   Rules,
 } from "./game-ui";
+
+import { presentEvent, type EventIcon } from "@/src/event-presentation";
+const EVENT_ICONS: Record<EventIcon, typeof Radio> = {
+  door: DoorOpen,
+  play: Play,
+  shield: Shield,
+  reject: CircleX,
+  check: Check,
+  skull: Skull,
+  heart: Heart,
+  search: Search,
+  eye: Eye,
+  mask: VenetianMask,
+  bomb: Bomb,
+  trophy: Trophy,
+  stop: CircleStop,
+  radio: Radio,
+};
 
 let latestRoom: RoomState | null = null;
 function useRoom(code: string) {
@@ -455,32 +479,45 @@ function Events({
             <small>อัปเดตใหม่จะแสดงที่นี่</small>
           </div>
         )}
-        {visible.map((event) => (
-          <div className={`event-row event-${event.type}`} key={event.id}>
-            <span className="event-mark">
-              {event.type === "warning" || event.type === "bomb" ? (
-                <AlertTriangle size={14} />
-              ) : event.type === "winner" ? (
-                <Shield size={14} />
-              ) : (
-                <Radio size={14} />
-              )}
-            </span>
-            <div>
-              <small className="event-visibility">
-                {event.playerId ? "เฉพาะคุณ · ส่วนตัว" : "ประกาศห้อง"}
-              </small>
-              <p>{event.message}</p>
-              <time>
-                {new Date(event.createdAt).toLocaleTimeString("th-TH", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  timeZone: "Asia/Bangkok",
-                })}
-              </time>
+        {visible.map((event) => {
+          const recipientName =
+            resolvedRoom.viewerRole === "host" && event.playerId
+              ? (resolvedRoom.players.find(
+                  (player) => player.id === event.playerId,
+                )?.name ?? "???????")
+              : undefined;
+          const presentation = presentEvent(event, ROLE_LABELS, recipientName);
+          const Icon = EVENT_ICONS[presentation.icon];
+          return (
+            <div
+              className={`event-row event-tone-${presentation.tone}`}
+              key={event.id}
+            >
+              <span className="event-mark" aria-hidden="true">
+                <Icon size={18} />
+              </span>
+              <div className="event-content">
+                <small className="event-visibility">
+                  {event.playerId
+                    ? recipientName
+                      ? `??????????: ${recipientName}`
+                      : "????????"
+                    : "??????????"}
+                </small>
+                <p>{presentation.message}</p>
+                <time dateTime={event.createdAt}>
+                  {new Date(event.createdAt).toLocaleString("th-TH", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Bangkok",
+                  })}
+                </time>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );
@@ -517,10 +554,83 @@ function Ended({
             ? "ฝ่ายเมืองชนะ"
             : resolvedRoom.winner === "killers"
               ? "ฝ่าย Killer ชนะ"
-              : "Host ได้ทำการจบเกม"}
+              : "จบเกมโดยไม่มีผู้ชนะ"}
         </p>
       </div>
     </div>
+  );
+}
+function PlayerEndGameSummary({
+  room,
+  playerId,
+  onLeave,
+}: {
+  room: RoomState;
+  playerId: string | null;
+  onLeave: () => void;
+}) {
+  const summaries = new Map(
+    room.endGameSummary.map((entry) => [entry.playerId, entry]),
+  );
+  const myTeam = playerId ? summaries.get(playerId)?.team : null;
+  return (
+    <main className="app-shell player-app">
+      <Header code={room.code} label="สรุปผลเกม" onLeave={onLeave} />
+      <div className="end-game-summary">
+        <Ended
+          room={room}
+          winner={room.winner && myTeam ? room.winner === myTeam : undefined}
+        />
+        <section className="panel" aria-labelledby="end-game-roster-title">
+          <div className="panel-heading">
+            <div>
+              <span className="section-kicker">เฉลยบทบาท</span>
+              <h2 id="end-game-roster-title">บทบาทของผู้เล่นทุกคน</h2>
+              <p className="muted">ผู้เล่นทั้งหมด {room.players.length} คน</p>
+            </div>
+          </div>
+          <ul className="end-game-roster">
+            {room.players.map((player) => {
+              const summary = summaries.get(player.id);
+              return (
+                <li key={player.id} className="end-game-player">
+                  <div className="end-game-player-details">
+                    <strong>
+                      {player.name}{player.id === playerId ? " (คุณ)" : ""}
+                    </strong>
+                    <span>
+                      {summary?.currentRole ? (
+                        <>
+                          {summary.initialRole && summary.initialRole !== summary.currentRole
+                            ? `${ROLE_LABELS[summary.initialRole]} → `
+                            : ""}
+                          {ROLE_LABELS[summary.currentRole]}
+                        </>
+                      ) : summary ? "ยังไม่ได้รับบทบาท" : "ยังไม่มีข้อมูลเฉลยบทบาท"}
+                    </span>
+                  </div>
+                  <span className={`end-game-team team-${summary?.team ?? "none"}`}>
+                    {summary?.team === "killers"
+                      ? "ฝ่าย Killer"
+                      : summary?.team === "city"
+                        ? "ฝ่ายเมือง"
+                        : "ยังไม่มีฝ่าย"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+        <div className="end-game-exit">
+          <p className="muted">
+            {room.closedAt ? "Host ปิดห้องแล้ว คุณยังอ่านสรุปนี้ได้" : "อ่านสรุปได้จนกว่าคุณจะพร้อมออก"}
+          </p>
+          <button className="primary-action" onClick={onLeave}>
+            กลับหน้าแรก <ArrowFallback />
+          </button>
+        </div>
+      </div>
+    </main>
   );
 }
 function LobbyPlayers({
@@ -778,7 +888,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
     setConfirmation({
       title: "จบเกมโดยไม่มีผู้ชนะ",
       detail:
-        "ผู้เล่นทุกคนจะเห็นผลจบเกม และกลับหน้าแรกใน 5 วินาที คุณยังดาวน์โหลดข้อมูลได้",
+        "ผู้เล่นทุกคนจะเห็นผลจบเกมและเฉลยบทบาท จนกว่าจะกดกลับหน้าแรกเอง คุณยังดาวน์โหลดข้อมูลได้",
       action: () => act(() => endGame(room.code)),
     });
   return (
@@ -1285,7 +1395,6 @@ export function PlayerRoom({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [now, setNow] = useState(Date.now());
-  const [endSeconds, setEndSeconds] = useState(5);
   const [toast, setToast] = useState("");
   const [mounted, setMounted] = useState(false);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -1299,6 +1408,7 @@ export function PlayerRoom({
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [capturedAt, setCapturedAt] = useState("");
+  const cameraTargetRef = useRef<string | null>(null);
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
@@ -1346,21 +1456,6 @@ export function PlayerRoom({
   useEffect(() => {
     if (loginName) void join();
   }, [code]);
-  useEffect(() => {
-    if (room?.phase !== "ended") return;
-    clearActiveRoom();
-    setEndSeconds(5);
-    setTab("home");
-    const tick = window.setInterval(
-      () => setEndSeconds((v) => Math.max(0, v - 1)),
-      1000,
-    );
-    const timer = window.setTimeout(() => router.replace("/"), 5000);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(tick);
-    };
-  }, [room?.phase, router]);
   const currentRole = playerId
     ? room?.privateStates[playerId]?.currentRole
     : undefined;
@@ -1377,13 +1472,13 @@ export function PlayerRoom({
     return () => window.clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
-    if (!playerId) return;
+    if (!playerId || room?.phase === "ended" || room?.closedAt) return;
     void heartbeat(code);
     const timer = window.setInterval(() => {
       void heartbeat(code);
     }, 30000);
     return () => window.clearInterval(timer);
-  }, [code, playerId]);
+  }, [code, playerId, room?.phase, room?.closedAt]);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -1398,6 +1493,14 @@ export function PlayerRoom({
       <main className="loading-screen">
         <Hourglass /> กำลังเชื่อมต่อห้อง...
       </main>
+    );
+  if (room?.phase === "ended" && room.viewerRole === "player")
+    return (
+      <PlayerEndGameSummary
+        room={room}
+        playerId={room.playerId ?? playerId}
+        onLeave={handleConfirmLeave}
+      />
     );
   if (!playerId && !joining)
     return (
@@ -1464,16 +1567,6 @@ export function PlayerRoom({
     );
   const me = room.privateStates[playerId];
   const mine = room.players.find((player) => player.id === playerId);
-  if (!me && room.phase === "ended")
-    return (
-      <main className="loading-screen">
-        <Ended room={room} />
-        <p>กลับหน้าแรกใน {endSeconds} วินาที</p>
-        <a href="/" className="secondary-action">
-          กลับหน้าแรก
-        </a>
-      </main>
-    );
   if (!me) {
     return (
       <>
@@ -1540,8 +1633,53 @@ export function PlayerRoom({
     setPhotoPreview("");
     setCapturedAt("");
   };
+  const receiveCameraPhoto = async (photo: Blob, receivedAt: string) => {
+    const requestedTargetId = cameraTargetRef.current;
+    cameraTargetRef.current = null;
+    if (!requestedTargetId || requestedTargetId !== target?.id) {
+      setError("เป้าหมายเปลี่ยนแล้ว กรุณาถ่ายรูปใหม่");
+      return;
+    }
+    try {
+      const current = await loadRoom(code);
+      const currentMe = current?.privateStates[playerId];
+      const currentPlayer = current?.players.find(
+        (player) => player.id === playerId,
+      );
+      const currentTarget = current?.players.find(
+        (player) =>
+          player.id === requestedTargetId &&
+          player.id !== playerId &&
+          player.health !== "dead" &&
+          !current.privateStates[player.id]?.isActiveKiller,
+      );
+      if (
+        !current ||
+        current.closedAt ||
+        current.phase !== "active" ||
+        !currentMe?.isActiveKiller ||
+        !currentPlayer ||
+        currentPlayer?.health === "dead" ||
+        !currentTarget ||
+        current.attacksThisHour >= current.attackLimit
+      ) {
+        if (current) setRoom(current);
+        clearPhoto();
+        setError("สถานะเกมหรือเป้าหมายเปลี่ยนแล้ว กรุณาถ่ายรูปใหม่");
+        return;
+      }
+      setRoom(current);
+      clearPhoto();
+      setPhoto(photo);
+      setPhotoPreview(URL.createObjectURL(photo));
+      setCapturedAt(receivedAt);
+      setError("");
+    } catch (cause) {
+      setError(errorMessage(cause, "ตรวจสอบสถานะเกมก่อนรับรูปไม่สำเร็จ"));
+    }
+  };
   const sendEvidence = async () => {
-    if (!photo || !target || !capturedAt || submittingEvidence) return;
+    if (!photo || !target || !capturedAt || submittingEvidence || quotaExhausted) return;
     if (Date.now() - new Date(capturedAt).getTime() >= 120000) {
       setError("รูปเกิน 2 นาทีแล้ว กรุณาถ่ายใหม่");
       return;
@@ -1561,9 +1699,6 @@ export function PlayerRoom({
       void refresh();
     }
   };
-  const winner = room.winner
-    ? (room.winner === "killers") === isKiller
-    : undefined;
   return (
     <main className={`app-shell player-app player-tab-${tab}`}>
       <Header
@@ -1660,18 +1795,6 @@ export function PlayerRoom({
               {me.team === "killers" ? "ฝ่าย Killer" : "ฝ่ายเมือง"}
             </div>
           </div>
-          <Ended room winner={winner} />
-          {room.phase === "ended" && (
-            <div className="panel">
-              <p role="status">กลับหน้าแรกใน {endSeconds} วินาที</p>
-              <button
-                className="primary-action"
-                onClick={() => router.replace("/")}
-              >
-                กลับหน้าแรก <ArrowFallback />
-              </button>
-            </div>
-          )}
           {room.phase === "bomb-resolution" && (
             <div className="quota-cooldown-notice">
               <AlertTriangle />
@@ -1771,8 +1894,7 @@ export function PlayerRoom({
                 <span className="section-kicker">โควต้าชั่วโมงนี้เต็มแล้ว</span>
                 <strong>โควต้าภาพอนุมัติเต็มแล้ว</strong>
                 <p>
-                  ยังส่งรูปเข้าคิวได้ Host
-                  จะอนุมัติได้เมื่อขึ้นชั่วโมงใหม่ตามเวลาไทย
+                  ไม่สามารถถ่ายหรือส่งรูปได้ กรุณารอรีเซ็ตโควต้าเมื่อขึ้นชั่วโมงใหม่ตามเวลาไทย
                 </p>
               </div>
             </div>
@@ -1793,10 +1915,11 @@ export function PlayerRoom({
                 aria-label="เลือกเป้าหมาย"
                 value={targetId}
                 onChange={(e) => {
+                  cameraTargetRef.current = null;
                   clearPhoto();
                   setTargetId(e.target.value);
                 }}
-                disabled={submittingEvidence}
+                disabled={submittingEvidence || quotaExhausted}
               >
                 <option value="">เลือกผู้เล่น...</option>
                 {room.players
@@ -1825,19 +1948,19 @@ export function PlayerRoom({
               <div className="camera-drop">
                 <Camera size={24} />
                 <span>
-                  ถ่ายรูปและส่งภายใน 2 นาที
-                  <small>รูปที่ส่งแล้วรอ Host ตรวจได้</small>
+                  ใช้กล้องมือถือเพื่อถ่ายและซูมภาพ
+                  <small>เมื่อกลับมาที่เว็บ จะมีเวลา 2 นาทีเพื่อส่งให้ Host</small>
                 </span>
               </div>
               {!target && <p className="muted">เลือกเป้าหมายก่อนเปิดกล้อง</p>}
-              <LiveCamera
-                disabled={submittingEvidence || !target || tab !== "home"}
-                onCapture={(blob, time) => {
-                  clearPhoto();
-                  setPhoto(blob);
-                  setPhotoPreview(URL.createObjectURL(blob));
-                  setCapturedAt(time);
+              <NativeCamera
+                disabled={submittingEvidence || quotaExhausted || !target || tab !== "home"}
+                onOpen={() => {
+                  cameraTargetRef.current = target?.id ?? null;
+                  setError("");
                 }}
+                onCapture={receiveCameraPhoto}
+                onError={setError}
               />
               {photoPreview && (
                 <div className="evidence-preview">
@@ -1845,7 +1968,7 @@ export function PlayerRoom({
                   <button
                     type="button"
                     className="preview-remove"
-                    disabled={submittingEvidence}
+                    disabled={submittingEvidence || quotaExhausted}
                     onClick={clearPhoto}
                     aria-label="ลบรูปและถ่ายใหม่"
                   >
@@ -1865,6 +1988,7 @@ export function PlayerRoom({
                   !photo ||
                   !capturedAt ||
                   photoSeconds <= 0 ||
+                  quotaExhausted ||
                   submittingEvidence
                 }
                 onClick={sendEvidence}

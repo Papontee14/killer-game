@@ -50,6 +50,7 @@ create table if not exists public.room_events (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
   type text not null, message text not null, visible_to_player_id uuid references public.players(id), created_at timestamptz not null default now()
 );
+alter table public.room_events add column if not exists excluded_player_id uuid references public.players(id);
 create table if not exists public.room_signals (
   room_id uuid primary key references public.rooms(id) on delete cascade, changed_at timestamptz not null default now()
 );
@@ -181,7 +182,7 @@ end $$;
 revoke execute on function public.advance_due_accusation(uuid) from public,anon,authenticated;
 
 create or replace function public.get_room_view(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb; progress jsonb := '[]'::jsonb;
+declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb; progress jsonb := '[]'::jsonb; summary jsonb := '[]'::jsonb;
 begin
   if auth.uid() is null then return null; end if;
   select * into r from public.rooms where code=upper(trim(p_code)) limit 1;
@@ -210,11 +211,15 @@ begin
         into progress from public.evidence e where e.room_id=r.id;
     end if;
   end if;
-  select coalesce(jsonb_agg(jsonb_build_object('id',e.id,'type',e.type,'message',e.message,'createdAt',e.created_at,'playerId',e.visible_to_player_id) order by e.created_at desc),'[]'::jsonb) into events from public.room_events e where e.room_id=r.id and (is_host or e.visible_to_player_id is null or e.visible_to_player_id=me.id);
+  select coalesce(jsonb_agg(jsonb_build_object('id',e.id,'type',e.type,'message',e.message,'createdAt',e.created_at,'playerId',e.visible_to_player_id) order by e.created_at desc),'[]'::jsonb) into events from public.room_events e where e.room_id=r.id and (is_host or ((e.visible_to_player_id is null or e.visible_to_player_id=me.id) and e.excluded_player_id is distinct from me.id));
+  if r.phase='ended' then
+    select coalesce(jsonb_agg(jsonb_build_object('playerId',p.id,'initialRole',s.initial_role,'currentRole',s.role_current,'team',s.team) order by p.joined_at,p.id),'[]'::jsonb)
+      into summary from public.players p left join public.player_secrets s on s.player_id=p.id where p.room_id=r.id;
+  end if;
   return jsonb_build_object('viewerRole',viewer_role,'playerId',case when is_host then null else me.id end,'code',r.code,'hostName',r.host_name,'phase',r.phase,
     'createdAt',r.created_at,'closedAt',r.closed_at,'attackLimit',r.attack_limit,'attacksThisHour',case when r.quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') then r.approved_attacks_in_window else 0 end,
     'quotaWindowStart',r.quota_window_start,'policeCheckAt',r.police_check_at,'players',roster,'privateStates',states,'evidences',evidences,'killerEvidenceProgress',progress,'events',events,
-    'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id);
+    'endGameSummary',summary,'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id);
 end $$;
 
 drop function if exists public.create_room(text,text,text,text);
@@ -287,6 +292,10 @@ begin
   end if;
   select * into target from public.players where id=p_target_id and room_id=r.id;
   checked_at := clock_timestamp();
+  if r.quota_window_start=(date_trunc('hour',checked_at at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok')
+    and r.approved_attacks_in_window>=r.attack_limit then
+    raise exception 'hourly approved attack quota reached';
+  end if;
   if r.phase<>'active' or target.id is null or target.health='dead' or target.id=me.id
     or not exists(select 1 from public.player_secrets where player_id=target.id and not is_active_killer)
     or nullif(trim(p_storage_path),'') is null or p_storage_path not like auth.uid()::text||'/%'
@@ -319,6 +328,10 @@ begin
   if r.approved_attacks_in_window>=r.attack_limit then raise exception 'hourly approved attack quota reached'; end if;
   new_hearts := greatest(0,t.hearts-1); update public.evidence set status='approved',decision_at=clock_timestamp() where id=e.id;
   update public.rooms set approved_attacks_in_window=r.approved_attacks_in_window+1,quota_window_start=r.quota_window_start where id=r.id;
+  -- Everyone except the victim receives this public, anonymous announcement.
+  -- The victim gets the private heart-loss event below instead.
+  insert into public.room_events(room_id,type,message,excluded_player_id)
+  values(r.id,'attack','มีคนถูกโจมตีจาก Killer',target.id);
   perform public.add_event(r.id,'warning','คุณถูกโจมตีและเสียหัวใจ 1 ดวง',target.id);
   if t.initial_role='killer-wife' and new_hearts=0 then
     update public.player_secrets set role_current='killer',team='killers',is_active_killer=true,hearts=0,max_hearts=0 where player_id=t.player_id; update public.players set health='alive' where id=target.id; update public.rooms set attack_limit=3 where id=r.id;

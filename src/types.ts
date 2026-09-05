@@ -19,6 +19,14 @@ export type EvidenceStatus = "pending" | "approved" | "rejected";
 export type WinningTeam = "city" | "killers" | null;
 export type Team = "city" | "killers";
 
+/** Role reveal for authorized room members after the game has ended. */
+export type EndGamePlayerSummary = {
+  playerId: string;
+  initialRole: Role | null;
+  currentRole: Role | null;
+  team: Team | null;
+};
+
 export type PrivatePlayerState = {
   playerId: string;
   initialRole: Role;
@@ -77,6 +85,7 @@ export type KillerEvidenceProgress = Pick<
 
 export type RoomState = {
   viewerRole: "host" | "player";
+  playerId?: string;
   code: string;
   hostName: string;
   phase: RoomPhase;
@@ -92,6 +101,7 @@ export type RoomState = {
   killerEvidenceProgress: KillerEvidenceProgress[];
   events: RoomEvent[];
   winner: WinningTeam;
+  endGameSummary: EndGamePlayerSummary[];
   bombTargets: string[];
   pendingBomberId?: string;
 };

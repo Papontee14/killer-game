@@ -1518,3 +1518,105 @@ svg {
   color: var(--danger);
   margin: 20px 0;
 }
+
+/* Event meaning is independent of audience and the legacy database type. */
+.event-feed .event-row {
+  --event-accent: var(--muted);
+  --event-surface: rgba(160, 176, 165, 0.045);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--event-accent);
+  border-radius: 9px;
+  background: var(--event-surface);
+  padding: 13px 12px;
+  margin-bottom: 9px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+}
+.event-feed .event-tone-success {
+  --event-accent: var(--acid);
+  --event-surface: rgba(169, 246, 107, 0.06);
+}
+.event-feed .event-tone-warning {
+  --event-accent: var(--amber);
+  --event-surface: rgba(237, 189, 104, 0.065);
+}
+.event-feed .event-tone-danger {
+  --event-accent: var(--danger);
+  --event-surface: rgba(246, 108, 105, 0.065);
+}
+.event-feed .event-tone-info {
+  --event-accent: #77c8b2;
+  --event-surface: rgba(119, 200, 178, 0.06);
+}
+.event-feed .event-mark {
+  color: var(--event-accent);
+  padding-top: 4px;
+}
+.event-feed .event-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.event-feed .event-visibility {
+  color: var(--muted);
+  font-size: 10px;
+}
+.event-feed .event-row p {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.event-feed .event-row time {
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 6px;
+}
+.end-game-summary {
+  width: min(100%, 760px);
+  margin: auto;
+  padding: 24px 16px 40px;
+  display: grid;
+  gap: 20px;
+}
+.end-game-roster {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.end-game-player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.end-game-player:last-child {
+  border-bottom: 0;
+}
+.end-game-player-details {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.end-game-player-details > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.end-game-team {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.end-game-team.team-city {
+  color: var(--acid);
+}
+.end-game-team.team-killers {
+  color: var(--danger);
+}
+.end-game-exit {
+  text-align: center;
+}
+.end-game-exit .primary-action {
+  width: 100%;
+}

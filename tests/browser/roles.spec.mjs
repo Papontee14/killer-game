@@ -3,6 +3,14 @@ import { database, fixture } from "../db-harness.mjs";
 let db,
   f,
   transportQueue = Promise.resolve();
+const CAMERA_PNG = {
+  name: "camera.png",
+  mimeType: "image/png",
+  buffer: Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT8sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+};
 test.beforeAll(async () => {
   db = await database();
 });
@@ -124,7 +132,7 @@ async function openPlayer(page, role, displayName = role, reclaimToken = "") {
   await expect(page.locator(".player-hero")).toBeVisible();
 }
 
-test("Killer sees ally and shared progress without ally target or file upload; camera captures and stops", async ({
+test("Killer opens the device camera, converts its photo, and sends it to Host", async ({
   page,
 }) => {
   await f.hit("killer-wife");
@@ -137,49 +145,38 @@ test("Killer sees ally and shared progress without ally target or file upload; c
   await expect(
     page.locator('select option[value="' + f.players["killer-wife"] + '"]'),
   ).toHaveCount(0);
-  await expect(page.locator("input[type=file]")).toHaveCount(0);
   await page.locator("select").selectOption(f.players.sumo);
-  await page.getByRole("button", { name: "เปิดกล้อง", exact: true }).click();
+  const cameraInput = page.getByLabel("ถ่ายรูปจากกล้องมือถือ");
+  await expect(cameraInput).toHaveAttribute("accept", "image/*");
+  await expect(cameraInput).toHaveAttribute("capture", "environment");
+  await page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }).click();
+  await cameraInput.setInputFiles(CAMERA_PNG);
   await expect(
-    page.getByRole("button", { name: "ถ่ายรูป", exact: true }),
-  ).toBeEnabled();
-  await page.evaluate(() => {
-    window.testTracks = document.querySelector("video").srcObject.getTracks();
-  });
-  await page.getByRole("button", { name: "ถ่ายรูป", exact: true }).click();
-  await expect(page.getByAltText("ตัวอย่างหลักฐานก่อนส่ง")).toBeVisible();
-  expect(
-    await page.evaluate(() =>
-      window.testTracks.every((track) => track.readyState === "ended"),
-    ),
-  ).toBe(true);
+    page.getByAltText("ตัวอย่างหลักฐานก่อนส่ง"),
+  ).toBeVisible();
   await page.getByRole("button", { name: "ส่งหลักฐานให้ Host" }).click();
   await expect(page.getByText("รอ Host ตรวจ", { exact: true })).toBeVisible();
 });
 
-test("full quota still allows camera; permission denial offers retry without file fallback", async ({
+test("full quota blocks the device camera and submission until reset", async ({
   page,
 }) => {
   await f.hit("sumo");
   await f.hit("athlete");
-  await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => {
-      throw new DOMException("denied", "NotAllowedError");
-    };
-  });
   await openPlayer(page, "killer");
+  await expect(page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ส่งหลักฐานให้ Host" })).toBeDisabled();
+  await expect(page.locator(".quota-cooldown-notice")).toContainText("ไม่สามารถถ่ายหรือส่งรูปได้");
+  await db.exec("update public.rooms set quota_window_start=quota_window_start-interval '1 hour'");
+  await expect(page.locator("select")).toBeEnabled({ timeout: 20000 });
   await page.locator("select").selectOption(f.players.sumo);
   await expect(
-    page.getByRole("button", { name: "เปิดกล้อง", exact: true }),
+    page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "เปิดกล้อง", exact: true }).click();
-  await expect(page.locator(".live-camera [role=alert]")).toContainText(
-    "อนุญาตให้ใช้กล้อง",
+  await expect(page.getByLabel("ถ่ายรูปจากกล้องมือถือ")).toHaveAttribute(
+    "capture",
+    "environment",
   );
-  await expect(
-    page.getByRole("button", { name: "เปิดกล้อง", exact: true }),
-  ).toBeEnabled();
-  await expect(page.locator("input[type=file]")).toHaveCount(0);
 });
 
 test("Reporter cannot select dead/self; target dies after selection: no ability spent", async ({
@@ -264,29 +261,13 @@ test("Host can review evidence and both Killer sessions receive the same result"
   }
 });
 
-test("captured image older than two minutes cannot be submitted; closing camera stops tracks", async ({
+test("captured image older than two minutes cannot be submitted", async ({
   page,
 }) => {
   await openPlayer(page, "killer");
   await page.locator("select").selectOption(f.players.sumo);
-  await page.getByRole("button", { name: "เปิดกล้อง", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "ถ่ายรูป", exact: true }),
-  ).toBeEnabled();
-  await page.evaluate(() => {
-    window.testTracks = document.querySelector("video").srcObject.getTracks();
-  });
-  await page.getByRole("button", { name: "ปิดกล้อง", exact: true }).click();
-  expect(
-    await page.evaluate(() =>
-      window.testTracks.every((track) => track.readyState === "ended"),
-    ),
-  ).toBe(true);
-  await page.getByRole("button", { name: "เปิดกล้อง", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "ถ่ายรูป", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "ถ่ายรูป", exact: true }).click();
+  await page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }).click();
+  await page.getByLabel("ถ่ายรูปจากกล้องมือถือ").setInputFiles(CAMERA_PNG);
   await expect(page.getByAltText("ตัวอย่างหลักฐานก่อนส่ง")).toBeVisible();
   await page.evaluate(() => {
     const now = Date.now.bind(Date);
@@ -404,6 +385,16 @@ test("all nine role variants keep public roster private at 360px", async ({
   }
 });
 
+test("active Killer with a legacy wife role displays Killer", async ({ page }) => {
+  await f.hit("killer-wife");
+  await f.hit("killer-wife");
+  await db.query("update public.player_secrets set role_current='killer-wife' where player_id=$1", [f.players["killer-wife"]]);
+  await openPlayer(page, "killer-wife");
+  await expect(page.locator(".player-hero h1")).toHaveText("Killer");
+  await page.getByRole("button", { name: "อ่านบทบาทของฉัน" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Killer");
+});
+
 test("live private role transitions show new actions without leaking identity", async ({
   page,
 }) => {
@@ -414,9 +405,10 @@ test("live private role transitions show new actions without leaking identity", 
     page.getByRole("heading", { name: "บทบาทของคุณเปลี่ยนแล้ว" }),
   ).toBeVisible({ timeout: 20000 });
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
+  await expect(page.locator(".player-hero h1")).toHaveText("Killer");
   await expect(page.locator(".personal-health")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "เปิดกล้อง", exact: true }),
+    page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".quota-panel")).toContainText("2 / 3");
   await page.getByRole("button", { name: "ผู้เล่น", exact: true }).click();
@@ -442,7 +434,7 @@ test("Host can resolve zero-person bomb and download archive before closing", as
   await page.getByRole("button", { name: "จบเกม", exact: true }).click();
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
   await expect(page.locator(".game-ended-notice")).toContainText(
-    "Host ได้ทำการจบเกม",
+    "จบเกมโดยไม่มีผู้ชนะ",
   );
   await page.getByRole("button", { name: "ดาวน์โหลดข้อมูลและปิดห้อง" }).click();
   await expect(page.getByRole("dialog")).toContainText(
@@ -527,28 +519,29 @@ test("new-device recovery restores the same character, not an extra player", asy
   ).toBe(9);
 });
 
-test("moving away from the camera stops the stream and does not reopen it", async ({
+test("a photo returned after the target changes is discarded", async ({
   page,
 }) => {
   await openPlayer(page, "killer");
   await page.locator("select").selectOption(f.players.sumo);
-  await page.getByRole("button", { name: "เปิดกล้อง", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "ถ่ายรูป", exact: true }),
-  ).toBeEnabled();
-  await page.evaluate(() => {
-    window.testTracks = document.querySelector("video").srcObject.getTracks();
+  await page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }).click();
+  await page.locator("select").selectOption(f.players.athlete);
+  await page.getByLabel("ถ่ายรูปจากกล้องมือถือ").setInputFiles(CAMERA_PNG);
+  await expect(page.getByAltText("ตัวอย่างหลักฐานก่อนส่ง")).toHaveCount(0);
+  await expect(page.getByText("เป้าหมายเปลี่ยนแล้ว กรุณาถ่ายรูปใหม่")).toBeVisible();
+});
+
+test("an unreadable camera photo is rejected before preview", async ({ page }) => {
+  await openPlayer(page, "killer");
+  await page.locator("select").selectOption(f.players.sumo);
+  await page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }).click();
+  await page.getByLabel("ถ่ายรูปจากกล้องมือถือ").setInputFiles({
+    name: "broken.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from("not an image"),
   });
-  await page.getByRole("button", { name: "ผู้เล่น", exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.testTracks.every((t) => t.readyState === "ended"),
-      ),
-    )
-    .toBe(true);
-  await page.getByRole("button", { name: "หน้าหลัก", exact: true }).click();
-  await expect(page.locator("video")).toHaveCount(0);
+  await expect(page.getByAltText("ตัวอย่างหลักฐานก่อนส่ง")).toHaveCount(0);
+  await expect(page.getByText("ไม่สามารถอ่านไฟล์รูปภาพนี้ได้")).toBeVisible();
 });
 
 test("Detective privately receives Police role after Police death", async ({
@@ -563,6 +556,75 @@ test("Detective privately receives Police role after Police death", async ({
   await expect(page.getByRole("dialog")).toContainText("นักสืบ → ตำรวจ");
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
   await expect(page.locator(".player-hero h1")).toHaveText("ตำรวจ");
+});
+
+test("player summary stays readable until manual exit, even after closure and reload at 360px", async ({ page }) => {
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await openPlayer(page, "villager");
+  await expect(page.locator(".end-game-summary")).toHaveCount(0);
+  await f.hit("killer-wife");
+  await f.hit("killer-wife");
+  await f.resetQuota();
+  await f.hit("police");
+  await f.hit("police");
+  await db.query("update public.players set name=$1 where id=$2", ["ผู้เล่นชื่อยาวสำหรับทดสอบ", f.players.sumo]);
+  await f.as("host", "end_game", ["ABCDEF"]);
+  const summary = page.locator(".end-game-summary");
+  await expect(summary).toBeVisible({ timeout: 20000 });
+  await expect(summary.locator(".game-ended-notice")).toContainText("จบเกมโดยไม่มีผู้ชนะ");
+  await expect(summary.locator(".end-game-player")).toHaveCount(Object.keys(f.players).length);
+  for (const role of Object.keys(f.players).filter((role) => role !== "sumo"))
+    await expect(summary.locator(".end-game-player-details strong", { hasText: role })).toHaveCount(role === "killer" ? 2 : 1);
+  await expect(summary).toContainText("นักสืบ → ตำรวจ");
+  const converted = summary.locator(".end-game-player", { hasText: "killer-wife" });
+  await expect(converted).toContainText("เมีย Killer → Killer");
+  await expect(converted).toContainText("ฝ่าย Killer");
+  await expect(page.locator(".player-hero")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.waitForTimeout(6000);
+  await expect(page).toHaveURL(/\/room\/ABCDEF/);
+  await expect(summary).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("end-game-summary-360.png"), fullPage: true });
+  await f.as("host", "close_room", ["ABCDEF"]);
+  await expect(summary).toContainText("Host ปิดห้องแล้ว คุณยังอ่านสรุปนี้ได้", { timeout: 20000 });
+  await page.reload();
+  await expect(summary).toBeVisible();
+  await expect(summary.locator(".end-game-player")).toHaveCount(Object.keys(f.players).length);
+  await expect(summary).toContainText("villager (คุณ)");
+  await page.getByRole("button", { name: "กลับหน้าแรก", exact: true }).click();
+  await expect(page).toHaveURL("/");
+  expect(await page.evaluate(() => localStorage.getItem("killer_active_room"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("killer_room_cred:player:ABCDEF"))).toBeNull();
+});
+
+for (const [target, winner, personal] of [
+  ["killer", "ฝ่ายเมืองชนะ", "คุณชนะ"],
+  ["sumo", "ฝ่าย Killer ชนะ", "คุณแพ้"],
+]) {
+  test(`player summary shows ${winner} after Police accusation`, async ({ page }) => {
+    await openPlayer(page, "villager");
+    await db.exec("update public.rooms set phase='police-check'");
+    await f.as("police", "resolve_police_check", ["ABCDEF", f.players[target]]);
+    await expect(page.locator(".end-game-summary")).toBeVisible({ timeout: 20000 });
+    await expect(page.locator(".game-ended-notice")).toContainText(winner);
+    await expect(page.locator(".game-ended-notice h2")).toHaveText(personal);
+    await page.reload();
+    await expect(page.locator(".end-game-summary")).toBeVisible();
+    await expect(page.locator(".game-ended-notice h2")).toHaveText(personal);
+  });
+}
+
+test("player sees unassigned roles when Host ends before dealing", async ({ page }) => {
+  await openPlayer(page, "villager");
+  await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby'");
+  await f.as("host", "end_game", ["ABCDEF"]);
+  await expect(page.locator(".end-game-summary")).toBeVisible({ timeout: 20000 });
+  await expect(page.locator(".game-ended-notice")).toContainText("จบเกมโดยไม่มีผู้ชนะ");
+  await expect(page.getByText("ยังไม่ได้รับบทบาท", { exact: true })).toHaveCount(Object.keys(f.players).length);
+  await page.getByRole("button", { name: "กลับหน้าแรก", exact: true }).click();
+  await expect(page).toHaveURL("/");
 });
 
 test("existing player sees room closure after Host closes lobby", async ({
@@ -607,4 +669,28 @@ test("failed close remains retryable after archive is downloaded", async ({
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
   await expect(page).toHaveURL("/");
   expect(downloads).toBe(1);
+});
+
+test("anonymous attack news and event colors respect audience at mobile and desktop sizes", async ({
+  page,
+}) => {
+  await openPlayer(page, "athlete");
+  await f.hit("sumo");
+  await page.getByRole("button", { name: "ข่าวสาร", exact: true }).click();
+  const row = page
+    .locator(".tab-content .event-row")
+    .filter({ hasText: "มีคนถูกโจมตีจาก Killer" });
+  await expect(row).toBeVisible({ timeout: 20000 });
+  await expect(row).toHaveClass(/event-tone-danger/);
+  await expect(row.locator("p")).toHaveText("มีคนถูกโจมตีจาก Killer");
+  await expect(row).not.toContainText("sumo");
+  await expect(page.locator(".tab-content")).not.toContainText("เสียหัวใจ");
+  for (const width of [360, 390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
 });

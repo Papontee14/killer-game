@@ -3,6 +3,7 @@ import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   Home,
@@ -49,6 +50,7 @@ export const ROLE_DETAILS: Record<Role, string> = {
   villager:
     "คุณมี 2 หัวใจ อยู่ฝ่ายเมือง รักษาตัวให้รอดและช่วยกันสังเกตว่าใครคือ Killer",
 };
+const RULE_ROLES = Object.keys(ROLE_LABELS) as Role[];
 export function Brand({ small = false }: { small?: boolean }) {
   return <span className={`killer-logo ${small ? "small" : ""}`}>KILLER</span>;
 }
@@ -56,10 +58,14 @@ export function Dialog({
   title,
   children,
   onClose,
+  dismissible = true,
+  className = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  dismissible?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -71,18 +77,26 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="game-dialog"
+      className={`game-dialog ${className}`}
       aria-labelledby={id}
-      onCancel={onClose}
+      onCancel={(event) => {
+        if (!dismissible) {
+          event.preventDefault();
+          return;
+        }
+        onClose();
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissible && e.target === e.currentTarget) onClose();
       }}
     >
       <div className="dialog-heading">
         <h2 id={id}>{title}</h2>
-        <button className="icon-button" aria-label="ปิด" onClick={onClose}>
-          <X size={20} />
-        </button>
+        {dismissible && (
+          <button className="icon-button" aria-label="ปิด" onClick={onClose}>
+            <X size={20} />
+          </button>
+        )}
       </div>
       {children}
     </dialog>
@@ -115,36 +129,169 @@ export function Rules({ onClose }: { onClose: () => void }) {
         </p>
       </div>
       <h3>9 บทบาท · ทุกคนมีความลับ</h3>
-      <div className="rules-roles">
-        {(Object.keys(ROLE_LABELS) as Role[]).map((role) => (
-          <details key={role}>
-            <summary>
-              <Image
-                className="role-thumb role-thumb-rules"
-                src={ROLE_ART[role]}
-                width={2048}
-                height={2048}
-                alt=""
-                aria-hidden="true"
-              />
-              <Shield size={17} />
-              <b>{ROLE_LABELS[role]}</b>
-              <span>
-                {ROLE_HEARTS[role]
-                  ? `${ROLE_HEARTS[role]} หัวใจ`
-                  : "ไม่มีแถบหัวใจ"}
-              </span>
-              <ChevronRight size={16} />
-            </summary>
-            <p>{ROLE_DETAILS[role]}</p>
-          </details>
-        ))}
-      </div>
+      <RoleCarousel />
       <p className="privacy-caption">
         <LockKeyhole size={16} />{" "}
         การปิดเว็บหรือหลุดจากเครือข่ายไม่ทำให้ตัวละครตาย
       </p>
     </Dialog>
+  );
+}
+
+function RoleCarousel() {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const updateIndex = () => {
+      const slides = Array.from(
+        viewport.querySelectorAll<HTMLElement>("[data-role-slide]"),
+      );
+      if (!slides.length) return;
+      const center = viewport.scrollLeft + viewport.clientWidth / 2;
+      const nextIndex = slides.reduce(
+        (closest, slide, index) =>
+          Math.abs(slide.offsetLeft + slide.offsetWidth / 2 - center) <
+          Math.abs(
+            slides[closest].offsetLeft + slides[closest].offsetWidth / 2 - center,
+          )
+            ? index
+            : closest,
+        0,
+      );
+      setActiveIndex(nextIndex);
+    };
+    viewport.addEventListener("scroll", updateIndex, { passive: true });
+    window.addEventListener("resize", updateIndex);
+    updateIndex();
+    return () => {
+      viewport.removeEventListener("scroll", updateIndex);
+      window.removeEventListener("resize", updateIndex);
+    };
+  }, []);
+
+  const moveTo = (index: number) => {
+    const boundedIndex = Math.max(0, Math.min(index, RULE_ROLES.length - 1));
+    const viewport = viewportRef.current;
+    const slide = viewport?.querySelector<HTMLElement>(
+      `[data-role-slide="${boundedIndex}"]`,
+    );
+    if (viewport && slide) {
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      viewport.scrollTo({
+        left: slide.offsetLeft,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    }
+    setActiveIndex(boundedIndex);
+  };
+
+  return (
+    <div className="role-carousel" aria-label="บทบาททั้งหมด">
+      <div
+        ref={viewportRef}
+        className="role-carousel-viewport"
+        role="region"
+        aria-roledescription="carousel"
+        aria-label="สไลด์บทบาท"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            moveTo(activeIndex - 1);
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            moveTo(activeIndex + 1);
+          }
+        }}
+      >
+        {RULE_ROLES.map((role, index) => (
+          <article
+            key={role}
+            data-role-slide={index}
+            className="role-carousel-slide"
+            role="group"
+            aria-roledescription="สไลด์"
+            aria-label={`${index + 1} จาก ${RULE_ROLES.length}`}
+          >
+            <Image
+              className="role-thumb role-thumb-rules role-carousel-art"
+              src={ROLE_ART[role]}
+              width={2048}
+              height={2048}
+              sizes="(max-width: 520px) calc(100vw - 64px), 420px"
+              alt={roleArtAlt(role)}
+            />
+            <div className="role-carousel-heading">
+              <div>
+                <span className="role-carousel-kicker">
+                  <Shield size={16} /> บทบาทที่ {index + 1}
+                </span>
+                <h4>{ROLE_LABELS[role]}</h4>
+              </div>
+              {ROLE_HEARTS[role] ? (
+                <span
+                  className="role-carousel-hearts"
+                  aria-label={`${ROLE_HEARTS[role]} หัวใจ`}
+                >
+                  <Heart
+                    className="role-carousel-heart-icon"
+                    size={16}
+                    fill="currentColor"
+                    aria-hidden="true"
+                  />
+                  <span aria-hidden="true">× {ROLE_HEARTS[role]}</span>
+                </span>
+              ) : (
+                <span className="role-carousel-hearts role-carousel-hearts-none">
+                  ไม่มีแถบหัวใจ
+                </span>
+              )}
+            </div>
+            <p>{ROLE_DETAILS[role]}</p>
+          </article>
+        ))}
+      </div>
+      <div className="role-carousel-controls">
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="บทบาทก่อนหน้า"
+          onClick={() => moveTo(activeIndex - 1)}
+          disabled={activeIndex === 0}
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <div className="role-carousel-dots" aria-label="เลือกบทบาท">
+          {RULE_ROLES.map((role, index) => (
+            <button
+              key={role}
+              type="button"
+              className={index === activeIndex ? "active" : ""}
+              aria-label={`ไปที่ ${ROLE_LABELS[role]}`}
+              aria-current={index === activeIndex ? "true" : undefined}
+              onClick={() => moveTo(index)}
+            />
+          ))}
+        </div>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="บทบาทถัดไป"
+          onClick={() => moveTo(activeIndex + 1)}
+          disabled={activeIndex === RULE_ROLES.length - 1}
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+      <p className="role-carousel-position" aria-live="polite">
+        {activeIndex + 1} / {RULE_ROLES.length}
+      </p>
+    </div>
   );
 }
 export function GameNavigation({
@@ -270,48 +417,184 @@ export function RecoveryCard({
     </Dialog>
   );
 }
+function MysteryCardBack() {
+  return (
+    <span className="mystery-card-back" aria-hidden="true">
+      <svg viewBox="0 0 300 400" fill="none" className="mystery-card-engraving">
+        <rect x="13" y="13" width="274" height="374" rx="15" />
+        <rect x="21" y="21" width="258" height="358" rx="10" />
+        {Array.from({ length: 12 }, (_, i) => (
+          <ellipse key={i} cx="150" cy="200" rx={68 + i * 4} ry={110 + i * 5}
+            transform={`rotate(${i * 15} 150 200)`} opacity=".24" />
+        ))}
+        {[0, 180].map((angle) => (
+          <g key={angle} transform={`rotate(${angle} 150 200)`}>
+            <path d="M32 90V32h58M39 72V39h33M210 32h58v58M228 39h33v33M110 48l40 22 40-22-40-16zM150 70v30" />
+            <path d="M42 108l9 9-9 9-9-9zM258 108l9 9-9 9-9-9z" />
+          </g>
+        ))}
+        <circle cx="150" cy="200" r="58" className="mystery-card-seal" />
+        <circle cx="150" cy="200" r="51" />
+        <path d="M150 131l7 9-7 9-7-9zM150 251l7 9-7 9-7-9z" />
+      </svg>
+      <span className="mystery-card-brand">KILLER</span>
+      <span className="mystery-card-question">?</span>
+      <span className="mystery-card-caption">EVERYONE HAS A SECRET</span>
+    </span>
+  );
+}
+
 export function RoleReveal({
   role,
   previous,
   hearts,
   maxHearts,
   onClose,
+  revealImmediately = false,
+  revealStorageKey,
 }: {
   role: Role;
   previous?: Role;
   hearts?: number;
   maxHearts?: number;
   onClose: () => void;
+  revealImmediately?: boolean;
+  revealStorageKey?: string;
 }) {
+  const [revealState, setRevealState] = useState<
+    "waiting" | "spinning" | "revealed"
+  >(() => {
+    if (revealImmediately) return "revealed";
+    try {
+      if (revealStorageKey && window.localStorage.getItem(revealStorageKey) === "1") {
+        return "revealed";
+      }
+    } catch {
+      // The in-page acknowledgement still works when browser storage is blocked.
+    }
+    return "waiting";
+  });
+  const [loadedArt, setLoadedArt] = useState("");
+  const [artError, setArtError] = useState(false);
+  const [artAttempt, setArtAttempt] = useState(0);
+  const roleArtReady = loadedArt === ROLE_ART[role];
+  const imageRef = useRef<HTMLImageElement>(null);
+  const isRevealed = revealState === "revealed";
+
+  useEffect(() => {
+    if (!isRevealed || !revealStorageKey) return;
+    try {
+      // Remember completion, not the tap: interrupted animations can be retried.
+      // Persist only a flag, never the player's private role.
+      window.localStorage.setItem(revealStorageKey, "1");
+    } catch {
+      // Storage may be unavailable in private browsing or full.
+    }
+  }, [isRevealed, revealStorageKey]);
+
+  useEffect(() => {
+    if (revealState !== "spinning") return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setRevealState("revealed"),
+      reduceMotion ? 240 : 2700,
+    );
+    return () => window.clearTimeout(timer);
+  }, [revealState]);
+
   return (
     <Dialog
       title={previous ? "บทบาทของคุณเปลี่ยนแล้ว" : "บทบาทของคุณ"}
       onClose={onClose}
+      dismissible={isRevealed}
+      className="role-reveal-dialog"
     >
-      <div className={`role-reveal ${role === "killer" ? "killer" : ""}`}>
-        <Image
-          className="role-reveal-art"
-          src={ROLE_ART[role]}
-          width={2048}
-          height={2048}
-          alt={roleArtAlt(role)}
-        />
-        <span className="section-kicker">
-          <LockKeyhole size={14} /> เฉพาะคุณเท่านั้น
-        </span>
-        <h2>{ROLE_LABELS[role]}</h2>
-        <span className="status-pill">
-          {role === "killer" ? "ฝ่าย Killer" : "ฝ่ายเมือง"}
-        </span>
+      <div
+        className={`role-reveal role-reveal-${revealState}`}
+      >
+        <div className="role-reveal-card-scene">
+          <div
+            className={`role-reveal-card ${revealState === "spinning" ? "is-spinning" : ""}`}
+            onAnimationEnd={(event) => {
+              if (
+                event.target === event.currentTarget &&
+                ["role-card-reveal", "role-card-reduced"].includes(event.animationName) &&
+                revealState === "spinning"
+              ) {
+                setRevealState("revealed");
+              }
+            }}
+          >
+            <span className="role-reveal-card-face role-reveal-card-question">
+              <MysteryCardBack />
+            </span>
+            <div
+              className="role-reveal-card-face role-reveal-card-role"
+              aria-hidden={!isRevealed}
+            >
+              <div className={`role-card-identity ${role === "killer" ? "killer" : ""}`}>
+              <Image
+                key={`${role}-${artAttempt}`}
+                ref={imageRef}
+                className="role-reveal-art"
+                src={ROLE_ART[role]}
+                width={2048}
+                height={2048}
+                sizes="280px"
+                priority
+                alt=""
+                onLoad={async (event) => {
+                  const node = event.currentTarget;
+                  try {
+                    await node.decode();
+                    if (imageRef.current === node) setLoadedArt(ROLE_ART[role]);
+                  } catch {
+                    if (imageRef.current === node) setArtError(true);
+                  }
+                }}
+                onError={() => setArtError(true)}
+              />
+              <span className="section-kicker">
+                <LockKeyhole size={14} /> เฉพาะคุณเท่านั้น
+              </span>
+              <h2>{ROLE_LABELS[role]}</h2>
+              <span className="status-pill">
+                {role === "killer" ? "ฝ่าย Killer" : "ฝ่ายเมือง"}
+              </span>
+              </div>
+              <span className="role-card-secret-cover"><MysteryCardBack /></span>
+            </div>
+            {[0, 1, 2].map((edge) => (
+              <span key={edge} className="role-card-edge" style={{ transform: `translateZ(${edge - 1}px)` }} aria-hidden="true" />
+            ))}
+          </div>
+          {!isRevealed && (
+            <button type="button" className="role-card-trigger"
+              disabled={!roleArtReady || revealState === "spinning"}
+              aria-label={!roleArtReady ? "กำลังเตรียมภาพบทบาท" : revealState === "waiting" ? "แตะเพื่อเปิดบทบาท" : "กำลังเปิดบทบาท"}
+              onClick={() => {
+                if (roleArtReady && revealState === "waiting") setRevealState("spinning");
+              }} />
+          )}
+        </div>
+        {!isRevealed && <p className="role-card-instruction" role="status">
+          {artError ? "โหลดภาพไม่สำเร็จ กรุณาลองใหม่" : !roleArtReady ? "กำลังเตรียมภาพบทบาท…" : revealState === "spinning" ? "ความลับของคุณกำลังเปิดเผย…" : "แตะเพื่อเปิดบทบาท"}
+        </p>}
+        {artError && <button type="button" className="text-button" onClick={() => {
+          setArtError(false);
+          setArtAttempt((attempt) => attempt + 1);
+        }}>ลองโหลดภาพอีกครั้ง</button>}
       </div>
-      {previous && (
+      {isRevealed && previous && (
         <p className="muted">
           จาก {ROLE_LABELS[previous]} → {ROLE_LABELS[role]} ·
           เก็บตัวตนใหม่เป็นความลับ
         </p>
       )}
-      <p>{ROLE_DETAILS[role]}</p>
-      {role !== "killer" && (
+      {isRevealed && <p>{ROLE_DETAILS[role]}</p>}
+      {isRevealed && role !== "killer" && (
         <div
           className="reveal-hearts"
           aria-label={`${hearts ?? ROLE_HEARTS[role]} หัวใจ`}
@@ -325,9 +608,11 @@ export function RoleReveal({
           ))}
         </div>
       )}
-      <button className="primary-action" onClick={onClose}>
-        เข้าใจแล้ว <Check size={18} />
-      </button>
+      {isRevealed && (
+        <button className="primary-action" onClick={onClose}>
+          เข้าใจแล้ว <Check size={18} />
+        </button>
+      )}
     </Dialog>
   );
 }

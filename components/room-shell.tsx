@@ -2170,10 +2170,13 @@ export function PlayerRoom({
       )}
       {roleOpen && !showRecovery && room.phase !== "ended" && (
         <RoleReveal
+          key={`${room.code}:${room.createdAt}:${playerId}`}
+          revealStorageKey={`killer_role_revealed:${room.code}:${room.createdAt}:${playerId}`}
           role={me.currentRole}
           hearts={me.hearts}
           maxHearts={me.maxHearts}
           previous={ackRole !== me.currentRole ? ackRole : undefined}
+          revealImmediately={ackRole !== undefined}
           onClose={() => {
             setRoleOpen(false);
             setAckRole(me.currentRole);

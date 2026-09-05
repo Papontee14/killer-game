@@ -63,6 +63,8 @@ import {
   getNotificationPermission,
   requestNotificationPermission,
   showGenericNotification,
+  subscribeToWebPush,
+  notifyRoomParticipants,
 } from '@/src/notifications';
 
 import { LiveCamera } from './live-camera';
@@ -137,12 +139,29 @@ function useRoom(code: string) {
   return [room, refresh, run, replaceRoom, initialLoadComplete] as const;
 }
 
-function NotificationToggle() {
+function NotificationToggle({ code }: { code: string }) {
   const [permission, setPermission] = useState<string>('default');
 
+  const setupWebPush = useCallback(async () => {
+    try {
+      const supabase = getSupabaseBrowser();
+      const session = await supabase?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      if (token && code) {
+        await subscribeToWebPush(code, token);
+      }
+    } catch {
+      // non-blocking
+    }
+  }, [code]);
+
   useEffect(() => {
-    setPermission(getNotificationPermission());
-  }, []);
+    const current = getNotificationPermission();
+    setPermission(current);
+    if (current === 'granted') {
+      void setupWebPush();
+    }
+  }, [setupWebPush]);
 
   if (permission === 'unsupported') return null;
 
@@ -150,6 +169,7 @@ function NotificationToggle() {
     const next = await requestNotificationPermission();
     setPermission(next);
     if (next === 'granted') {
+      void setupWebPush();
       void showGenericNotification('เปิดการแจ้งเตือนสำเร็จ');
     }
   };
@@ -160,7 +180,7 @@ function NotificationToggle() {
       onClick={() => void handleToggle()}
       title={
         permission === 'granted'
-          ? 'เปิดการแจ้งเตือนแล้ว'
+          ? 'เปิดการแจ้งเตือนแล้ว (รองรับแม้ปิดจอหรือปัดแอป)'
           : 'กดเพื่อเปิดการแจ้งเตือนบนมือถือ'
       }
       type='button'
@@ -191,7 +211,7 @@ function Header({
       </a>
       <span className='topbar-title'>{label}</span>
       <div className='topbar-actions'>
-        <NotificationToggle />
+        <NotificationToggle code={code} />
         {action}
         <span className='room-chip'>
           ROOM <b>{code}</b>

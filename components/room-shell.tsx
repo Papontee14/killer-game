@@ -34,6 +34,7 @@ import {
   approveEvidence,
   closeRoom,
   createOrLoadRoom,
+  endGame,
   heartbeat,
   joinOrCreateDemo,
   loadRoom,
@@ -47,7 +48,10 @@ import {
 } from '@/src/room-store';
 import { getSupabaseBrowser } from '@/src/supabase-browser';
 import {
+  clearActiveRoom,
+  forgetRoomCredentials,
   readRoomCredentials,
+  rememberActiveRoom,
   rememberRoomCredentials,
 } from '@/src/room-session';
 import {
@@ -197,18 +201,38 @@ function Header({
   code,
   label,
   back = false,
+  onLeave,
   action,
 }: {
   code: string;
   label: string;
   back?: boolean;
+  onLeave?: () => void;
   action?: ReactNode;
 }) {
   return (
     <header className='topbar'>
-      <a className='back-link' href={back ? '/' : undefined}>
-        {back ? <ChevronLeft size={17} /> : <Radio size={17} />}
-      </a>
+      {onLeave ? (
+        <button
+          type='button'
+          className='back-link'
+          onClick={onLeave}
+          title='ออกจากเกม'
+          aria-label='ออกจากเกม'
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          <ChevronLeft size={17} />
+        </button>
+      ) : (
+        <a className='back-link' href={back ? '/' : undefined}>
+          {back ? <ChevronLeft size={17} /> : <Radio size={17} />}
+        </a>
+      )}
       <span className='topbar-title'>{label}</span>
       <div className='topbar-actions'>
         <NotificationToggle code={code} />
@@ -248,6 +272,137 @@ function ErrorBanner({ error }: { error: string }) {
       <AlertTriangle size={16} /> {error}
     </div>
   ) : null;
+}
+
+function LeaveConfirmModal({
+  expectedName,
+  isOpen,
+  onClose,
+  onConfirm,
+}: {
+  expectedName: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [typedName, setTypedName] = useState('');
+  const [error, setError] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typedName.trim() !== expectedName.trim()) {
+      setError('ชื่อไม่ตรงกับชื่อในเกม กรุณาลองใหม่');
+      return;
+    }
+    setError('');
+    onConfirm();
+  };
+
+  return (
+    <div
+      role='dialog'
+      aria-modal='true'
+      aria-labelledby='leave-dialog-title'
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(4px)',
+        padding: '20px',
+      }}
+    >
+      <div
+        className='panel'
+        style={{
+          width: 'min(100%, 420px)',
+          border: '1px solid var(--danger)',
+          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6)',
+        }}
+      >
+        <div className='panel-heading'>
+          <div>
+            <span className='section-kicker' style={{ color: 'var(--danger)' }}>
+              LEAVE GAME
+            </span>
+            <h2 id='leave-dialog-title' style={{ margin: '4px 0 0' }}>
+              ออกจากเกม
+            </h2>
+          </div>
+          <DoorOpen size={24} style={{ color: 'var(--danger)' }} />
+        </div>
+        <p
+          style={{
+            fontSize: '13px',
+            color: 'var(--muted)',
+            margin: '0 0 16px',
+            lineHeight: 1.5,
+          }}
+        >
+          ต้องการออกจากเกมนี้หรือไม่? อุปกรณ์จะไม่กลับเข้าห้องนี้โดยอัตโนมัติอีก
+          (พิมพ์ชื่อของคุณ <strong>&quot;{expectedName}&quot;</strong>{' '}
+          เพื่อยืนยัน)
+        </p>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '12px' }}>
+          <label style={{ fontSize: '12px', display: 'grid', gap: '6px' }}>
+            <span>ยืนยันชื่อในเกม</span>
+            <input
+              autoFocus
+              required
+              value={typedName}
+              onChange={(e) => {
+                setTypedName(e.target.value);
+                if (error) setError('');
+              }}
+              placeholder={expectedName}
+              style={{
+                width: '100%',
+                height: '42px',
+                padding: '0 12px',
+                border: '1px solid var(--line)',
+                background: 'var(--panel-2)',
+                color: 'var(--text)',
+              }}
+            />
+          </label>
+          {error && <ErrorBanner error={error} />}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <button
+              type='button'
+              onClick={() => {
+                setTypedName('');
+                setError('');
+                onClose();
+              }}
+              className='topbar-btn'
+              style={{ flex: 1, height: '42px', justifyContent: 'center' }}
+            >
+              ยกเลิก
+            </button>
+            <button
+              type='submit'
+              className='topbar-btn danger'
+              style={{
+                flex: 1,
+                height: '42px',
+                justifyContent: 'center',
+                background: 'var(--danger)',
+                color: 'var(--ink)',
+                fontWeight: 700,
+                border: 'none',
+              }}
+            >
+              ยืนยันออก
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 function Hearts({ count, max }: { count: number; max: number }) {
   return (
@@ -362,9 +517,21 @@ function Ended({
       <Trophy size={30} />
       <div>
         <span className='section-kicker'>GAME OVER</span>
-        <h2>{host ? 'เกมจบแล้ว' : winner ? 'คุณชนะ' : 'คุณแพ้'}</h2>
+        <h2>
+          {host
+            ? 'เกมจบแล้ว'
+            : winner === undefined
+              ? 'เกมจบแล้ว'
+              : winner
+                ? 'คุณชนะ'
+                : 'คุณแพ้'}
+        </h2>
         <p>
-          {resolvedRoom.winner === 'city' ? 'ฝ่ายเมืองชนะ' : 'ฝ่าย Killer ชนะ'}
+          {resolvedRoom.winner === 'city'
+            ? 'ฝ่ายเมืองชนะ'
+            : resolvedRoom.winner === 'killers'
+              ? 'ฝ่าย Killer ชนะ'
+              : 'Host ได้ทำการจบเกม'}
         </p>
       </div>
     </div>
@@ -403,9 +570,33 @@ function LobbyPlayers({
     </section>
   );
 }
-function Waiting({ room }: { room: RoomState }) {
+function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
   return (
     <main className='lobby-waiting-screen'>
+      {onLeave && (
+        <div style={{ position: 'absolute', top: 16, left: 20, zIndex: 10 }}>
+          <button
+            type='button'
+            className='back-link'
+            onClick={onLeave}
+            title='ออกจากเกม'
+            aria-label='ออกจากเกม'
+            style={{
+              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid var(--line)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: 'var(--acid)',
+              display: 'grid',
+              placeItems: 'center',
+              width: 36,
+              height: 36,
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+        </div>
+      )}
       <div className='waiting-grid' />
       <Skull className='waiting-skull' size={56} />
       <div className='waiting-copy'>
@@ -441,6 +632,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
       setError(
         'Host access is unavailable on this device. Return to the original Host browser.',
       );
+      clearActiveRoom();
     }
   }, [mounted, initialLoadComplete, room, hostName, leaving]);
   useEffect(() => {
@@ -454,8 +646,21 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
       return;
     creationAttemptForCode.current = code;
     createOrLoadRoom(code, hostName)
-      .then(setRoom)
-      .catch((e) => setError(errorMessage(e, 'เปิดห้องไม่ได้')));
+      .then((loaded) => {
+        setRoom(loaded);
+        rememberActiveRoom({ role: 'host', code, name: hostName });
+      })
+      .catch((e) => {
+        const msg = errorMessage(e, 'เปิดห้องไม่ได้');
+        setError(msg);
+        if (
+          msg.includes('closed') ||
+          msg.includes('ไม่อยู่') ||
+          msg.includes('ไม่พบ')
+        ) {
+          clearActiveRoom();
+        }
+      });
   }, [mounted, room, code, hostName, leaving, setRoom]);
   if (!mounted || !room)
     return (
@@ -494,6 +699,8 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
     try {
       await downloadEvidenceArchive(room);
       setLeaving(true);
+      clearActiveRoom();
+      forgetRoomCredentials(`host:${room.code}`);
       await closeRoom(room.code);
       router.replace('/');
     } catch (e) {
@@ -503,8 +710,15 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const leave = async () => {
     if (!window.confirm('ปิดห้องนี้หรือไม่')) return;
     setLeaving(true);
+    clearActiveRoom();
+    forgetRoomCredentials(`host:${room.code}`);
     await closeRoom(room.code);
     router.replace('/');
+  };
+  const endCurrentGame = () => {
+    if (!window.confirm('ยืนยันการจบเกม? ผู้เล่นทุกคนจะเห็นว่าเกมจบแล้ว'))
+      return;
+    act(endGame(room.code));
   };
   return (
     <main className='app-shell'>
@@ -512,15 +726,22 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         code={room.code}
         label='CONTROL ROOM'
         action={
-          room.phase === 'lobby' ? (
-            <button className='topbar-btn danger' onClick={leave}>
-              <DoorOpen size={15} /> ปิดห้อง
-            </button>
-          ) : room.phase === 'ended' ? (
+          room.phase === 'ended' ? (
             <button className='topbar-btn danger' onClick={finish}>
               <Download size={15} /> archive และปิด
             </button>
-          ) : null
+          ) : (
+            <>
+              <button className='topbar-btn danger' onClick={endCurrentGame}>
+                <Skull size={15} /> จบเกม
+              </button>
+              {room.phase === 'lobby' && (
+                <button className='topbar-btn danger' onClick={leave}>
+                  <DoorOpen size={15} /> ปิดห้อง
+                </button>
+              )}
+            </>
+          )
         }
       />
       <div className='host-layout'>
@@ -825,6 +1046,7 @@ export function PlayerRoom({
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const join = async (event?: React.FormEvent) => {
     event?.preventDefault();
     setJoining(true);
@@ -835,6 +1057,11 @@ export function PlayerRoom({
         name: loginName,
         reclaimToken: token || undefined,
       });
+      rememberActiveRoom({
+        role: 'player',
+        code,
+        name: loginName,
+      });
       setReclaimToken(token);
       if (joined.reclaimToken)
         window.alert(
@@ -843,10 +1070,24 @@ export function PlayerRoom({
       setPlayerId(joined.playerId);
       setRoom(joined.room);
     } catch (e) {
-      setError(errorMessage(e, 'เข้าห้องไม่ได้'));
+      const msg = errorMessage(e, 'เข้าห้องไม่ได้');
+      setError(msg);
+      if (
+        msg.includes('closed') ||
+        msg.includes('ไม่อยู่') ||
+        msg.includes('ไม่พบ')
+      ) {
+        clearActiveRoom();
+      }
     } finally {
       setJoining(false);
     }
+  };
+  const handleConfirmLeave = () => {
+    clearActiveRoom();
+    forgetRoomCredentials(`player:${code}`);
+    setIsLeaveModalOpen(false);
+    router.replace('/');
   };
   useEffect(() => {
     if (loginName) void join();
@@ -929,7 +1170,19 @@ export function PlayerRoom({
     );
   const me = room.privateStates[playerId];
   const mine = room.players.find((player) => player.id === playerId);
-  if (!me) return <Waiting room={room} />;
+  if (!me) {
+    return (
+      <>
+        <Waiting room={room} onLeave={() => setIsLeaveModalOpen(true)} />
+        <LeaveConfirmModal
+          expectedName={loginName}
+          isOpen={isLeaveModalOpen}
+          onClose={() => setIsLeaveModalOpen(false)}
+          onConfirm={handleConfirmLeave}
+        />
+      </>
+    );
+  }
   const isKiller = me.isActiveKiller;
   const quotaExhausted =
     isKiller &&
@@ -987,7 +1240,11 @@ export function PlayerRoom({
     : undefined;
   return (
     <main className='app-shell player-app'>
-      <Header code={room.code} label='FIELD DEVICE' back />
+      <Header
+        code={room.code}
+        label='FIELD DEVICE'
+        onLeave={() => setIsLeaveModalOpen(true)}
+      />
       <div className='player-layout'>
         <section className='main-column'>
           <div className='player-hero'>
@@ -1207,6 +1464,12 @@ export function PlayerRoom({
           </div>
         </aside>
       </div>
+      <LeaveConfirmModal
+        expectedName={loginName}
+        isOpen={isLeaveModalOpen}
+        onClose={() => setIsLeaveModalOpen(false)}
+        onConfirm={handleConfirmLeave}
+      />
     </main>
   );
 }

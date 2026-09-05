@@ -276,6 +276,9 @@ export function reporterAbility(code: string, targetId: string) {
 export function setAccusationAt(code: string, accusationAt: string) {
   return mutate(code, 'set_accusation_at', { p_at: accusationAt });
 }
+export function endGame(code: string) {
+  return mutate(code, 'end_game');
+}
 export async function heartbeat(code: string) {
   const normalizedCode = roomCodeValue(code);
   if (!normalizedCode) return;

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Noto_Sans_Thai } from 'next/font/google';
 import './globals.css';
 import './pwa.css';
+import './redesign.css';
 import { PwaRegister } from '@/components/pwa-register';
 
 const notoSansThai = Noto_Sans_Thai({
@@ -29,8 +30,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#0d0f12',
+  themeColor: '#080f0d',
 };
 export default function RootLayout({
   children,

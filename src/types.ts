@@ -1,5 +1,19 @@
-export type Role = "killer" | "killer-wife" | "police" | "reporter" | "bomber" | "detective" | "athlete" | "sumo" | "villager";
-export type RoomPhase = "lobby" | "active" | "police-check" | "bomb-resolution" | "ended";
+export type Role =
+  | "killer"
+  | "killer-wife"
+  | "police"
+  | "reporter"
+  | "bomber"
+  | "detective"
+  | "athlete"
+  | "sumo"
+  | "villager";
+export type RoomPhase =
+  | "lobby"
+  | "active"
+  | "police-check"
+  | "bomb-resolution"
+  | "ended";
 export type HealthState = "alive" | "critical" | "dead";
 export type EvidenceStatus = "pending" | "approved" | "rejected";
 export type WinningTeam = "city" | "killers" | null;
@@ -48,7 +62,16 @@ export type RoomEvent = {
 };
 
 /** Shared metadata only; images and storage paths are Host-only. */
-export type KillerEvidenceProgress = Pick<Evidence, "id" | "killerId" | "targetId" | "capturedAt" | "createdAt" | "status" | "decisionAt"> & {
+export type KillerEvidenceProgress = Pick<
+  Evidence,
+  | "id"
+  | "killerId"
+  | "targetId"
+  | "capturedAt"
+  | "createdAt"
+  | "status"
+  | "decisionAt"
+> & {
   result: "target is still alive" | "elimination confirmed" | null;
 };
 
@@ -58,6 +81,7 @@ export type RoomState = {
   hostName: string;
   phase: RoomPhase;
   createdAt: string;
+  closedAt?: string;
   attackLimit: number;
   attacksThisHour: number;
   quotaWindowStart: string;

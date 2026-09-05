@@ -47,6 +47,11 @@ export type RoomEvent = {
   playerId?: string;
 };
 
+/** Shared metadata only; images and storage paths are Host-only. */
+export type KillerEvidenceProgress = Pick<Evidence, "id" | "killerId" | "targetId" | "capturedAt" | "createdAt" | "status" | "decisionAt"> & {
+  result: "target is still alive" | "elimination confirmed" | null;
+};
+
 export type RoomState = {
   viewerRole: "host" | "player";
   code: string;
@@ -60,6 +65,7 @@ export type RoomState = {
   players: Player[];
   privateStates: Record<string, PrivatePlayerState>;
   evidences: Evidence[];
+  killerEvidenceProgress: KillerEvidenceProgress[];
   events: RoomEvent[];
   winner: WinningTeam;
   bombTargets: string[];

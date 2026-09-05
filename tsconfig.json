@@ -37,7 +37,8 @@
     ".next-verify/types/**/*.ts",
     ".next-verify-2/types/**/*.ts",
     ".next-killer/types/**/*.ts",
-    ".next-killer-dev/types/**/*.ts"
+    ".next-killer-dev/types/**/*.ts",
+    ".next-role-tests/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

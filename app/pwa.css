@@ -1,0 +1,208 @@
+/* PWA Banner & Install Modal */
+.pwa-install-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: rgba(22, 25, 29, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  animation: pwaSlideDown 0.3s ease-out;
+}
+@keyframes pwaSlideDown {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.pwa-install-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pwa-install-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pwa-inline-icon {
+  color: var(--acid);
+}
+.pwa-install-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pwa-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pwa-install-btn {
+  background: var(--acid);
+  color: var(--ink);
+  border: 1px solid var(--acid);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 14px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.pwa-install-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.pwa-dismiss-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 6px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s ease;
+}
+.pwa-dismiss-btn:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* iOS PWA Install Modal */
+.pwa-ios-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: pwaFadeIn 0.25s ease-out;
+}
+@keyframes pwaFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.pwa-ios-modal {
+  width: min(100%, 420px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: pwaZoomIn 0.25s ease-out;
+}
+@keyframes pwaZoomIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.pwa-ios-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pwa-ios-title-wrap h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.pwa-ios-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.pwa-ios-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pwa-ios-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.pwa-step-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(201, 255, 61, 0.1);
+  border: 1px solid rgba(201, 255, 61, 0.25);
+  color: var(--acid);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.pwa-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pwa-step-text strong {
+  font-size: 13px;
+  color: var(--text);
+}
+.pwa-step-text span {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.pwa-ios-close-btn {
+  margin-top: 6px;
+  width: 100%;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+}
+@media (max-width: 600px) {
+  .pwa-install-banner {
+    padding: 9px 12px;
+  }
+  .pwa-install-desc {
+    max-width: 180px;
+  }
+}

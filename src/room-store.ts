@@ -1,5 +1,5 @@
 import { ensureAnonymousSession, getSupabaseBrowser } from "./supabase-browser";
-import type { Evidence, PrivatePlayerState, RoomState, Role, Team } from "./types";
+import type { Evidence, KillerEvidenceProgress, PrivatePlayerState, RoomState, Role, Team } from "./types";
 
 /** Supabase is the authority. This adapter intentionally has no localStorage fallback. */
 type Json = Record<string, unknown>;
@@ -52,6 +52,12 @@ function asRoom(value: unknown): RoomState {
       isOnline: Boolean(player.isOnline ?? player.is_online), health: player.health as RoomState["players"][number]["health"],
       heartsVisibleToHost: Number(player.heartsVisibleToHost ?? player.hearts_visible_to_host ?? 0), maxHearts: Number(player.maxHearts ?? player.max_hearts ?? 0) })),
     privateStates: Object.fromEntries(Object.entries(secrets).map(([id, secret]) => [id, asPrivateState(secret)])), evidences,
+    killerEvidenceProgress: ((data.killerEvidenceProgress ?? []) as Array<Json>).map((item) => ({
+      id: String(item.id), killerId: String(item.killerId), targetId: String(item.targetId),
+      capturedAt: String(item.capturedAt), createdAt: String(item.createdAt), status: item.status as Evidence["status"],
+      decisionAt: item.decisionAt ? String(item.decisionAt) : undefined,
+      result: (item.result ?? null) as KillerEvidenceProgress["result"],
+    })),
     events: ((data.events ?? []) as Array<Json>).map((event) => ({ id: String(event.id), type: event.type as RoomState["events"][number]["type"], message: String(event.message),
       createdAt: String(event.createdAt ?? event.created_at), playerId: event.playerId ? String(event.playerId) : event.visibleToPlayerId ? String(event.visibleToPlayerId) : undefined })),
     winner: (data.winner ?? null) as RoomState["winner"], bombTargets: ((data.bombTargets ?? data.bomb_targets ?? []) as unknown[]).map(String),
@@ -121,8 +127,9 @@ async function mutate(code: string, fn: string, args: Json = {}) {
   const normalizedCode = roomCodeValue(code);
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   await ensureAnonymousSession();
-  const { error } = await client().rpc(fn, { p_code: normalizedCode, ...args });
+  const { data, error } = await client().rpc(fn, { p_code: normalizedCode, ...args });
   if (error) throw error;
+  if (data?.actionError) throw new Error("ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
   return room;
@@ -151,6 +158,8 @@ function imageExtension(image: Blob) {
 
 export async function submitEvidence(code: string, targetId: string, image: File | Blob, capturedAt: string) {
   if (!targetId || !capturedAt || !image.type.startsWith("image/") || image.size <= 0) throw new Error("กรุณาถ่ายรูปหลักฐานก่อนส่ง");
+  const captureAge = Date.now() - Date.parse(capturedAt);
+  if (!Number.isFinite(captureAge) || captureAge < 0 || captureAge > 120000) throw new Error("รูปเกิน 2 นาทีแล้ว กรุณาถ่ายใหม่");
   await ensureAnonymousSession();
   const supabase = client();
   const session = await supabase.auth.getSession();
@@ -159,8 +168,11 @@ export async function submitEvidence(code: string, targetId: string, image: File
   const storagePath = `${userId}/${crypto.randomUUID()}.${imageExtension(image)}`;
   const uploaded = await supabase.storage.from("evidence").upload(storagePath, image, { contentType: image.type, upsert: false });
   if (uploaded.error) throw uploaded.error;
-  const { error } = await supabase.rpc("submit_evidence", { p_code: roomCodeValue(code), p_target_id: targetId, p_storage_path: storagePath, p_captured_at: capturedAt });
-  if (error) { await supabase.storage.from("evidence").remove([storagePath]); throw error; }
+  const { data, error } = await supabase.rpc("submit_evidence", { p_code: roomCodeValue(code), p_target_id: targetId, p_storage_path: storagePath, p_captured_at: capturedAt });
+  if (error || data?.actionError) {
+    await supabase.storage.from("evidence").remove([storagePath]);
+    throw error || new Error("ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
+  }
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
   return room;

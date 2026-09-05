@@ -56,6 +56,9 @@ not implement it without an explicit rule update.
 
 - Killer submits a live camera photo and selects a target. The Host validates
   the evidence before any game state changes.
+- The web app captures the photo directly from a live camera. Evidence must be
+  submitted within two minutes of capture. Once submitted, evidence does not
+  expire while waiting for Host review; the Host still validates authenticity.
 - The final photo that eliminates a target MUST be freshly captured, not a
   pre-existing stock photo.
 - The initial Killer team may have at most two **approved attacks** during each
@@ -86,9 +89,13 @@ not implement it without an explicit rule update.
 ## Reporter
 
 - A living Reporter may use their ability exactly once per game.
-- Reporter selects one other player and privately learns that player's initial
+- Reporter selects one other living player and privately learns that player's initial
   role. A transformed Killer's Wife still returns `Killer's Wife`; a promoted
   Detective still returns `Detective`.
+- Reporter cannot inspect themselves or a dead player. The target must still be
+  alive when the action is processed; a refused inspection consumes no ability.
+- The ability is available during active play, Bomber resolution, and final
+  accusation, but never before the game starts or after it ends.
 - Publicly announce only: `Reporter has used an ability.` Do not reveal the
   Reporter's identity, the inspected target, or the result.
 - The inspected player receives a private notification that they were inspected
@@ -108,6 +115,9 @@ not implement it without an explicit rule update.
 - A Killer killed by a Bomber is announced only as a dead player; the public
   MUST NOT learn that they were a Killer.
 - If all Killers are dead, the city team wins immediately.
+- Resolve all explosion victims together before succession or victory checks.
+  If the last Killer and Police die in the same explosion, the city wins even
+  when no Detective survives. This takes priority over the Police-death loss.
 
 ## Police, Detective, and Victory
 

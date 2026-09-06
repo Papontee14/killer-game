@@ -93,28 +93,8 @@ async function evidenceEntry(evidence: Evidence, index: number) {
 export async function downloadEvidenceArchive(room: RoomState) {
   if (typeof window === "undefined")
     throw new Error("ดาวน์โหลดได้จากหน้า Host เท่านั้น");
+  if (room.evidences.length === 0) return 0;
   const entries = await Promise.all(room.evidences.map(evidenceEntry));
-  entries.unshift({
-    name: "game-summary.json",
-    bytes: new TextEncoder().encode(
-      JSON.stringify(
-        {
-          code: room.code,
-          hostName: room.hostName,
-          phase: room.phase,
-          winner: room.winner,
-          players: room.players,
-          roles: room.privateStates,
-          events: room.events,
-          evidence: room.evidences.map(
-            ({ imageData, storagePath, ...metadata }) => metadata,
-          ),
-        },
-        null,
-        2,
-      ),
-    ),
-  });
   const url = URL.createObjectURL(zip(entries));
   const link = document.createElement("a");
   link.href = url;

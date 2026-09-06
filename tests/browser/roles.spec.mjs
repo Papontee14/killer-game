@@ -634,6 +634,7 @@ test("live private role transitions show new actions without leaking identity", 
 test("Host can resolve zero-person bomb and download archive before closing", async ({
   page,
 }) => {
+  await f.evidence("sumo");
   await f.hit("bomber");
   await f.hit("bomber");
   await openPlayer(page, "host");

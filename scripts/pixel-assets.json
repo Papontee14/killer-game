@@ -31,8 +31,8 @@
   },
   {
     "key": "role-police",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-bb7518f3-2f20-4541-87e0-33e8342986d7.png",
-    "prompt": "Revised police role art: youthful plain-clothes investigator in a casual dark overshirt over a tee, no uniform, cap, tie or epaulettes. Same crisp 8-bit pixel portrait, dark teal background and neon green/red rim light.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-0f46521d-81c8-49bc-8919-129b360bf486.png",
+    "prompt": "Revised police role art: youthful plain-clothes investigator with a subtle badge, radio, utility belt and small blue-red ID clip so the profession reads clearly, while keeping a casual dark overshirt over a tee. No cap, tie, formal uniform or epaulettes. Same crisp 8-bit pixel portrait and neon palette.",
     "output": "public/pixel/role-police.webp"
   },
   {
@@ -49,8 +49,8 @@
   },
   {
     "key": "role-detective",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-300e927a-94f9-47e7-9d04-169c0ad3dc90.png",
-    "prompt": "Revised detective role art: energetic young adult with messy hair in a casual hoodie and short street jacket, holding a magnifying glass, no mature trench coat or bomber silhouette. Same crisp 8-bit pixel portrait and neon palette.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-a8df16bb-8e1e-40bf-9609-813f141c1b8e.png",
+    "prompt": "Revised detective role art: clearly 26-year-old young adult with smooth skin, alert eyes and confident half-smile, wearing a casual hoodie and light street jacket while holding a magnifying glass. Avoid teenager, mature wrinkles, trench coat and bomber silhouette. Same crisp 8-bit pixel portrait and neon palette.",
     "output": "public/pixel/role-detective.webp"
   },
   {

@@ -19,7 +19,7 @@ import {
   type Role,
   type RoomPhase,
 } from "@/src/types";
-import { ROLE_ART, roleArtAlt } from "@/src/role-art";
+import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 export const PHASE_LABELS: Record<RoomPhase, string> = {
   lobby: "ห้องรอ",
   active: "กำลังเล่น",
@@ -442,6 +442,7 @@ export function RoleReveal({
   revealImmediately = false,
   revealStorageKey,
   onHideScreen,
+  artVariantKey,
 }: {
   role: Role;
   previous?: Role;
@@ -451,6 +452,7 @@ export function RoleReveal({
   revealImmediately?: boolean;
   revealStorageKey?: string;
   onHideScreen?: () => void;
+  artVariantKey?: string;
 }) {
   const [revealState, setRevealState] = useState<
     "waiting" | "spinning" | "revealed"
@@ -468,7 +470,8 @@ export function RoleReveal({
   const [loadedArt, setLoadedArt] = useState("");
   const [artError, setArtError] = useState(false);
   const [artAttempt, setArtAttempt] = useState(0);
-  const roleArtReady = loadedArt === ROLE_ART[role];
+  const art = roleArtForPlayer(role, artVariantKey);
+  const roleArtReady = loadedArt === art;
   const imageRef = useRef<HTMLImageElement>(null);
   const isRevealed = revealState === "revealed";
 
@@ -531,7 +534,7 @@ export function RoleReveal({
                 key={`${role}-${artAttempt}`}
                 ref={imageRef}
                 className="role-reveal-art"
-                src={ROLE_ART[role]}
+                src={art}
                 width={2048}
                 height={2048}
                 sizes="280px"
@@ -541,7 +544,7 @@ export function RoleReveal({
                   const node = event.currentTarget;
                   try {
                     await node.decode();
-                    if (imageRef.current === node) setLoadedArt(ROLE_ART[role]);
+                    if (imageRef.current === node) setLoadedArt(art);
                   } catch {
                     if (imageRef.current === node) setArtError(true);
                   }

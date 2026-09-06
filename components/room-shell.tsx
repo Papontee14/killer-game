@@ -73,11 +73,12 @@ import {
   type Role,
   type RoomState,
 } from "@/src/types";
-import { ROLE_ART, roleArtAlt } from "@/src/role-art";
+import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 import { downloadEvidenceArchive } from "@/src/evidence-download";
 import {
   getNotificationPermission,
   requestNotificationPermission,
+  schedulePoliceCheckReminder,
   showGenericNotification,
   subscribeToWebPush,
 } from "@/src/notifications";
@@ -190,6 +191,17 @@ function useRoom(code: string) {
     [replaceRoom],
   );
   return [room, refresh, run, replaceRoom, initialLoadComplete, stale] as const;
+}
+
+function usePoliceCheckReminder(
+  code: string,
+  policeCheckAt: string | undefined,
+  isHost: boolean,
+) {
+  useEffect(
+    () => schedulePoliceCheckReminder(code, policeCheckAt, isHost),
+    [code, policeCheckAt, isHost],
+  );
 }
 
 function NotificationToggle({ code }: { code: string }) {
@@ -464,7 +476,7 @@ function PlayerCard({
       {visibleState && (
         <img
           className="role-thumb role-thumb-player"
-          src={ROLE_ART[state.currentRole]}
+          src={roleArtForPlayer(state.currentRole, player.id)}
           alt={roleArtAlt(state.currentRole)}
         />
       )}
@@ -640,7 +652,7 @@ function PlayerEndGameSummary({
                   {summary?.initialRole && (
                     <img
                       className="role-thumb role-thumb-endgame"
-                      src={ROLE_ART[summary.initialRole]}
+                      src={roleArtForPlayer(summary.initialRole, player.id)}
                       alt={roleArtAlt(summary.initialRole)}
                     />
                   )}
@@ -769,6 +781,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const router = useRouter();
   const [room, refresh, run, setRoom, initialLoadComplete, stale] =
     useRoom(code);
+  usePoliceCheckReminder(code, room?.policeCheckAt, true);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState(false);
@@ -1463,6 +1476,7 @@ export function PlayerRoom({
 }) {
   const router = useRouter();
   const [room, refresh, run, setRoom, , stale] = useRoom(code);
+  usePoliceCheckReminder(code, room?.policeCheckAt, false);
   const [tab, setTab] = useState("home");
   const [showRules, setShowRules] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
@@ -1927,7 +1941,7 @@ export function PlayerRoom({
           <div className={`player-hero ${isKiller ? "is-killer" : ""}`}>
             <img
               className="player-hero-art"
-              src={ROLE_ART[me.currentRole]}
+              src={roleArtForPlayer(me.currentRole, playerId)}
               alt=""
               aria-hidden="true"
             />
@@ -2274,6 +2288,7 @@ export function PlayerRoom({
           key={`${room.code}:${room.createdAt}:${playerId}`}
           revealStorageKey={`killer_role_revealed:${room.code}:${room.createdAt}:${playerId}`}
           role={me.currentRole}
+          artVariantKey={playerId}
           hearts={me.hearts}
           maxHearts={me.maxHearts}
           previous={ackRole !== me.currentRole ? ackRole : undefined}

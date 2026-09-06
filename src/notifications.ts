@@ -4,6 +4,16 @@ export type NotificationPermissionState =
   | 'denied'
   | 'unsupported';
 
+export type RoomNotificationKind =
+  | 'generic'
+  | 'evidence'
+  | 'police-reminder';
+
+export const POLICE_CHECK_REMINDER =
+  '\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35';
+export const EVIDENCE_RECEIVED =
+  '\u0e21\u0e35\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\u0e43\u0e2b\u0e21\u0e48\u0e23\u0e2d Host \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a';
+
 export function getNotificationPermission(): NotificationPermissionState {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'unsupported';
@@ -80,6 +90,44 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+/**
+ * Schedule the three-minute police reminder for an open room view. When the
+ * Host client reaches the reminder time it asks the server to fan the reminder
+ * out to every registered device; each open room view also gets a local alert.
+ */
+export function schedulePoliceCheckReminder(
+  code: string,
+  policeCheckAt: string | undefined,
+  isHost: boolean,
+) {
+  if (typeof window === 'undefined' || !policeCheckAt) return () => undefined;
+
+  const reminderAt = Date.parse(policeCheckAt) - 3 * 60 * 1000;
+  const delay = reminderAt - Date.now();
+  // Do not show a stale “in 3 minutes” message after the reminder window.
+  if (!Number.isFinite(reminderAt) || delay < -30 * 1000) return () => undefined;
+
+  const storageKey = `killer_police_reminder:${code}:${policeCheckAt}`;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const fire = () => {
+    try {
+      if (window.localStorage.getItem(storageKey)) return;
+      window.localStorage.setItem(storageKey, '1');
+    } catch {
+      // Still show the notification when storage is unavailable.
+    }
+    void showGenericNotification(POLICE_CHECK_REMINDER);
+    if (isHost) {
+      void notifyRoomParticipants(code, undefined, undefined, 'police-reminder');
+    }
+  };
+
+  timer = setTimeout(fire, Math.max(0, delay));
+  return () => {
+    if (timer) clearTimeout(timer);
+  };
+}
+
 async function readyServiceWorker(): Promise<ServiceWorkerRegistration> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -152,13 +200,15 @@ export async function subscribeToWebPush(
 export async function notifyRoomParticipants(
   code: string,
   excludeUserId?: string,
+  targetUserId?: string,
+  kind: RoomNotificationKind = 'generic',
 ) {
   try {
     await fetch('/api/push/send', {
       method: 'POST',
       keepalive: true,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, excludeUserId }),
+      body: JSON.stringify({ code, excludeUserId, targetUserId, kind }),
     });
   } catch {
     // Non-blocking background call

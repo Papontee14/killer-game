@@ -31,8 +31,8 @@
   },
   {
     "key": "role-police",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-db16967e-8553-47a8-a194-9865eb21c239.png",
-    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult police officer wearing a navy uniform and peaked cap, green rimlight, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-bb7518f3-2f20-4541-87e0-33e8342986d7.png",
+    "prompt": "Revised police role art: youthful plain-clothes investigator in a casual dark overshirt over a tee, no uniform, cap, tie or epaulettes. Same crisp 8-bit pixel portrait, dark teal background and neon green/red rim light.",
     "output": "public/pixel/role-police.webp"
   },
   {
@@ -49,27 +49,45 @@
   },
   {
     "key": "role-detective",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-80a92ac8-b794-4bad-8086-b5dbb1af38f2.png",
-    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult private detective in tan trench coat holding magnifying glass, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-300e927a-94f9-47e7-9d04-169c0ad3dc90.png",
+    "prompt": "Revised detective role art: energetic young adult with messy hair in a casual hoodie and short street jacket, holding a magnifying glass, no mature trench coat or bomber silhouette. Same crisp 8-bit pixel portrait and neon palette.",
     "output": "public/pixel/role-detective.webp"
   },
   {
     "key": "role-athlete",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-be294275-525b-4cd2-b026-0c9b04074ff6.png",
-    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult male runner with athletic build wearing a green sports jersey, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-d32f4715-6753-43a4-9595-d060eba666f5.png",
+    "prompt": "Revised athlete role art: cheerful young woman with ponytail in a sporty sleeveless jersey, bright confident smile, no injury or blood. Same crisp 8-bit pixel portrait and dark teal neon palette.",
     "output": "public/pixel/role-athlete.webp"
   },
   {
     "key": "role-sumo",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-c24bde17-2356-4883-b342-5586d1de86db.png",
-    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult male sumo wrestler, large strong build, dark teal wrestling belt, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-6b8ceb57-671d-4bb8-8dac-225b0e119297.png",
+    "prompt": "Revised sumo role art: centered half-body crop from head to waist, no legs or feet, topknot and dark teal mawashi visible. Same crisp 8-bit pixel portrait and neon rim light.",
     "output": "public/pixel/role-sumo.webp"
   },
   {
     "key": "role-villager",
-    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-7f21ab26-048b-4845-9641-54b684a767bf.png",
-    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, ordinary adult town resident wearing a mustard jacket and green shirt, centered, consistent medium-sized pixels, plain dark teal backdrop.",
-    "output": "public/pixel/role-villager.webp"
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-aa655d58-75bd-44e0-be7e-0febcc8dd01e.png",
+    "prompt": "Villager variant 1: young man with curly hair and round glasses in a teal hoodie, waving with a curious friendly expression. Same crisp 8-bit portrait and neon palette.",
+    "output": "public/pixel/role-villager-1.webp"
+  },
+  {
+    "key": "role-villager-2",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-47c50541-e195-48d5-b1b4-dfe8796536c9.png",
+    "prompt": "Villager variant 2: middle-aged man with shaved-side undercut and mustard work jacket, holding a folded map. Distinct face and pose, same crisp 8-bit neon portrait.",
+    "output": "public/pixel/role-villager-2.webp"
+  },
+  {
+    "key": "role-villager-3",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-4fa0e84b-f59d-4e1e-af93-63fe29d0c309.png",
+    "prompt": "Villager variant 3: young woman with two braids and beanie, teal utility vest and lime shirt, leaning forward with a flashlight. Distinct face and pose, same crisp 8-bit neon portrait.",
+    "output": "public/pixel/role-villager-3.webp"
+  },
+  {
+    "key": "role-villager-4",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-ce0a5fe1-4d5b-49f3-9605-925d24691503.png",
+    "prompt": "Villager variant 4: adult woman with asymmetrical pixie haircut, freckles, red scarf and charcoal denim jacket, arms crossed with a skeptical expression. Distinct face and pose, same crisp 8-bit neon portrait.",
+    "output": "public/pixel/role-villager-4.webp"
   },
   {
     "key": "role-host",

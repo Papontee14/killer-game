@@ -45,3 +45,11 @@ test('push wakes a worker without any open app window and uses pixel notificatio
  assert.equal(options.data.url,'/room/ABCDEF');
  assert.equal(options.silent,false);
 });
+
+test('push allows the scheduled police reminder but still rejects arbitrary text', async () => {
+ const {handlers,notifications}=worker();
+ let done;
+ handlers.push({data:{json:()=>({body:'\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35'})},waitUntil:p=>done=p});
+ await done;
+ assert.equal(notifications[0][1].body,'\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35');
+});

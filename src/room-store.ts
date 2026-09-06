@@ -356,6 +356,13 @@ export async function submitEvidence(
   }
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
+  // Evidence is visible only to the Host, so notify the Host device directly.
+  void notifyRoomParticipants(
+    roomCodeValue(code),
+    undefined,
+    undefined,
+    "evidence",
+  );
   return room;
 }
 

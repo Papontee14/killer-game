@@ -585,7 +585,7 @@ test("all nine role variants keep public roster private at 360px", async ({
         detective: "/pixel/role-detective.webp",
         athlete: "/pixel/role-athlete.webp",
         sumo: "/pixel/role-sumo.webp",
-        villager: "/pixel/role-villager.webp",
+        villager: /\/pixel\/role-villager-[1-4]\.webp/,
       };
       await expect(page.locator(".player-hero-art")).toHaveAttribute(
         "src",

@@ -26,3 +26,7 @@ test('push setup subscribes a new device; missing VAPID key reports failure',asy
 test('room push request survives page navigation',async()=>{
  const c=client();await c.api.notifyRoomParticipants('ABCDEF');assert.equal(c.requests[0].options.keepalive,true);
 });
+test('room push request can select a notification kind',async()=>{
+ const c=client();await c.api.notifyRoomParticipants('ABCDEF',undefined,undefined,'evidence');
+ assert.equal(JSON.parse(c.requests[0].options.body).kind,'evidence');
+});

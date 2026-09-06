@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { code, excludeUserId, targetUserId } = body;
+    const { code, excludeUserId, targetUserId, kind = 'generic' } = body;
     if (!code) {
       return NextResponse.json({ error: 'Missing room code' }, { status: 400 });
     }
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     // Find the room
     const { data: room, error: roomErr } = await supabase
       .from('rooms')
-      .select('id')
+      .select('id, host_user_id')
       .eq('code', String(code).trim().toUpperCase())
       .single();
 
@@ -67,7 +67,10 @@ export async function POST(req: Request) {
       .select('id, endpoint, p256dh, auth, user_id')
       .eq('room_id', room.id);
 
-    if (targetUserId) {
+    if (kind === 'evidence') {
+      // A submitted evidence item is Host-only information.
+      query = query.eq('user_id', room.host_user_id);
+    } else if (targetUserId) {
       query = query.eq('user_id', targetUserId);
     } else if (excludeUserId) {
       query = query.neq('user_id', excludeUserId);
@@ -86,12 +89,24 @@ export async function POST(req: Request) {
     // "Notifications shown on a locked phone MUST be generic and must not leak role,
     //  target, heart, or inspection information. Full details appear only after the
     //  player opens the authenticated game view."
+    const notificationBody =
+      kind === 'police-reminder'
+        ? '\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35'
+        : kind === 'evidence'
+          ? '\u0e21\u0e35\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\u0e43\u0e2b\u0e21\u0e48\u0e23\u0e2d Host \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a'
+          : null;
     const payload = JSON.stringify({
       title: 'KILLER',
       body: 'มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด',
       tag: 'killer-event',
       url: `/room/${encodeURIComponent(String(code).trim().toUpperCase())}`,
     });
+    const outgoingPayload = notificationBody
+      ? payload.replace(
+          /"body":"[^"]*"/,
+          `"body":${JSON.stringify(notificationBody)}`,
+        )
+      : payload;
 
     const deadSubscriptionIds: string[] = [];
     let sentCount = 0;
@@ -107,7 +122,7 @@ export async function POST(req: Request) {
         };
 
         try {
-          await webpush.sendNotification(pushSubscription, payload, {
+          await webpush.sendNotification(pushSubscription, outgoingPayload, {
             TTL: 60 * 60, // 1 hour
             urgency: 'high',
           });

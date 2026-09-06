@@ -25,7 +25,9 @@ Game captures use an isolated PostgreSQL fixture and intercepted Supabase transp
 
 ## Artwork provenance
 
-21 illustrations were generated with the built-in **imagegen** tool: 3 scene illustrations, 9 role portraits, a Host portrait, and 8 neutral avatars. The final WebP files live in [`public/pixel`](../../public/pixel). Their final prompts and original generated source locations are recorded in [`scripts/pixel-assets.json`](../../scripts/pixel-assets.json).
+25 illustrations were generated with the built-in **imagegen** tool: 3 scene illustrations, 12 role portraits (including four Villager variants), a Host portrait, and 8 neutral avatars. The final WebP files live in [`public/pixel`](../../public/pixel). Their final prompts and original generated source locations are recorded in [`scripts/pixel-assets.json`](../../scripts/pixel-assets.json).
+
+Role art refresh (2026-09-06): police now wears casual plain clothes, detective is younger and more contemporary, athlete is a bright female character, and sumo uses a half-body crop. Villager has four distinct portraits (`role-villager-1.webp` through `role-villager-4.webp`); [`src/role-art.ts`](../../src/role-art.ts) selects one deterministically from the player ID while keeping avatars and role secrecy separate.
 
 [`prepare-pixel-assets.cjs`](../../scripts/prepare-pixel-assets.cjs) packages the original images as WebP with nearest-neighbor resizing (1200px scenes, 512px role portraits, 128px avatars). It also creates the code-native pixel K PWA icons and the artwork overview. Original PNGs remain in the generator's directory; runtime uses only project-owned WebP files.
 

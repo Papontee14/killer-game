@@ -2138,3 +2138,122 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
     min-width: 0;
   }
 }
+
+/* Player header: give the mobile controls their own deliberate second row. */
+@media (max-width: 760px) {
+  .player-app > .topbar {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas:
+      "back brand"
+      "back actions";
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 10px;
+    min-height: 146px;
+    padding: max(16px, env(safe-area-inset-top)) 18px 14px;
+    border-bottom: 1px solid #41635f;
+    background:
+      linear-gradient(180deg, #0c2721 0%, #081b18 72%, #061512 100%);
+    box-shadow: 0 8px 24px #0005;
+  }
+
+  .player-app > .topbar > .back-link {
+    grid-area: back;
+    align-self: start;
+    margin-top: 7px;
+    color: var(--acid);
+    background: transparent !important;
+    border: 1px solid transparent !important;
+  }
+
+  .player-app > .topbar > .killer-logo.small {
+    grid-area: brand;
+    justify-self: start;
+    width: 96px;
+    font-size: 0;
+  }
+
+  .player-app > .topbar > .killer-logo.small > svg {
+    width: 96px;
+    filter: drop-shadow(2px 3px 0 #183b34);
+  }
+
+  .player-app > .topbar > .topbar-title {
+    display: none;
+  }
+
+  .player-app > .topbar > .topbar-actions {
+    grid-area: actions;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 60px 60px;
+    grid-template-areas:
+      ". privacy notifications"
+      "room room room";
+    align-items: center;
+    gap: 8px;
+  }
+
+  .player-app > .topbar .topbar-actions > .topbar-btn {
+    width: 60px;
+    min-width: 60px;
+    min-height: 52px;
+    padding: 0;
+    justify-content: center;
+    color: var(--text);
+    border-color: #41635f;
+    background: #102a24;
+    box-shadow: 3px 3px 0 #0006;
+  }
+
+  .player-app > .topbar .topbar-actions > .topbar-btn:hover,
+  .player-app > .topbar .topbar-actions > .topbar-btn:focus-visible {
+    color: var(--acid);
+    border-color: var(--acid);
+    background: #163b2a;
+  }
+
+  .player-app > .topbar .privacy-button {
+    grid-area: privacy;
+  }
+
+  .player-app > .topbar .topbar-actions > .topbar-btn:not(.privacy-button) {
+    grid-area: notifications;
+  }
+
+  .player-app > .topbar .topbar-actions > .topbar-btn span {
+    display: none;
+  }
+
+  .player-app > .topbar .room-chip {
+    grid-area: room;
+    justify-self: end;
+    align-self: center;
+    margin: 0;
+    padding: 8px 0 8px 8px;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .player-app > .topbar .room-chip::before {
+    content: "ห้อง";
+    display: block;
+    margin-bottom: 2px;
+    color: #6f8f85;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+
+  .player-app > .topbar .room-chip b {
+    display: block;
+    margin: 0;
+    color: var(--acid);
+    font-size: 16px;
+    letter-spacing: 0.16em;
+  }
+}

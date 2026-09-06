@@ -1,5 +1,7 @@
 const CACHE = "killer-shell-v3";
 const SHELL = ["/", "/manifest.webmanifest"];
+const POLICE_CHECK_REMINDER = "\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35";
+const EVIDENCE_RECEIVED = "\u0e21\u0e35\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\u0e43\u0e2b\u0e21\u0e48\u0e23\u0e2d Host \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a";
 const GENERIC_NOTIFICATION_BODY = "มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด";
 
 self.addEventListener("install", (event) => {
@@ -29,8 +31,12 @@ self.addEventListener("push", (event) => {
   // Keep the lock-screen text generic; details are only shown after opening the game.
   let data = {};
   try { data = event.data?.json() || {}; } catch (_) {}
+  const requestedBody = typeof data.body === "string" ? data.body : "";
+  const body = [POLICE_CHECK_REMINDER, EVIDENCE_RECEIVED].includes(requestedBody)
+    ? requestedBody
+    : GENERIC_NOTIFICATION_BODY;
   event.waitUntil(self.registration.showNotification("KILLER", {
-    body: GENERIC_NOTIFICATION_BODY,
+    body,
     tag: "killer-event",
     icon: "/icon-192.png?v=8bit-1",
     badge: '/notification-badge.png?v=8bit-1',

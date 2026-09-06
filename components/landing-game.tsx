@@ -6,19 +6,17 @@ import {
   Crown,
   DoorOpen,
   Fingerprint,
-  LockKeyhole,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { makeRoomCode } from "@/src/game";
 import { rememberRoomCredentials } from "@/src/room-session";
 import { Brand, Rules } from "./game-ui";
-export function LandingGame() {
+export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"join" | "host">("join");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode);
   const [name, setName] = useState("");
   const [recovery, setRecovery] = useState(false);
   const [token, setToken] = useState("");
@@ -62,25 +60,16 @@ export function LandingGame() {
               <Brand />
             </h1>
             <h2>
-              ทริปบางแสนนี้…
+              ในกลุ่มเพื่อนนี้…
               <br />
-              <span>พี่ไว้ใจใครได้บ้าง?</span>
+              <span>คุณไว้ใจใครได้บ้าง?</span>
             </h2>
             <p>
-              เมื่อคนใกล้ตัวอาจเป็น Killer
+              รับบทบาทลับ เล่นกับเพื่อนรอบตัว
               <br />
-              ความลับของคุณ คือกุญแจของเกมนี้
+              Killer แอบถ่ายเป้าหมาย ส่วนฝ่ายเมืองช่วยกันหาตัวคนร้าย
             </p>
-            <div className="story-tags">
-              <span>
-                <Users size={16} /> เล่นกับเพื่อนในชีวิตจริง
-              </span>
-              <span>
-                <LockKeyhole size={16} /> คนละเครื่อง · คนละความลับ
-              </span>
-            </div>
           </div>
-          <span className="art-caption">ค่ำคืนนี้ ทุกคนมีบางอย่างซ่อนอยู่</span>
         </section>
         <section className="entry-access">
           <div className="access-panel">
@@ -113,16 +102,6 @@ export function LandingGame() {
               </button>
             </div>
             <div className="access-heading">
-              <div className="access-icon">
-                {recovery ? (
-                  <Fingerprint size={24} />
-                ) : mode === "host" ? (
-                  <Crown size={24} />
-                ) : (
-                  <DoorOpen size={24} />
-                )}
-              </div>
-              <span>ความลับกำลังรอคุณอยู่</span>
               <h2>
                 {recovery
                   ? "กลับมาเป็นคุณคนเดิม"
@@ -179,7 +158,7 @@ export function LandingGame() {
                   }
                 />
                 <span className="input-hint">
-                  ใช้ชื่อที่เพื่อนรู้จัก <span>{name.length}/24</span>
+                  ใช้ชื่อที่เพื่อนรู้จัก · ไม่เกิน 24 ตัวอักษร
                 </span>
               </label>
               {recovery && (

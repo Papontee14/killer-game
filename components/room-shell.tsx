@@ -6,6 +6,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -28,6 +29,7 @@ import {
   DoorOpen,
   Download,
   Eye,
+  EyeOff,
   Heart,
   Hourglass,
   Radio,
@@ -80,6 +82,8 @@ import {
 
 import { NativeCamera } from "./native-camera";
 import { KillerProgress } from "./killer-progress";
+import { RoomInvite } from "./room-invite";
+import { PrivacyBoundary, capturePrivateView, type PrivateViewSnapshot } from "./privacy-boundary";
 import {
   Brand,
   ConnectionStatus,
@@ -88,7 +92,7 @@ import {
   PHASE_LABELS,
   RecoveryCard,
   RoleReveal,
-  ROLE_DETAILS,
+  ROLE_SUMMARIES,
   Rules,
 } from "./game-ui";
 
@@ -251,12 +255,14 @@ function Header({
   label,
   back = false,
   onLeave,
+  onHideScreen,
   action,
 }: {
   code: string;
   label: string;
   back?: boolean;
   onLeave?: () => void;
+  onHideScreen?: () => void;
   action?: ReactNode;
 }) {
   return (
@@ -285,6 +291,17 @@ function Header({
       <Brand small />
       <span className="topbar-title">{label}</span>
       <div className="topbar-actions">
+        {onHideScreen && (
+          <button
+            type="button"
+            className="topbar-btn privacy-button"
+            onClick={onHideScreen}
+            title="ซ่อนหน้าจอ"
+            aria-label="ซ่อนหน้าจอ"
+          >
+            <EyeOff size={16} /> <span>ซ่อนหน้าจอ</span>
+          </button>
+        )}
         <NotificationToggle code={code} />
         {action}
         <span className="room-chip">
@@ -347,11 +364,13 @@ function LeaveConfirmModal({
   isOpen,
   onClose,
   onConfirm,
+  onHideScreen,
 }: {
   expectedName: string;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  onHideScreen?: () => void;
 }) {
   const [typedName, setTypedName] = useState("");
   const [error, setError] = useState("");
@@ -362,7 +381,7 @@ function LeaveConfirmModal({
     onClose();
   };
   return (
-    <Dialog title="ออกจากเกม" onClose={close}>
+    <Dialog title="ออกจากเกม" onClose={close} onHideScreen={onHideScreen}>
       <p>
         พิมพ์ชื่อ <strong>{expectedName}</strong> เพื่อยืนยัน
         ตัวละครของคุณยังอยู่ในเกม
@@ -989,6 +1008,13 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               {PHASE_LABELS[room.phase]}
             </div>
           </div>
+          {room.phase === "lobby" && (tab === "home" || tab === "settings") && (
+            <section className="host-room-banner" aria-label="ข้อมูลห้อง">
+              <div><span className="section-kicker">รหัสเข้าร่วมห้อง</span><strong className="big-code">{room.code}</strong></div>
+              <p><b>{room.players.length} คน</b> เข้าห้องแล้ว<br />แชร์รหัสนี้ให้เพื่อน แล้วจัดสรรบทบาทให้ครบ</p>
+              <RoomInvite code={room.code} />
+            </section>
+          )}
           <Ended room={room} host />
           {room.phase === "lobby" && tab === "players" && (
             <LobbyPlayers room={room} />
@@ -1066,6 +1092,73 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
             </div>
           ) : (
             <>
+              {room.phase === "bomb-resolution" && (
+                <div className="panel bomb-panel" data-host-section="urgent">
+                  <div className="panel-heading">
+                    <div>
+                      <span className="section-kicker danger-kicker">
+                        เหตุการณ์เร่งด่วน
+                      </span>
+                      <h2>เลือกผู้เล่นใกล้ Bomber 0–2 คน</h2>
+                    </div>
+                    <Skull />
+                  </div>
+                  <div className="bomb-grid">
+                    {room.players
+                      .filter((player) => player.health !== "dead")
+                      .map((player) => (
+                        <button
+                          className={
+                            bombSelection.includes(player.id) ? "selected" : ""
+                          }
+                          key={player.id}
+                          onClick={() =>
+                            setBombSelection((current) =>
+                              current.includes(player.id)
+                                ? current.filter((id) => id !== player.id)
+                                : current.length < 2
+                                  ? [...current, player.id]
+                                  : current,
+                            )
+                          }
+                        >
+                          <span className="avatar">
+                            {player.name.slice(0, 1)}
+                          </span>
+                          {player.name}
+                          <Check size={16} />
+                        </button>
+                      ))}
+                  </div>
+                  <button
+                    className="danger-action"
+                    disabled={busy}
+                    onClick={() =>
+                      setConfirmation({
+                        title: "ทบทวนผลระเบิด",
+                        detail: bombSelection.length
+                          ? `ผู้เล่นที่จะถูกกำจัดทันที: ${room.players
+                              .filter((p) => bombSelection.includes(p.id))
+                              .map((p) => p.name)
+                              .join(" และ ")}`
+                          : "ไม่เลือกผู้ได้รับผลระเบิด เกมจะดำเนินต่อหรือแสดงผลตามกติกา",
+                        action: () =>
+                          act(() => resolveBomb(room.code, bombSelection)),
+                      })
+                    }
+                  >
+                    ดำเนินการระเบิด <Skull size={16} />
+                  </button>
+                </div>
+              )}
+              <section className="host-review-summary" data-host-section="home">
+                <div>
+                  <span className="section-kicker">งานรอตรวจ</span>
+                  <h2>{pending.length} หลักฐานรอตรวจ</h2>
+                  <p>{room.phase !== "active" ? "พักการอนุมัติในช่วงนี้" : pending.length ? "เปิดภาพและตรวจเป้าหมายก่อนตัดสินผล" : "ตรวจครบแล้ว รอหลักฐานใหม่จากผู้เล่น"}</p>
+                </div>
+                <button className="primary-action" onClick={() => setTab("evidence")}>ตรวจหลักฐาน <Camera size={18} /></button>
+              </section>
               <div className="metric-grid" data-host-section="home">
                 <div className="metric-card">
                   <small>ผู้เล่น</small>
@@ -1088,6 +1181,15 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   <span>คิวตรวจรูป</span>
                 </div>
               </div>
+              {tab === "home" && (
+                <section className="panel schedule-preview">
+                  <Clock3 size={22} />
+                  <div><span className="muted">เวลาตำรวจชี้ตัว · เวลาไทย</span>
+                    <strong>{room.policeCheckAt ? new Date(room.policeCheckAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" }) : "ยังไม่ได้กำหนดเวลา"}</strong>
+                  </div>
+                  <button className="text-button" onClick={() => setTab("settings")}>ตั้งเวลา</button>
+                </section>
+              )}
               <div
                 className="panel action-panel police-schedule-panel"
                 data-host-section="settings"
@@ -1149,65 +1251,6 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   </div>
                 )}
               </div>
-              {room.phase === "bomb-resolution" && (
-                <div className="panel bomb-panel" data-host-section="urgent">
-                  <div className="panel-heading">
-                    <div>
-                      <span className="section-kicker danger-kicker">
-                        เหตุการณ์เร่งด่วน
-                      </span>
-                      <h2>เลือกผู้เล่นใกล้ Bomber 0–2 คน</h2>
-                    </div>
-                    <Skull />
-                  </div>
-                  <div className="bomb-grid">
-                    {room.players
-                      .filter((player) => player.health !== "dead")
-                      .map((player) => (
-                        <button
-                          className={
-                            bombSelection.includes(player.id) ? "selected" : ""
-                          }
-                          key={player.id}
-                          onClick={() =>
-                            setBombSelection((current) =>
-                              current.includes(player.id)
-                                ? current.filter((id) => id !== player.id)
-                                : current.length < 2
-                                  ? [...current, player.id]
-                                  : current,
-                            )
-                          }
-                        >
-                          <span className="avatar">
-                            {player.name.slice(0, 1)}
-                          </span>
-                          {player.name}
-                          <Check size={16} />
-                        </button>
-                      ))}
-                  </div>
-                  <button
-                    className="danger-action"
-                    disabled={busy}
-                    onClick={() =>
-                      setConfirmation({
-                        title: "ทบทวนผลระเบิด",
-                        detail: bombSelection.length
-                          ? `ผู้เล่นที่จะถูกกำจัดทันที: ${room.players
-                              .filter((p) => bombSelection.includes(p.id))
-                              .map((p) => p.name)
-                              .join(" และ ")}`
-                          : "ไม่เลือกผู้ได้รับผลระเบิด เกมจะดำเนินต่อหรือแสดงผลตามกติกา",
-                        action: () =>
-                          act(() => resolveBomb(room.code, bombSelection)),
-                      })
-                    }
-                  >
-                    ดำเนินการระเบิด <Skull size={16} />
-                  </button>
-                </div>
-              )}
               <div className="panel" data-host-section="evidence">
                 <div className="panel-heading">
                   <div>
@@ -1344,24 +1387,11 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
             </>
           )}
-        </section>
-        <aside className="side-column">
-          <div className="panel room-info">
-            <span className="section-kicker">รหัสเข้าร่วมห้อง</span>
-            <div className="big-code">{room.code}</div>
-            <p>แชร์รหัสห้องให้ผู้เล่น</p>
-            <div className="online-line">
-              <span /> <b>{room.players.length}</b> คนในห้อง
-            </div>
-          </div>
-          <div className="panel" data-host-section="events">
-            <div className="panel-heading">
-              <h2>บันทึกเหตุการณ์</h2>
-              <Clock3 size={16} className="muted" />
-            </div>
+          <section className="panel" data-host-section="events">
+            <div className="panel-heading"><h2>บันทึกเหตุการณ์</h2><Clock3 size={16} className="muted" /></div>
             <Events room />
-          </div>
-        </aside>
+          </section>
+        </section>
       </div>
       <ErrorBanner error={error} />
       {busy && (
@@ -1447,6 +1477,8 @@ export function PlayerRoom({
   const [toast, setToast] = useState("");
   const [mounted, setMounted] = useState(false);
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [screenHidden, setScreenHidden] = useState<boolean | null>(null);
+  const privateViewSnapshot = useRef<PrivateViewSnapshot | null>(null);
   const remembered = readRoomCredentials(`player:${code}`);
   const [loginName, setLoginName] = useState(name || remembered?.name || "");
   const [reclaimToken, setReclaimToken] = useState(
@@ -1508,9 +1540,53 @@ export function PlayerRoom({
   const currentRole = playerId
     ? room?.privateStates[playerId]?.currentRole
     : undefined;
+  const privacyPlayerId = playerId ?? room?.playerId;
+  const privacyStorageKey =
+    room && privacyPlayerId
+      ? `killer_privacy:${room.code}:${room.createdAt}:${privacyPlayerId}`
+      : "";
+  const hideScreen = useCallback(() => {
+    if (!privacyStorageKey) return;
+    privateViewSnapshot.current = capturePrivateView();
+    try {
+      window.sessionStorage.setItem(privacyStorageKey, "1");
+    } catch {
+      // The overlay still protects the current view when storage is unavailable.
+    }
+    setScreenHidden(true);
+  }, [privacyStorageKey]);
+  const revealScreen = useCallback(async () => {
+    await refresh();
+    if (privacyStorageKey) {
+      try {
+        window.sessionStorage.removeItem(privacyStorageKey);
+      } catch {
+        // Continue revealing the current view if storage is unavailable.
+      }
+    }
+    setScreenHidden(false);
+  }, [privacyStorageKey, refresh]);
+  useEffect(() => {
+    if (!privacyStorageKey) return;
+    let hidden = false;
+    try {
+      hidden = window.sessionStorage.getItem(privacyStorageKey) === "1";
+    } catch {
+      hidden = false;
+    }
+    setScreenHidden(hidden);
+  }, [privacyStorageKey]);
   useEffect(() => {
     if (currentRole && currentRole !== ackRole) setRoleOpen(true);
   }, [currentRole]);
+  useLayoutEffect(() => {
+    // Never retain a confirmation callback from an earlier role or phase.
+    setConfirmation(null);
+  }, [currentRole, room?.phase, room?.createdAt,
+    playerId ? room?.privateStates[playerId]?.hasUsedAbility : undefined,
+    room?.players.find(player => player.id === playerId)?.health,
+    room?.players.find(player => player.id === targetId)?.health,
+    room?.players.find(player => player.id === reportTarget)?.health]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -1543,8 +1619,19 @@ export function PlayerRoom({
         <Hourglass /> กำลังเชื่อมต่อห้อง...
       </main>
     );
-  if (room?.phase === "ended" && room.viewerRole === "player")
+  if (privacyPlayerId && screenHidden === null)
     return (
+      <main className="loading-screen">
+        <Hourglass /> กำลังเตรียมพื้นที่ส่วนตัว...
+      </main>
+    );
+  const protect = (content: ReactNode) => (
+    <PrivacyBoundary hidden={screenHidden === true} snapshot={privateViewSnapshot.current} onReveal={revealScreen}>
+      {content}
+    </PrivacyBoundary>
+  );
+  if (room?.phase === "ended" && room.viewerRole === "player")
+    return protect(
       <PlayerEndGameSummary
         room={room}
         playerId={room.playerId ?? playerId}
@@ -1604,7 +1691,7 @@ export function PlayerRoom({
       </main>
     );
   if (room.closedAt)
-    return (
+    return protect(
       <main className="loading-screen">
         <DoorOpen size={32} />
         <h1>ห้องถูกปิดแล้ว</h1>
@@ -1617,13 +1704,14 @@ export function PlayerRoom({
   const me = room.privateStates[playerId];
   const mine = room.players.find((player) => player.id === playerId);
   if (!me) {
-    return (
+    return protect(
       <>
         <Waiting room={room} onLeave={() => setIsLeaveModalOpen(true)} />
         {showRecovery && (
           <RecoveryCard
             token={reclaimToken}
             onClose={() => setShowRecovery(false)}
+            onHideScreen={hideScreen}
           />
         )}
         <LeaveConfirmModal
@@ -1631,6 +1719,7 @@ export function PlayerRoom({
           isOpen={isLeaveModalOpen}
           onClose={() => setIsLeaveModalOpen(false)}
           onConfirm={handleConfirmLeave}
+          onHideScreen={hideScreen}
         />
       </>
     );
@@ -1748,12 +1837,13 @@ export function PlayerRoom({
       void refresh();
     }
   };
-  return (
+  return protect(
     <main className={`app-shell player-app player-tab-${tab}`}>
       <Header
         code={room.code}
         label="พื้นที่ผู้เล่น"
         onLeave={() => setIsLeaveModalOpen(true)}
+        onHideScreen={hideScreen}
       />
       <ConnectionStatus />
       {stale && (
@@ -1840,9 +1930,9 @@ export function PlayerRoom({
               alt=""
               aria-hidden="true"
             />
-            <span className="section-kicker">บทบาทส่วนตัวของคุณ</span>
+            <span className="section-kicker">บัตรบทบาท · ลับเฉพาะคุณ</span>
             <h1>{ROLE_LABELS[me.currentRole]}</h1>
-            <p>{ROLE_DETAILS[me.currentRole]}</p>
+            <p>{ROLE_SUMMARIES[me.currentRole]}</p>
             <button className="text-button" onClick={() => setRoleOpen(true)}>
               <Eye size={15} /> อ่านบทบาทของฉัน
             </button>
@@ -1908,8 +1998,9 @@ export function PlayerRoom({
             <div className="panel quota-panel">
               <span className="section-kicker">โควต้าอนุมัติชั่วโมงนี้</span>
               <h2>
-                อนุมัติแล้ว {room.attacksThisHour} / {room.attackLimit}
+                ส่งได้อีก {Math.max(0, room.attackLimit - room.attacksThisHour)} ภาพที่อนุมัติ
               </h2>
+              <p>อนุมัติแล้ว {room.attacksThisHour} / {room.attackLimit} ภาพ · ใช้ร่วมกับทีม Killer</p>
               <div className="quota-meter">
                 <span
                   style={{
@@ -1959,13 +2050,21 @@ export function PlayerRoom({
               <div className="panel-heading">
                 <div>
                   <span className="section-kicker">ภารกิจของคุณ</span>
-                  <h2>เลือกเป้าหมาย</h2>
+                  <h2>{photo ? "ตรวจภาพและส่ง" : target ? "ถ่ายภาพเป้าหมาย" : "เลือกเป้าหมาย"}</h2>
                 </div>
                 <span className="quota">
                   {Math.max(0, room.attackLimit - room.attacksThisHour)}{" "}
                   ภาพอนุมัติคงเหลือ
                 </span>
               </div>
+              <ol className="mission-steps" aria-label="ขั้นตอนภารกิจ">
+                {["เลือกเป้าหมาย", "ถ่ายภาพ", "ตรวจและส่ง"].map((label, index) => {
+                  const step = photo ? 2 : target ? 1 : 0;
+                  return <li key={label} aria-current={index === step ? "step" : undefined} className={index < step ? "complete" : ""}>
+                    <span aria-hidden="true">{index < step ? "✓" : index + 1}</span>{label}
+                  </li>;
+                })}
+              </ol>
               <select
                 aria-label="เลือกเป้าหมาย"
                 value={targetId}
@@ -2146,7 +2245,7 @@ export function PlayerRoom({
             </div>
           )}
           <ErrorBanner error={error} />
-          <div className="panel">
+          <div className="panel latest-news-panel">
             <div className="panel-heading">
               <h2>ข่าวล่าสุด</h2>
             </div>
@@ -2163,10 +2262,11 @@ export function PlayerRoom({
       </div>
       {showRules && <Rules onClose={() => setShowRules(false)} />}
       {showRecovery && (
-        <RecoveryCard
-          token={reclaimToken}
-          onClose={() => setShowRecovery(false)}
-        />
+          <RecoveryCard
+            token={reclaimToken}
+            onClose={() => setShowRecovery(false)}
+            onHideScreen={hideScreen}
+          />
       )}
       {roleOpen && !showRecovery && room.phase !== "ended" && (
         <RoleReveal
@@ -2181,12 +2281,14 @@ export function PlayerRoom({
             setRoleOpen(false);
             setAckRole(me.currentRole);
           }}
+          onHideScreen={hideScreen}
         />
       )}
       {confirmation && (
         <Dialog
           title={confirmation.title}
           onClose={() => setConfirmation(null)}
+          onHideScreen={hideScreen}
         >
           <p>{confirmation.detail}</p>
           <button
@@ -2217,6 +2319,7 @@ export function PlayerRoom({
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         onConfirm={handleConfirmLeave}
+        onHideScreen={hideScreen}
       />
     </main>
   );

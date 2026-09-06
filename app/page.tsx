@@ -9,8 +9,15 @@ import { Hourglass } from 'lucide-react';
 export default function HomePage() {
   const router = useRouter();
   const [resuming, setResuming] = useState(true);
+  const [inviteCode, setInviteCode] = useState('');
 
   useEffect(() => {
+    const invitation = new URLSearchParams(window.location.search).get('room')?.toUpperCase() ?? '';
+    if (/^[A-Z0-9]{6}$/.test(invitation)) {
+      setInviteCode(invitation);
+      setResuming(false);
+      return;
+    }
     const active = readActiveRoom();
     if (active && active.code) {
       if (active.role === 'host') {
@@ -31,5 +38,5 @@ export default function HomePage() {
     );
   }
 
-  return <LandingGame />;
+  return <LandingGame initialCode={inviteCode} />;
 }

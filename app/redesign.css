@@ -5,11 +5,11 @@
   --panel-2: #18261f;
   --line: #293c31;
   --text: #f1f3eb;
-  --muted: #a0b0a5;
+  --muted: #b1beb5;
   --acid: #a9f66b;
   --danger: #f66c69;
   --amber: #edbd68;
-  --radius: 14px;
+  --radius: 12px;
 }
 body {
   background:
@@ -122,7 +122,7 @@ svg {
   min-height: 650px;
   max-height: 850px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 12px;
   overflow: hidden;
   background: #0e1812;
   box-shadow: 0 30px 100px #0005;
@@ -151,7 +151,7 @@ svg {
     linear-gradient(0deg, #0b140ef5, transparent 40%);
 }
 .entry-story-content {
-  padding: 56px 44px;
+  padding: 48px 44px;
   position: relative;
   z-index: 1;
   height: 100%;
@@ -178,7 +178,7 @@ svg {
   margin: 27px 0 30px;
 }
 .entry-story h2 {
-  font-size: 36px;
+  font-size: 34px;
   line-height: 1.45;
   margin: 8px 0 12px;
   font-weight: 800;
@@ -189,7 +189,8 @@ svg {
 }
 .entry-story p {
   color: #b6c9b7;
-  font-size: 14px;
+  font-size: 16px;
+  max-width: 390px;
   margin: 0;
   line-height: 1.85;
 }
@@ -199,7 +200,7 @@ svg {
   flex-direction: column;
   gap: 9px;
   color: #c4d0c2;
-  font-size: 11px;
+  font-size: 12px;
   padding-top: 50px;
 }
 .story-tags > span {
@@ -214,7 +215,7 @@ svg {
   position: absolute;
   right: 28px;
   bottom: 28px;
-  font-size: 10px;
+  font-size: 12px;
   color: #a2b8a4;
   writing-mode: vertical-rl;
   letter-spacing: 2px;
@@ -234,14 +235,14 @@ svg {
 .mode-switch {
   background: #09120c;
   border: 1px solid #29392a;
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 5px;
   margin-bottom: 30px;
   gap: 5px;
 }
 .mode-switch button {
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   font-weight: 600;
   font-size: 13px;
   min-height: 46px;
@@ -257,13 +258,13 @@ svg {
   width: 48px;
   height: 48px;
   border: 1px solid #415437;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--acid);
   background: #20311b;
   margin-bottom: 20px;
 }
 .access-heading > span {
-  font-size: 10px;
+  font-size: 12px;
   color: #8fa681;
   letter-spacing: 0.08em;
 }
@@ -288,7 +289,7 @@ svg {
 .access-panel label > small {
   float: right;
   color: #899e87;
-  font-size: 10px;
+  font-size: 12px;
 }
 .access-panel input {
   height: 52px;
@@ -315,7 +316,7 @@ svg {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 12px;
   color: #8c9c88;
 }
 .primary-action {
@@ -338,7 +339,7 @@ svg {
   color: #b0bfaa;
   min-height: 48px;
   width: 100%;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 10px;
 }
 .access-reassurance {
@@ -353,7 +354,7 @@ svg {
 }
 .access-reassurance p {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.8;
 }
 .access-reassurance span {
@@ -365,7 +366,7 @@ svg {
   justify-content: space-between;
   align-items: center;
   color: #7e937b;
-  font-size: 10px;
+  font-size: 12px;
 }
 .entry-footer > span {
   display: flex;
@@ -401,7 +402,7 @@ svg {
 }
 .section-kicker {
   letter-spacing: 0.04em;
-  font-size: 11px;
+  font-size: 12px;
 }
 .muted {
   font-size: 12px;
@@ -427,11 +428,18 @@ svg {
   min-width: 44px;
   border-radius: 8px;
 }
+.privacy-button {
+  color: var(--muted);
+  border-color: var(--line);
+}
+.privacy-button span {
+  font-size: 12px;
+}
 .topbar-actions {
   gap: 12px;
 }
 .room-chip {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 .room-chip b {
@@ -441,7 +449,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   padding: 12px 30px;
 }
@@ -485,7 +493,7 @@ svg {
   opacity: 0.9;
 }
 .nav-brand > span:last-child {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .game-nav button {
@@ -507,7 +515,7 @@ svg {
   border-color: #354d2b;
 }
 .game-nav button > b {
-  font-size: 10px;
+  font-size: 12px;
   margin-left: auto;
   background: var(--amber);
   color: #201509;
@@ -519,12 +527,12 @@ svg {
   display: flex;
   gap: 7px;
   color: #8ea184;
-  font-size: 10px;
+  font-size: 12px;
   padding: 16px 8px;
 }
 .host-layout {
   padding: 14px 28px 50px;
-  grid-template-columns: minmax(0, 1fr) 265px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 .page-intro h1 {
@@ -540,47 +548,44 @@ svg {
 .quota {
   border-radius: 6px;
   letter-spacing: 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 .metric-grid {
   gap: 12px;
 }
 .metric-card {
   padding: 20px 15px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 .metric-card small {
-  font-size: 11px;
+  font-size: 12px;
 }
 .metric-card strong {
   font-size: 34px;
   line-height: 1.2;
 }
 .metric-card span {
-  font-size: 10px;
+  font-size: 12px;
 }
 .role-grid {
   border: 0;
   gap: 8px;
 }
 .role-control {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   display: flex;
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  gap: 12px;
-  padding: 13px;
-  background: var(--panel);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  gap: 10px;
+  padding: 12px 0;
+  background: transparent;
 }
 .role-control::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent 0%, #111c1799 32%, var(--panel) 51%);
+  content: none;
 }
 .role-control > :not(.role-thumb-control) {
   position: relative;
@@ -588,7 +593,7 @@ svg {
 }
 .role-control > div:not(.stepper) {
   min-width: 0;
-  margin-left: 27%;
+  margin-left: 0;
 }
 .role-control .stepper {
   margin-left: auto;
@@ -638,7 +643,28 @@ svg {
   margin-bottom: 0;
 }
 .host-tab-home .police-schedule-panel {
-  display: block;
+  display: none;
+}
+.host-tab-home [data-host-section="evidence"],
+.host-tab-home [data-host-section="players"],
+.host-tab-home [data-host-section="events"] {
+  display: none;
+}
+.host-room-banner, .host-review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.host-room-banner .big-code { display: block; color: var(--text); }
+.host-room-banner p, .host-review-summary p { font-size: 16px; color: var(--muted); margin: 6px 0 0; }
+.host-review-summary h2 { margin: 4px 0; }
+.host-review-summary .primary-action { width: auto; min-width: 180px; }
+.host-app .schedule-preview { flex-wrap: wrap; }
+.host-app .schedule-preview .text-button { margin-left: auto;
 }
 .host-tab-evidence .players-grid {
   display: none;
@@ -659,7 +685,7 @@ svg {
   object-fit: contain;
 }
 .evidence-info {
-  padding: 16px;
+  padding: 16px 4px 4px;
 }
 .evidence-info small {
   line-height: 1.7;
@@ -697,6 +723,10 @@ svg {
 }
 .evidence-card {
   overflow: hidden;
+  padding: 10px;
+  border-top: 4px solid #b6b3a0;
+  border-radius: 8px;
+  background: #17221d;
 }
 .empty-state {
   border: 1px dashed #3a4b3c;
@@ -709,31 +739,27 @@ svg {
 }
 .players-grid {
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 0;
 }
 .player-card {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 14px;
+  padding: 16px 0;
   gap: 12px;
   min-height: 74px;
-  background: var(--panel);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
 }
 .player-card:has(.role-thumb-player)::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent 0%, #111c1799 27%, var(--panel) 48%);
+  content: none;
 }
 .player-card > :not(.role-thumb-player) {
   position: relative;
   z-index: 1;
 }
 .player-card:has(.role-thumb-player) .avatar {
-  margin-left: 24%;
+  margin-left: 0;
 }
 .avatar {
   width: 40px;
@@ -743,12 +769,12 @@ svg {
   color: #c4d1bd;
 }
 .player-meta strong {
-  font-size: 13px;
+  font-size: 16px;
 }
 .player-meta small {
   white-space: normal;
   line-height: 1.6;
-  font-size: 10px;
+  font-size: 12px;
   color: #a1b29d;
 }
 .player-card.is-dead {
@@ -764,14 +790,14 @@ svg {
 }
 .event-row p {
   line-height: 1.8;
-  font-size: 12px;
+  font-size: 16px;
 }
 .event-row time {
   color: #95a78f;
 }
 .event-visibility {
   display: inline-flex;
-  font-size: 9px;
+  font-size: 12px;
   color: #8eaa83;
   margin-bottom: 4px;
 }
@@ -787,6 +813,37 @@ svg {
   padding: 16px 28px 30px;
   gap: 22px;
 }
+.player-home {
+  display: flex;
+  flex-direction: column;
+}
+.player-home > * {
+  order: 3;
+}
+.player-home > .player-greeting {
+  order: 1;
+}
+.player-home > .personal-health,
+.player-home > .quota-panel,
+.player-home > .quota-cooldown-notice,
+.player-home > .schedule-preview,
+.player-home > .dead-card {
+  order: 2;
+}
+.player-home > .action-panel {
+  order: 3;
+}
+.player-home > .player-hero {
+  order: 4;
+}
+.player-home > .killer-alliance-panel,
+.player-home > .killer-evidence-panel {
+  order: 5;
+}
+.player-home > .error-banner,
+.player-home > .latest-news-panel {
+  order: 6;
+}
 .player-greeting {
   display: flex;
   align-items: center;
@@ -799,6 +856,8 @@ svg {
 }
 .player-hero {
   position: relative;
+  border-top: 4px solid #b6b3a0;
+  border-radius: 8px;
   isolation: isolate;
   overflow: hidden;
   padding: 27px;
@@ -828,18 +887,24 @@ svg {
 }
 .player-hero.is-killer .section-kicker,
 .player-hero.is-killer .identity-stamp {
-  color: var(--danger);
+  display: inline-block;
+  font-size: 12px;
+  right: auto;
+  top: auto;
+  margin-top: 12px;
+  transform: none;
+  border-radius: 3px;
 }
 .player-hero h1 {
   font-size: 38px;
-  padding-right: 80px;
+  padding-right: 0;
 }
 .player-hero p {
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.85;
 }
 .identity-stamp {
-  font-size: 9px;
+  font-size: 12px;
   right: 20px;
   top: 25px;
   border-radius: 3px;
@@ -859,7 +924,7 @@ svg {
   font-size: 25px;
 }
 .quota-panel p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 0;
 }
@@ -892,6 +957,35 @@ svg {
   border-radius: 8px;
   min-height: 48px;
   background: #0c150e;
+}
+.mission-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+}
+.mission-steps li {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 2px solid var(--line);
+  padding-top: 10px;
+}
+.mission-steps li[aria-current="step"] {
+  color: var(--acid);
+  border-color: var(--acid);
+  font-weight: 700;
+}
+.mission-steps .complete { color: var(--text); }
+.invite-qr {
+  display: block;
+  width: min(100%, 256px);
+  height: auto;
+  margin: 16px auto;
+  background: white;
 }
 .camera-drop {
   border-radius: 8px;
@@ -928,7 +1022,7 @@ svg {
   flex-direction: column;
   justify-content: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 12px;
   min-height: 58px;
   padding: 8px 4px;
 }
@@ -947,7 +1041,7 @@ svg {
 .you-tag {
   display: block;
   color: var(--acid);
-  font-size: 10px;
+  font-size: 12px;
   margin: 0 0 4px 8px;
 }
 .menu-list {
@@ -1003,7 +1097,7 @@ svg {
 }
 .game-dialog {
   border: 1px solid #43553b;
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 26px;
   width: min(480px, calc(100% - 28px));
   max-height: 88svh;
@@ -1015,12 +1109,46 @@ svg {
   background: #030a06c9;
   backdrop-filter: blur(7px);
 }
+.privacy-screen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: 28px;
+  background: var(--ink);
+  color: var(--text);
+  text-align: center;
+}
+.privacy-screen .killer-logo {
+  margin-bottom: 18px;
+}
+.privacy-screen > svg {
+  color: var(--acid);
+}
+.privacy-screen h1 {
+  margin: 0;
+  font-size: 24px;
+}
+.privacy-screen p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.privacy-screen .primary-action {
+  width: min(100%, 280px);
+}
 .dialog-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+}
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .dialog-heading h2 {
   font-size: 21px;
@@ -1037,7 +1165,7 @@ svg {
   border-radius: 8px;
 }
 .game-dialog p {
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.9;
   color: #c0cdb9;
 }
@@ -1045,15 +1173,38 @@ svg {
   counter-reset: step;
 }
 .rules-steps p {
-  padding: 14px;
-  background: #17241a;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
 }
 .rules-steps b {
   display: block;
   color: var(--acid);
   margin-bottom: 6px;
+}
+.rules-details {
+  margin: 14px 0 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.rules-details summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--acid);
+  font-size: 13px;
+  font-weight: 750;
+}
+.rules-details summary::marker {
+  color: var(--acid);
+}
+.rules-details > div {
+  padding: 0 0 10px;
+}
+.rules-details p {
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.8;
 }
 .role-carousel {
   margin: 14px 0 18px;
@@ -1080,7 +1231,8 @@ svg {
   scroll-snap-align: start;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-top: 4px solid #b6b3a0;
+  border-radius: 8px;
   background: #142018;
 }
 .role-thumb {
@@ -1112,7 +1264,7 @@ svg {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .role-carousel-heading h4 {
   margin: 4px 0 0;
@@ -1136,6 +1288,25 @@ svg {
   margin: 0;
   padding: 10px 14px 16px;
 }
+.role-carousel-details {
+  margin: 0 14px 14px;
+  border-top: 1px solid var(--line);
+}
+.role-carousel-details summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--acid);
+  font-size: 12px;
+  font-weight: 700;
+}
+.role-carousel-details > p {
+  margin: 0;
+  padding: 0 0 4px;
+  font-size: 16px;
+  line-height: 1.8;
+}
 .role-carousel-controls {
   display: flex;
   align-items: center;
@@ -1144,8 +1315,8 @@ svg {
   margin-top: 12px;
 }
 .role-carousel-controls .icon-button {
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
 }
 .role-carousel-controls .icon-button:disabled {
   opacity: 0.35;
@@ -1175,30 +1346,29 @@ svg {
   margin: 7px 0 0 !important;
   text-align: center;
   color: var(--muted) !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
   line-height: 1.3 !important;
 }
 .role-thumb-control {
-  position: absolute;
-  z-index: -1;
-  inset: 0 auto 0 -13px;
-  width: 40%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  opacity: 0.5;
-  filter: brightness(0.72) saturate(0.72);
+  position: static;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 56px;
+  border: 1px solid #b6b3a0;
+  border-radius: 4px;
+  opacity: 1;
+  object-fit: cover;
   object-position: center 35%;
 }
 .role-thumb-player {
-  position: absolute;
-  z-index: -1;
-  inset: 0 auto 0 -14px;
-  width: 36%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  opacity: 0.64;
+  position: static;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 56px;
+  border: 1px solid #b6b3a0;
+  border-radius: 4px;
+  opacity: 1;
+  object-fit: cover;
   object-position: center 35%;
 }
 .privacy-caption {
@@ -1233,7 +1403,7 @@ svg {
   display: grid;
   justify-items: center;
   padding: 14px 6px 4px;
-  --card-gold: #bca779;
+  --card-gold: #c7c9b8;
 }
 .role-reveal-dialog::backdrop {
   background: #030a06;
@@ -1260,7 +1430,7 @@ svg {
   transform: rotateX(5deg) rotateY(-8deg);
 }
 .role-reveal-waiting .role-reveal-card {
-  animation: role-card-float 4s ease-in-out infinite;
+  animation: none;
 }
 .role-reveal-card.is-spinning {
   animation: role-card-reveal 2.5s linear forwards;
@@ -1294,7 +1464,7 @@ svg {
   position: absolute;
   inset: 0;
   border: 1px solid var(--card-gold);
-  border-radius: 15px;
+  border-radius: 8px;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -1314,9 +1484,9 @@ svg {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border-radius: 14px;
-  background: radial-gradient(ellipse at 30% 15%, #274236, #10241c 48%, #06150f);
-  box-shadow: inset 0 0 24px #0009, inset 0 0 0 3px #c8ad7433;
+  border-radius: 7px;
+  background: #14231d;
+  box-shadow: inset 0 0 0 3px #c7c9b833;
   color: var(--card-gold);
 }
 .mystery-card-engraving {
@@ -1338,7 +1508,7 @@ svg {
   text-align: center;
 }
 .mystery-card-brand {
-  top: 21%;
+  top: 11%;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: .4em;
@@ -1347,16 +1517,16 @@ svg {
 .mystery-card-question {
   top: 50%;
   transform: translateY(-50%);
-  font-family: Georgia, serif;
+  font-family: inherit;
   font-size: 74px;
   line-height: 1;
-  color: #e2cc96;
-  text-shadow: 0 2px 1px #000, 0 0 20px #d4b97733;
+  color: var(--text);
+  text-shadow: none;
 }
 .mystery-card-caption {
-  bottom: 22%;
-  font-size: 7px;
-  letter-spacing: .22em;
+  bottom: 26%;
+  font-size: 12px;
+  letter-spacing: .04em;
 }
 .mystery-card-back::after {
   content: "";
@@ -1367,7 +1537,7 @@ svg {
   pointer-events: none;
 }
 .role-reveal-waiting .mystery-card-back::after {
-  animation: role-card-glint 5s ease-in-out infinite;
+  animation: none;
 }
 .role-card-identity {
   position: absolute;
@@ -1378,7 +1548,7 @@ svg {
   justify-content: flex-end;
   padding: 22px 12px;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 7px;
   visibility: hidden;
   isolation: isolate;
 }
@@ -1408,7 +1578,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 12px;
   color: #e2cc96;
 }
 .role-card-identity.killer h2 { color: var(--danger); }
@@ -1538,7 +1708,7 @@ svg {
 }
 .waiting-status {
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 .loading-screen {
@@ -1619,41 +1789,46 @@ svg {
     box-shadow: none;
   }
   .entry-story {
-    min-height: 355px;
+    min-height: 190px;
     border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
   }
   .entry-art {
     background-position: 66% 36%;
+    background-size: cover;
+    background-color: #101b13;
+    height: 160px;
+    inset: 0 0 auto;
     opacity: 0.88;
   }
   .entry-story-content {
-    padding: 27px 25px 30px;
+    padding: 20px 24px 20px;
   }
   .entry-story h1 {
-    margin: 18px 0 20px;
+    display: none;
   }
   .killer-logo {
     font-size: 80px;
     letter-spacing: -5px;
   }
   .entry-story h2 {
-    font-size: 25px;
-    line-height: 1.45;
-    margin: 0 0 8px;
+    font-size: 23px;
+    line-height: 1.35;
+    margin: 12px 0 7px;
   }
   .entry-story p {
-    font-size: 11px;
-    line-height: 1.8;
+    max-width: 100%;
+    font-size: 16px;
+    line-height: 1.55;
   }
   .eyebrow {
-    font-size: 10px;
+    font-size: 12px;
   }
   .story-tags {
     display: none;
   }
   .art-caption {
-    font-size: 8px;
+    font-size: 12px;
     right: 16px;
     bottom: 20px;
   }
@@ -1661,34 +1836,34 @@ svg {
     background: transparent;
   }
   .entry-access .access-panel {
-    padding: 25px 24px 16px;
+    padding: 20px 24px 14px;
     max-width: 480px;
     margin: auto;
   }
   .mode-switch {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
   .access-icon {
     display: none;
   }
   .access-heading h2 {
-    font-size: 25px;
+    font-size: 24px;
   }
   .access-heading > span {
-    font-size: 9px;
+    font-size: 12px;
   }
   .access-heading p {
-    font-size: 11px;
-    margin-bottom: 20px;
+    font-size: 12px;
+    margin-bottom: 14px;
   }
   .access-panel input {
     height: 52px;
   }
   .access-panel form {
-    gap: 16px;
+    gap: 12px;
   }
-  .primary-action {
-    min-height: 52px;
+  .entry-access .primary-action {
+    min-height: 48px;
   }
   .access-reassurance {
     margin-top: 10px;
@@ -1703,7 +1878,7 @@ svg {
     display: none;
   }
   .entry-footer > span {
-    font-size: 9px;
+    font-size: 12px;
   }
   .host-app {
     padding-left: 0;
@@ -1728,9 +1903,11 @@ svg {
   }
   .host-nav button {
     position: relative;
+    min-width: 0;
+    overflow-wrap: anywhere;
     flex-direction: column;
     gap: 5px;
-    font-size: 9px;
+    font-size: 12px;
     padding: 7px 2px;
     min-height: 56px;
   }
@@ -1752,9 +1929,12 @@ svg {
   .topbar-actions {
     gap: 6px;
   }
+  .privacy-button span {
+    display: none;
+  }
   .topbar-btn {
     padding: 6px 9px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .topbar-actions .room-chip {
     display: none;
@@ -1770,7 +1950,7 @@ svg {
   }
   .connection-status {
     padding: 10px 18px;
-    font-size: 9px;
+    font-size: 12px;
   }
   .host-layout,
   .player-layout {
@@ -1790,7 +1970,7 @@ svg {
     font-size: 27px;
   }
   .page-intro .section-kicker {
-    font-size: 9px;
+    font-size: 12px;
   }
   .phase-badge {
     white-space: nowrap;
@@ -1809,20 +1989,20 @@ svg {
   }
   .metric-card {
     padding: 16px 10px;
-    border-radius: 10px;
+    border-radius: 0;
   }
   .metric-card strong {
     font-size: 27px;
   }
   .metric-card small,
   .metric-card span {
-    font-size: 9px;
+    font-size: 12px;
   }
   .evidence-grid {
     grid-template-columns: 1fr;
   }
   .evidence-info {
-    padding: 16px;
+    padding: 16px 4px 4px;
   }
   .evidence-actions {
     grid-template-columns: 1fr 1fr;
@@ -1848,12 +2028,12 @@ svg {
     font-size: 36px;
   }
   .player-hero p {
-    font-size: 12px;
+    font-size: 16px;
     padding-right: 0;
   }
   .player-hero .identity-stamp {
-    top: 23px;
-    right: 18px;
+    top: auto;
+    right: auto;
   }
   .player-nav {
     bottom: 0;
@@ -1864,7 +2044,7 @@ svg {
   }
   .player-nav button {
     min-height: 58px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .game-dialog {
     padding: 22px 18px;
@@ -1936,13 +2116,12 @@ svg {
 /* Event meaning is independent of audience and the legacy database type. */
 .event-feed .event-row {
   --event-accent: var(--muted);
-  --event-surface: rgba(160, 176, 165, 0.045);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--event-accent);
-  border-radius: 9px;
-  background: var(--event-surface);
-  padding: 13px 12px;
-  margin-bottom: 9px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 0;
+  margin: 0;
   grid-template-columns: 24px minmax(0, 1fr);
   align-items: start;
 }
@@ -1972,16 +2151,16 @@ svg {
 }
 .event-feed .event-visibility {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .event-feed .event-row p {
   color: var(--text);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.8;
 }
 .event-feed .event-row time {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 6px;
 }
 .end-game-summary {
@@ -2026,7 +2205,7 @@ svg {
   display: block;
   margin-bottom: 2px;
   color: var(--acid);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }

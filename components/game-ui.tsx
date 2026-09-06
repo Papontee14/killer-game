@@ -1,11 +1,13 @@
 "use client";
 import Image from "next/image";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
+import { usePrivacyHidden } from "./privacy-boundary";
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  EyeOff,
   Home,
   Heart,
   LockKeyhole,
@@ -50,6 +52,17 @@ export const ROLE_DETAILS: Record<Role, string> = {
   villager:
     "คุณมี 2 หัวใจ อยู่ฝ่ายเมือง รักษาตัวให้รอดและช่วยกันสังเกตว่าใครคือ Killer",
 };
+export const ROLE_SUMMARIES: Record<Role, string> = {
+  killer: "เลือกเป้าหมาย ถ่ายภาพด้วยกล้องสด และส่งให้ Host ตรวจภายใน 2 นาที",
+  "killer-wife": "อยู่ฝ่ายเมืองจนถูกโจมตีครบสองครั้ง แล้วจึงเปลี่ยนเป็น Killer",
+  police: "เมื่อถึงเวลาชี้ตัว เลือกผู้ต้องสงสัยที่ยังมีชีวิตหนึ่งคน",
+  reporter: "ตรวจบทบาทเริ่มต้นของผู้เล่นที่ยังมีชีวิตได้หนึ่งครั้งต่อเกม",
+  bomber: "เมื่อคุณตาย Host จะเลือกผู้เล่นใกล้ตัวได้สูงสุดสองคน",
+  detective: "หากตำรวจตาย คุณจะรับตำแหน่งตำรวจเป็นการส่วนตัว",
+  athlete: "อยู่ฝ่ายเมือง มีสามหัวใจ และช่วยสังเกตหา Killer",
+  sumo: "อยู่ฝ่ายเมือง มีสี่หัวใจและช่วยกันสังเกตผู้ต้องสงสัย",
+  villager: "อยู่ฝ่ายเมือง มีสองหัวใจ รักษาตัวให้รอดและช่วยหาตัว Killer",
+};
 const RULE_ROLES = Object.keys(ROLE_LABELS) as Role[];
 export function Brand({ small = false }: { small?: boolean }) {
   return <span className={`killer-logo ${small ? "small" : ""}`}>KILLER</span>;
@@ -60,20 +73,24 @@ export function Dialog({
   onClose,
   dismissible = true,
   className = "",
+  onHideScreen,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   dismissible?: boolean;
   className?: string;
+  onHideScreen?: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
-  useEffect(() => {
+  const hidden = usePrivacyHidden();
+  useLayoutEffect(() => {
     const node = ref.current;
-    node?.showModal();
+    if (!hidden) node?.showModal();
+    else node?.close();
     return () => node?.close();
-  }, []);
+  }, [hidden]);
   return (
     <dialog
       ref={ref}
@@ -92,11 +109,18 @@ export function Dialog({
     >
       <div className="dialog-heading">
         <h2 id={id}>{title}</h2>
-        {dismissible && (
-          <button className="icon-button" aria-label="ปิด" onClick={onClose}>
-            <X size={20} />
-          </button>
-        )}
+        <div className="dialog-actions">
+          {onHideScreen && (
+            <button className="icon-button privacy-dialog-button" aria-label="ซ่อนหน้าจอ" onClick={onHideScreen}>
+              <EyeOff size={19} />
+            </button>
+          )}
+          {dismissible && (
+            <button className="icon-button" aria-label="ปิด" onClick={onClose}>
+              <X size={20} />
+            </button>
+          )}
+        </div>
       </div>
       {children}
     </dialog>
@@ -118,16 +142,19 @@ export function Rules({ onClose }: { onClose: () => void }) {
           อ่านภารกิจส่วนตัวก่อนเริ่มเล่น
         </p>
         <p>
-          <b>03 · สังเกตและเอาตัวรอด</b>Killer ส่งภาพจากกล้องสดให้ Host ตรวจ
-          โควต้าเริ่มต้น 2 ภาพอนุมัติต่อชั่วโมง รีเซ็ตตรงต้นชั่วโมงเวลาไทย
-          ภาพรอตรวจไม่ใช้โควต้า และไม่มีเวลารอต่อเป้าหมาย
+          <b>03 · เล่นตามหน้าที่</b>สังเกตคนรอบตัว ทำภารกิจของบทบาท และเอาตัวรอด
         </p>
         <p>
-          <b>04 · ถึงเวลาตัดสิน</b>ตำรวจชี้ถูก ฝ่ายเมืองชนะ ชี้ผิด ฝ่าย Killer
-          ชนะ หาก Killer ทุกคนตายจากระเบิด ฝ่ายเมืองชนะ แม้ตำรวจตายพร้อมกัน
-          หากตำรวจตายและไม่มีนักสืบรับตำแหน่ง ฝ่าย Killer ชนะ
+          <b>04 · ถึงเวลาตัดสิน</b>ตำรวจชี้ตัวเมื่อถึงเวลา แล้วระบบจะแสดงผลของเกม
         </p>
       </div>
+      <details className="rules-details">
+        <summary>กติกาละเอียด</summary>
+        <div>
+          <p>Killer ส่งภาพจากกล้องสดให้ Host ตรวจ โควต้าเริ่มต้น 2 ภาพอนุมัติต่อชั่วโมง รีเซ็ตตรงต้นชั่วโมงเวลาไทย ภาพรอตรวจไม่ใช้โควต้า และไม่มีเวลารอต่อเป้าหมาย</p>
+          <p>ตำรวจชี้ถูก ฝ่ายเมืองชนะ ชี้ผิด ฝ่าย Killer ชนะ หาก Killer ทุกคนตายจากระเบิด ฝ่ายเมืองชนะ แม้ตำรวจตายพร้อมกัน หากตำรวจตายและไม่มีนักสืบรับตำแหน่ง ฝ่าย Killer ชนะ</p>
+        </div>
+      </details>
       <h3>9 บทบาท · ทุกคนมีความลับ</h3>
       <RoleCarousel />
       <p className="privacy-caption">
@@ -252,7 +279,11 @@ function RoleCarousel() {
                 </span>
               )}
             </div>
-            <p>{ROLE_DETAILS[role]}</p>
+            <p>{ROLE_SUMMARIES[role]}</p>
+            <details className="role-carousel-details">
+              <summary>อ่านรายละเอียดบทบาท</summary>
+              <p>{ROLE_DETAILS[role]}</p>
+            </details>
           </article>
         ))}
       </div>
@@ -374,16 +405,19 @@ export function ConnectionStatus() {
     </div>
   );
 }
+
 export function RecoveryCard({
   token,
   onClose,
+  onHideScreen,
 }: {
   token: string;
   onClose: () => void;
+  onHideScreen?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Dialog title="เก็บรหัสนี้ไว้ให้ดี" onClose={onClose}>
+    <Dialog title="เก็บรหัสนี้ไว้ให้ดี" onClose={onClose} onHideScreen={onHideScreen}>
       <div className="recovery-icon">
         <LockKeyhole size={32} />
       </div>
@@ -421,25 +455,14 @@ function MysteryCardBack() {
   return (
     <span className="mystery-card-back" aria-hidden="true">
       <svg viewBox="0 0 300 400" fill="none" className="mystery-card-engraving">
-        <rect x="13" y="13" width="274" height="374" rx="15" />
-        <rect x="21" y="21" width="258" height="358" rx="10" />
-        {Array.from({ length: 12 }, (_, i) => (
-          <ellipse key={i} cx="150" cy="200" rx={68 + i * 4} ry={110 + i * 5}
-            transform={`rotate(${i * 15} 150 200)`} opacity=".24" />
-        ))}
-        {[0, 180].map((angle) => (
-          <g key={angle} transform={`rotate(${angle} 150 200)`}>
-            <path d="M32 90V32h58M39 72V39h33M210 32h58v58M228 39h33v33M110 48l40 22 40-22-40-16zM150 70v30" />
-            <path d="M42 108l9 9-9 9-9-9zM258 108l9 9-9 9-9-9z" />
-          </g>
-        ))}
-        <circle cx="150" cy="200" r="58" className="mystery-card-seal" />
-        <circle cx="150" cy="200" r="51" />
-        <path d="M150 131l7 9-7 9-7-9zM150 251l7 9-7 9-7-9z" />
+        <rect x="16" y="16" width="268" height="368" rx="5" />
+        <path d="M32 82h236M32 304h236M32 332h120M32 348h84M210 332h58M210 348h58" />
+        <rect x="102" y="132" width="96" height="120" rx="4" />
+        <path d="M126 132v-12a24 24 0 0 1 48 0v12" />
       </svg>
       <span className="mystery-card-brand">KILLER</span>
       <span className="mystery-card-question">?</span>
-      <span className="mystery-card-caption">EVERYONE HAS A SECRET</span>
+      <span className="mystery-card-caption">แฟ้มบทบาท · ยังไม่เปิดเผย</span>
     </span>
   );
 }
@@ -452,6 +475,7 @@ export function RoleReveal({
   onClose,
   revealImmediately = false,
   revealStorageKey,
+  onHideScreen,
 }: {
   role: Role;
   previous?: Role;
@@ -460,6 +484,7 @@ export function RoleReveal({
   onClose: () => void;
   revealImmediately?: boolean;
   revealStorageKey?: string;
+  onHideScreen?: () => void;
 }) {
   const [revealState, setRevealState] = useState<
     "waiting" | "spinning" | "revealed"
@@ -508,6 +533,7 @@ export function RoleReveal({
     <Dialog
       title={previous ? "บทบาทของคุณเปลี่ยนแล้ว" : "บทบาทของคุณ"}
       onClose={onClose}
+      onHideScreen={onHideScreen}
       dismissible={isRevealed}
       className="role-reveal-dialog"
     >
@@ -557,7 +583,7 @@ export function RoleReveal({
                 onError={() => setArtError(true)}
               />
               <span className="section-kicker">
-                <LockKeyhole size={14} /> เฉพาะคุณเท่านั้น
+                <LockKeyhole size={14} /> ลับเฉพาะคุณ
               </span>
               <h2>{ROLE_LABELS[role]}</h2>
               <span className="status-pill">

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import jsQR from "jsqr";
 import { database, fixture } from "../db-harness.mjs";
 let db,
   f,
@@ -138,7 +139,7 @@ async function openPlayer(
     })
     .click();
   const playerScreen = page.locator(".player-hero, .lobby-waiting-screen");
-  await expect(playerScreen).toBeVisible();
+  await expect(playerScreen).toBeVisible({ timeout: 20000 });
   if (await page.locator(".lobby-waiting-screen").isVisible()) return;
   if (!reveal) return;
   await expect(
@@ -289,6 +290,22 @@ test("player lobby waiting screen fits a small phone without page scrolling", as
   await expect(page.locator(".waiting-roster")).toHaveCSS("overflow-y", "auto");
 });
 
+test("player can hide private content, restore it, and remain hidden after reload", async ({ page }) => {
+  await openPlayer(page, "villager", "villager", "", true, true);
+  await expect(page.getByRole("button", { name: "ซ่อนหน้าจอ" })).toBeVisible();
+  await page.getByRole("button", { name: "ซ่อนหน้าจอ" }).click();
+  await expect(page.getByRole("dialog", { name: "ซ่อนหน้าจอแล้ว" })).toBeVisible();
+  await expect(page.locator(".player-hero")).toBeHidden();
+  await page.getByRole("button", { name: "กลับเข้าเกม" }).click();
+  await expect(page.locator(".player-hero")).toBeVisible();
+
+  await page.getByRole("button", { name: "ซ่อนหน้าจอ" }).click();
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "ซ่อนหน้าจอแล้ว" })).toBeVisible();
+  await page.getByRole("button", { name: "กลับเข้าเกม" }).click();
+  await expect(page.locator(".player-hero")).toBeVisible();
+});
+
 test("Killer opens the device camera, converts its photo, and sends it to Host", async ({
   page,
 }) => {
@@ -393,9 +410,14 @@ test("Host can review evidence and both Killer sessions receive the same result"
     );
     for (const [index, role] of ["host", "killer", "killer-wife"].entries())
       await openPlayer(pages[index], role);
+    await expect(pages[0].locator(".host-review-summary")).toBeVisible();
+    await expect(pages[0].locator(".police-schedule-panel")).toBeHidden();
+    await pages[0].locator('.host-nav button').nth(2).click();
     await expect(
       pages[0].getByText("เฉพาะ Host · บทบาทและหัวใจ"),
     ).toBeVisible();
+    await pages[0].locator('.host-nav button').first().click();
+    await pages[0].locator('.host-review-summary button').click();
     await expect(pages[0].getByAltText("หลักฐานการโจมตี")).toBeVisible();
     await expect
       .poll(() =>
@@ -666,6 +688,17 @@ test("responsive Thai entry and Host navigation produce review screenshots", asy
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  for (const [width, height] of [[360, 800], [390, 844], [768, 1000], [1440, 1000]]) {
+    await page.setViewportSize({ width, height });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width < 768) {
+      const submit = page.locator('.access-panel form .primary-action');
+      const bounds = await submit.boundingBox();
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
+      await expect(page.locator('.entry-story p')).toHaveCSS('font-size', '16px');
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
     path: "test-results/redesign-mobile.png",
     fullPage: true,
@@ -878,6 +911,196 @@ test("failed close remains retryable after archive is downloaded", async ({
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
   await expect(page).toHaveURL("/");
   expect(downloads).toBe(1);
+});
+
+test("case-file Host workflow fits mobile and desktop with actions before statistics", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  await f.evidence("sumo");
+  await openPlayer(page, "host");
+  for (const width of [360, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const queue = await page.locator('.host-review-summary').boundingBox();
+    const stats = await page.locator('.metric-grid').boundingBox();
+    expect(queue.y + queue.height).toBeLessThanOrEqual(stats.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `artifacts/ux-review/host-${width}.png`, fullPage: true });
+  }
+  await page.locator('.host-review-summary button').click();
+  await expect(page.getByAltText('หลักฐานการโจมตี')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'artifacts/ux-review/evidence-390.png', fullPage: true });
+  await page.locator('.host-nav button').first().click();
+  await page.getByRole('button', { name: 'ตั้งเวลา', exact: true }).click();
+  await expect(page.getByLabel('วันและเวลาตำรวจชี้ตัว')).toBeVisible();
+  const playerContext = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  try {
+    const playerPage = await playerContext.newPage();
+    await openPlayer(playerPage, 'killer');
+    await expect(playerPage.locator('.player-hero p')).toHaveCSS('font-size', '16px');
+    await playerPage.screenshot({ path: 'artifacts/ux-review/player-390.png', fullPage: true });
+    await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby'");
+    await playerPage.reload();
+    await expect(playerPage.locator('.waiting-copy')).toBeVisible();
+    await playerPage.screenshot({ path: 'artifacts/ux-review/player-lobby-390.png', fullPage: true });
+  } finally {
+    await playerContext.close();
+  }
+  await db.exec("update public.rooms set phase='lobby'");
+  await page.reload();
+  await expect(page.locator('.setup-panel')).toBeVisible();
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const room = await page.locator('.host-room-banner').boundingBox();
+    const setup = await page.locator('.setup-panel').boundingBox();
+    expect(room.y + room.height).toBeLessThanOrEqual(setup.y);
+    await page.screenshot({ path: `artifacts/ux-review/host-lobby-${width}.png`, fullPage: true });
+  }
+});
+
+test("room invitation QR decodes to a prefilled join link and bypasses old-room resume", async ({ page }) => {
+  await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby'");
+  await openPlayer(page, 'host');
+  await page.getByRole('button', { name: 'ชวนเพื่อน · ลิงก์ / QR' }).click();
+  const link = await page.getByLabel('ลิงก์เข้าห้อง').inputValue();
+  expect(new URL(link).search).toBe('?room=ABCDEF');
+  const qr = page.getByAltText('QR เข้าห้อง ABCDEF');
+  await expect(qr).toBeVisible();
+  await expect.poll(() => qr.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  const pixels = await qr.evaluate(img => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+    return { data: Array.from(ctx.getImageData(0, 0, canvas.width, canvas.height).data), width: canvas.width, height: canvas.height };
+  });
+  expect(jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height)?.data).toBe(link);
+  await page.screenshot({ path: 'artifacts/ux-review/invite-qr.png' });
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw Error('denied'); } } }));
+  await page.getByRole('button', { name: 'คัดลอกลิงก์', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('แตะช่องลิงก์');
+  await page.goto(link);
+  await expect(page.getByLabel('รหัสห้อง', { exact: true })).toHaveValue('ABCDEF');
+  await expect(page.getByLabel('ชื่อผู้เล่น', { exact: true })).toBeEditable();
+  await page.getByLabel('ชื่อผู้เล่น', { exact: true }).fill('friend');
+  await page.getByRole('button', { name: 'เข้าสู่เกม', exact: true }).click();
+  await expect(page).toHaveURL(/\/room\/ABCDEF$/);
+});
+
+test("mission steps and privacy preserve captured photo, target, scroll and focus", async ({ page }) => {
+  await openPlayer(page, 'killer');
+  const step = page.locator('.mission-steps [aria-current="step"]');
+  await expect(step).toContainText('เลือกเป้าหมาย');
+  await page.getByLabel('เลือกเป้าหมาย', { exact: true }).selectOption(f.players.sumo);
+  await expect(step).toContainText('ถ่ายภาพ');
+  await page.getByRole('button', { name: 'เปิดกล้องมือถือ', exact: true }).click();
+  await page.getByLabel('ถ่ายรูปจากกล้องมือถือ').setInputFiles(CAMERA_PNG);
+  await expect(step).toContainText('ตรวจและส่ง');
+  const preview = page.getByAltText('ตัวอย่างหลักฐานก่อนส่ง');
+  const src = await preview.getAttribute('src');
+  await page.locator('.toast').waitFor({ state: 'hidden' });
+  const hide = page.getByRole('button', { name: 'ซ่อนหน้าจอ', exact: true });
+  await hide.focus();
+  const y = await page.evaluate(() => { window.scrollTo(0, 420); return window.scrollY; });
+  await hide.evaluate(button => button.click());
+  await expect(page.locator('.private-view')).toHaveAttribute('inert', '');
+  await expect(preview).toBeHidden();
+  await expect(page.getByRole('button', { name: 'กลับเข้าเกม' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  expect(await page.locator('.private-view').evaluate(node => node.contains(document.activeElement))).toBe(false);
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(hide).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
+  await expect(preview).toHaveAttribute('src', src);
+  await expect(page.getByLabel('เลือกเป้าหมาย', { exact: true })).toHaveValue(f.players.sumo);
+  await page.screenshot({ path: 'artifacts/ux-review/mission-preview.png', fullPage: true });
+  await page.getByRole('button', { name: 'ส่งหลักฐานให้ Host' }).click();
+  await expect(page.getByText('รอ Host ตรวจ', { exact: true })).toBeVisible();
+});
+
+test("privacy hides role dialogs without acknowledging or losing their position", async ({ page }) => {
+  await openPlayer(page, 'villager', 'villager', '', true, false);
+  let dialog = page.locator('.role-reveal-dialog');
+  await dialog.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.privacy-screen')).toBeVisible();
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.locator('.role-card-trigger')).toBeVisible();
+  await page.locator('.role-card-trigger').click();
+  await expect(dialog.getByRole('button', { name: 'เข้าใจแล้ว' })).toBeVisible();
+  const hide = dialog.getByRole('button', { name: 'ซ่อนหน้าจอ' });
+  await hide.focus();
+  const scroll = await dialog.evaluate(node => { node.scrollTop = 120; return node.scrollTop; });
+  await hide.evaluate(button => button.click());
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(hide).toBeFocused();
+  await expect.poll(() => dialog.evaluate(node => node.scrollTop)).toBe(scroll);
+  await dialog.getByRole('button', { name: 'เข้าใจแล้ว' }).click();
+});
+
+test("privacy preserves recovery and confirmation dialogs without executing their actions", async ({ page }) => {
+  const token = 'abcdef0123456789abcdef0123456789';
+  await db.query('update public.players set reclaim_token_hash=md5($2) where id=$1', [f.players.villager, token]);
+  await openPlayer(page, 'outsider', 'villager', token);
+  await page.getByRole('button', { name: 'เพิ่มเติม', exact: true }).click();
+  await page.getByRole('button', { name: /รหัสกู้คืน/ }).click();
+  const recovery = page.getByRole('dialog');
+  await recovery.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(recovery).toBeVisible();
+  await expect(recovery.locator('.recovery-code')).toHaveText(token);
+  await recovery.getByRole('button', { name: 'ปิด', exact: true }).click();
+  await page.getByRole('button', { name: 'ออกจากห้อง', exact: true }).click();
+  await page.getByLabel('ยืนยันชื่อในเกม').fill('villa');
+  await page.getByRole('dialog').getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.getByLabel('ยืนยันชื่อในเกม')).toHaveValue('villa');
+  await expect(page).toHaveURL(/\/room\/ABCDEF$/);
+});
+
+test("privacy cancels an outdated ability confirmation and hides a pending response", async ({ page }) => {
+  await openPlayer(page, 'reporter');
+  await page.getByLabel('เลือกผู้เล่นเพื่อตรวจบทบาท').selectOption(f.players.villager);
+  await page.getByRole('button', { name: 'ใช้ความสามารถ', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  expect((await db.query('select has_used_ability from public.player_secrets where player_id=$1', [f.players.reporter])).rows[0].has_used_ability).toBe(false);
+  await f.hit('villager'); await f.hit('villager');
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'ใช้ความสามารถ', exact: true })).toBeDisabled();
+  await page.getByLabel('เลือกผู้เล่นเพื่อตรวจบทบาท').selectOption(f.players.sumo);
+  await page.getByRole('button', { name: 'ใช้ความสามารถ', exact: true }).click();
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  await page.route('**/rest/v1/rpc/use_reporter', async route => { await held; await route.fallback(); });
+  await page.getByRole('button', { name: 'ยืนยันดำเนินการ' }).click();
+  await page.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  release();
+  await expect.poll(async () => (await db.query('select has_used_ability from public.player_secrets where player_id=$1', [f.players.reporter])).rows[0].has_used_ability).toBe(true);
+  await expect(page.locator('.private-view')).toBeHidden();
+  await expect(page.locator('.toast')).toBeHidden();
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.getByRole('button', { name: 'ใช้ความสามารถ', exact: true })).toHaveCount(0);
+});
+
+test("role changes and game results stay hidden and restore the latest screen", async ({ page }) => {
+  await openPlayer(page, 'detective');
+  await page.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  await f.hit('police'); await f.hit('police');
+  await expect(page.locator('.player-hero h1')).toHaveText('Police', { timeout: 20000 });
+  await expect(page.locator('.privacy-screen')).toBeVisible();
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Detective → Police');
+  await page.getByRole('dialog').getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
+  await f.as('host', 'end_game', ['ABCDEF']);
+  await expect(page.locator('.end-game-summary')).toHaveCount(1, { timeout: 20000 });
+  await expect(page.locator('.end-game-summary')).toBeHidden();
+  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
+  await expect(page.locator('.end-game-summary')).toBeVisible();
 });
 
 test("anonymous attack news and event colors respect audience at mobile and desktop sizes", async ({

@@ -21,7 +21,7 @@ export function KillerProgress({
   };
   return (
     <>
-      <div className="panel killer-alliance">
+      <div className="panel killer-alliance killer-alliance-panel">
         <Skull size={19} />
         <strong>ทีม Killer</strong>
         {allies.length ? (
@@ -35,7 +35,7 @@ export function KillerProgress({
           <p>ขณะนี้คุณเป็น Killer คนเดียว</p>
         )}
       </div>
-      <div className="panel">
+      <div className="panel killer-evidence-panel">
         <h2>หลักฐานร่วมของทีม</h2>
         {room.killerEvidenceProgress.length === 0 ? (
           <p>ยังไม่มีหลักฐาน</p>

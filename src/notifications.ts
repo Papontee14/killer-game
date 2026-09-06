@@ -40,8 +40,8 @@ export async function showGenericNotification(
   const options: NotificationOptions & { renotify: boolean; vibrate: number[] } = {
     body: message,
     tag: 'killer-event',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/icon-192.png?v=8bit-1',
+    badge: '/notification-badge.png?v=8bit-1',
     // Ask the OS for a visible, audible notification while the device is locked.
     // Android still decides whether the lock screen itself is illuminated.
     silent: false,
@@ -80,6 +80,20 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+async function readyServiceWorker(): Promise<ServiceWorkerRegistration> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Service worker unavailable')), 12000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Register Web Push Subscription with server so notifications arrive
  * even when the mobile phone screen is locked or app is closed.
@@ -102,7 +116,7 @@ export async function subscribeToWebPush(
   }
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await readyServiceWorker();
     if (!reg.pushManager) return false;
 
     let sub = await reg.pushManager.getSubscription();
@@ -115,6 +129,7 @@ export async function subscribeToWebPush(
 
     const res = await fetch('/api/push/subscribe', {
       method: 'POST',
+      signal: AbortSignal.timeout(12000),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${authToken}`,
@@ -141,6 +156,7 @@ export async function notifyRoomParticipants(
   try {
     await fetch('/api/push/send', {
       method: 'POST',
+      keepalive: true,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, excludeUserId }),
     });

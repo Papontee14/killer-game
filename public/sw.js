@@ -32,8 +32,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification("KILLER", {
     body: GENERIC_NOTIFICATION_BODY,
     tag: "killer-event",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-192.png?v=8bit-1",
+    badge: '/notification-badge.png?v=8bit-1',
     // These options request the most prominent web notification available.
     silent: false,
     renotify: true,

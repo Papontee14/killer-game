@@ -80,7 +80,6 @@ import {
   requestNotificationPermission,
   showGenericNotification,
   subscribeToWebPush,
-  notifyRoomParticipants,
 } from "@/src/notifications";
 
 import { NativeCamera } from "./native-camera";
@@ -195,17 +194,20 @@ function useRoom(code: string) {
 
 function NotificationToggle({ code }: { code: string }) {
   const [permission, setPermission] = useState<string>("default");
+  const [pushState, setPushState] = useState<"idle" | "pending" | "ready" | "failed">("idle");
 
   const setupWebPush = useCallback(async () => {
+    setPushState("pending");
     try {
       const supabase = getSupabaseBrowser();
       const session = await supabase?.auth.getSession();
       const token = session?.data.session?.access_token;
-      if (token && code) {
-        await subscribeToWebPush(code, token);
-      }
+      const ready = !!token && !!code && await subscribeToWebPush(code, token);
+      setPushState(ready ? "ready" : "failed");
+      return ready;
     } catch {
-      // non-blocking
+      setPushState("failed");
+      return false;
     }
   }, [code]);
 
@@ -224,25 +226,33 @@ function NotificationToggle({ code }: { code: string }) {
     const next = await requestNotificationPermission();
     setPermission(next);
     if (next === "granted") {
-      void setupWebPush();
-      void showGenericNotification("เปิดการแจ้งเตือนสำเร็จ");
+      if (await setupWebPush()) {
+        void showGenericNotification("เปิดการแจ้งเตือนสำเร็จ");
+      }
     }
   };
 
   return (
     <button
-      className={`topbar-btn ${permission === "granted" ? "" : "notice"}`}
+      className={`topbar-btn ${pushState === "ready" ? "" : "notice"}`}
+      disabled={pushState === "pending"}
       onClick={() => void handleToggle()}
       title={
-        permission === "granted"
-          ? "เปิดการแจ้งเตือนแล้ว"
+        pushState === "failed"
+          ? "ยังลงทะเบียนแจ้งเตือนตอนปิดจอไม่สำเร็จ กดเพื่อลองอีกครั้ง"
+          : pushState === "ready"
+          ? "ลงทะเบียนรับแจ้งเตือนแล้ว การแสดงผลขึ้นกับการตั้งค่ามือถือ"
           : "กดเพื่อเปิดการแจ้งเตือนบนมือถือ"
       }
       type="button"
     >
-      {permission === "granted" ? <Bell size={15} /> : <BellOff size={15} />}
+      {pushState === "ready" ? <Bell size={15} /> : <BellOff size={15} />}
       <span className="notif-label">
-        {permission === "granted"
+        {pushState === "pending"
+          ? "กำลังเปิดแจ้งเตือน…"
+          : pushState === "failed"
+            ? "แจ้งเตือนยังไม่พร้อม · ลองอีกครั้ง"
+          : pushState === "ready"
           ? "แจ้งเตือนเปิดแล้ว"
           : permission === "denied"
             ? "ถูกปฏิเสธ · เปิดในการตั้งค่าเบราว์เซอร์"

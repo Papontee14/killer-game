@@ -18,19 +18,7 @@ const assets = require('./pixel-assets.json');
     },{data,limit});
     fs.writeFileSync(asset.output,Buffer.from(encoded,'base64'));
   }
-  // A code-native pixel K mark stays legible inside the maskable safe area.
-  for (const [file,size] of [['icon-192.png',192],['icon-512.png',512],['apple-touch-icon.png',180]]) {
-    const png = await page.evaluate(size => {
-      const c=document.createElement('canvas');c.width=c.height=size;const ctx=c.getContext('2d');
-      ctx.fillStyle='#061210';ctx.fillRect(0,0,size,size);
-      const unit=size/32;ctx.fillStyle='#A3FF72';
-      const rows=['1100011','1100110','1101100','1111000','1111000','1101100','1100110','1100011'];
-      rows.forEach((row,y)=>[...row].forEach((bit,x)=>{if(bit==='1')ctx.fillRect((9+x*2)*unit,(7+y*2)*unit,unit*2,unit*2)}));
-      ctx.fillStyle='#FF3347';ctx.fillRect(8*unit,25*unit,16*unit,2*unit);
-      return c.toDataURL('image/png').split(',')[1];
-    },size);
-    fs.writeFileSync('public/'+file,Buffer.from(png,'base64'));
-  }
+  await import('./generate-icons.mjs');
   await page.setViewportSize({width:1200,height:1200});
   const cards=assets.map(a=>`<article><img src="data:image/webp;base64,${fs.readFileSync(a.output).toString('base64')}"><p>${a.key}</p></article>`).join('');
   await page.setContent(`<style>body{background:#061210;color:#f3f5e9;font:16px monospace;margin:24px;display:grid;grid-template-columns:repeat(5,1fr);gap:16px}article{margin:0;min-width:0}img{width:100%;height:200px;object-fit:cover;image-rendering:pixelated}p{margin:6px 0 16px}</style>${cards}`);

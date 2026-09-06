@@ -31,3 +31,17 @@ test('activation removes old evidence-containing shell cache; push notification 
  handlers.push({data:{text:()=> 'secret target and hearts'},waitUntil:promise=>done=promise});await done;
  assert.equal(notifications[0][1].body,'มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด');
 });
+
+test('push wakes a worker without any open app window and uses pixel notification assets', async () => {
+ const {handlers,notifications}=worker();
+ let done;
+ handlers.push({data:{json:()=>({body:'secret role',url:'/room/ABCDEF'})},waitUntil:p=>done=p});
+ await done;
+ const [title,options]=notifications[0];
+ assert.equal(title,'KILLER');
+ assert.equal(options.body,'มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด');
+ assert.equal(options.icon,'/icon-192.png?v=8bit-1');
+ assert.equal(options.badge,'/notification-badge.png?v=8bit-1');
+ assert.equal(options.data.url,'/room/ABCDEF');
+ assert.equal(options.silent,false);
+});

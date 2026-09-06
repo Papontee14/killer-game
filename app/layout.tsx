@@ -23,8 +23,8 @@ export const metadata: Metadata = {
     title: 'Killer',
   },
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/icon-192.png?v=8bit-1',
+    apple: '/apple-touch-icon.png?v=8bit-1',
   },
 };
 export const viewport: Viewport = {

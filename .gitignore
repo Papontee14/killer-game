@@ -17,3 +17,4 @@ out
 test-results/
 playwright-report/
 supabase/.temp/
+.codex-remote-attachments/

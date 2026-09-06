@@ -735,15 +735,16 @@ function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
         </div>
       )}
       <div className="waiting-grid" />
-      <Skull className="waiting-skull" size={56} />
+      <Skull className="waiting-skull" size={56} aria-hidden="true" />
       <div className="waiting-copy">
         <span className="section-kicker">KILLER · ห้อง {room.code}</span>
         <h1>KILLER</h1>
         <p>Host {room.hostName} กำลังเตรียมเกม</p>
         <p className="muted">ปิดเว็บหรือหลุดจากเครือข่าย ไม่ถือว่าถูกกำจัด</p>
         <ConnectionStatus />
-        <div className="waiting-status">
-          <span /> รอ Host เริ่มเกม
+        <div className="waiting-status" role="status" aria-live="polite">
+          <span aria-hidden="true" />
+          <strong>รอ Host เริ่มเกม</strong>
         </div>
         <LobbyPlayers room={room} waiting />
       </div>

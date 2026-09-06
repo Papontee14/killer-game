@@ -30,6 +30,7 @@ export function RoomInvite({ code }: { code: string }) {
       <p>สแกน QR หรือเปิดลิงก์ แล้วใส่ชื่อเพื่อเข้าห้อง</p>
       {qr ? <Image className="invite-qr" src={qr} alt={`QR เข้าห้อง ${code}`} width={256} height={256} unoptimized /> :
         qrError ? <button className="secondary-action" onClick={() => setAttempt(value => value + 1)}>โหลด QR อีกครั้ง</button> : <p role="status">กำลังสร้าง QR…</p>}
+      <p className="invite-app-hint">💡 สำหรับเพื่อนที่ติดตั้งแอปไว้แล้ว ให้เปิดแอปและแตะ <strong>สแกน QR</strong> ในหน้าแรก</p>
       <label className="dialog-field">ลิงก์เข้าห้อง
         <input aria-label="ลิงก์เข้าห้อง" readOnly value={url} onFocus={event => event.target.select()} />
       </label>

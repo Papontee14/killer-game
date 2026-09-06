@@ -304,6 +304,33 @@ svg {
   color: #788a77;
   font-size: 13px;
 }
+.room-code-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.scan-qr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--panel-2);
+  border: 1px solid #3c5443;
+  color: var(--acid);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.scan-qr-btn:hover {
+  background: #203529;
+  border-color: var(--acid);
+}
+.scan-qr-btn:active {
+  transform: scale(0.97);
+}
 .access-panel .room-code-input {
   letter-spacing: 6px;
   font-size: 20px !important;
@@ -986,6 +1013,92 @@ svg {
   height: auto;
   margin: 16px auto;
   background: white;
+}
+.invite-app-hint {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin: 8px 0 14px;
+  line-height: 1.5;
+}
+.qr-scanner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.qr-video-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--line);
+}
+.qr-scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.qr-viewfinder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.viewfinder-box {
+  position: relative;
+  width: 70%;
+  height: 70%;
+  border: 2px solid var(--acid);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--acid);
+  box-shadow: 0 0 8px var(--acid);
+  animation: scan-vertical 2s linear infinite;
+}
+@keyframes scan-vertical {
+  0% {
+    top: 5%;
+  }
+  50% {
+    top: 95%;
+  }
+  100% {
+    top: 5%;
+  }
+}
+.scanner-instruction {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.qr-scanner-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 16px 8px;
+}
+.qr-scanner-error .error-icon {
+  color: var(--danger);
+}
+.scanner-help-text {
+  font-size: 13px;
+  color: var(--muted);
 }
 .camera-drop {
   border-radius: 8px;
@@ -1718,6 +1831,36 @@ svg {
 }
 .lobby-waiting-screen .waiting-grid {
   opacity: 0.15;
+}
+.lobby-waiting-screen .waiting-skull {
+  z-index: 0;
+  color: var(--danger);
+  opacity: 0.12;
+  filter: none;
+  pointer-events: none;
+}
+.lobby-waiting-screen .waiting-status {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 320px);
+  min-height: 52px;
+  justify-content: center;
+  padding: 12px 18px;
+  gap: 10px;
+  background: #0b1710f2;
+  border-color: rgb(201 255 61 / 58%);
+  box-shadow: 0 0 0 1px rgb(201 255 61 / 8%), 0 10px 28px rgb(0 0 0 / 24%);
+  color: var(--acid);
+  font-size: 15px;
+  font-weight: 850;
+}
+.lobby-waiting-screen .waiting-status strong {
+  font-weight: 850;
+}
+.lobby-waiting-screen .waiting-status span {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
 }
 @media (min-width: 1200px) {
   .host-tab-home .role-grid {

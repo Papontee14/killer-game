@@ -6,13 +6,15 @@ import {
   Crown,
   DoorOpen,
   Fingerprint,
+  QrCode,
   ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { makeRoomCode } from "@/src/game";
 import { rememberRoomCredentials } from "@/src/room-session";
 import { Brand, Rules } from "./game-ui";
+import { QrScannerDialog } from "./qr-scanner-dialog";
 export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"join" | "host">("join");
@@ -21,7 +23,9 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const [recovery, setRecovery] = useState(false);
   const [token, setToken] = useState("");
   const [rules, setRules] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   function continueToRoom(event: React.FormEvent) {
     event.preventDefault();
     if (!name.trim() || busy) return;
@@ -120,7 +124,17 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
             <form onSubmit={continueToRoom}>
               {mode === "join" && (
                 <label>
-                  รหัสห้อง <small>6 ตัวอักษรหรือตัวเลข</small>
+                  <span className="room-code-label-row">
+                    <span>รหัสห้อง <small>6 ตัวอักษรหรือตัวเลข</small></span>
+                    <button
+                      type="button"
+                      className="scan-qr-btn"
+                      onClick={() => setScannerOpen(true)}
+                      aria-label="สแกน QR เพื่อเข้าห้อง"
+                    >
+                      <QrCode size={16} /> สแกน QR
+                    </button>
+                  </span>
                   <input
                     aria-label="รหัสห้อง"
                     className="room-code-input"
@@ -146,6 +160,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
               <label>
                 {mode === "host" ? "ชื่อ Host" : "ชื่อผู้เล่น"}
                 <input
+                  ref={nameInputRef}
                   aria-label={mode === "host" ? "ชื่อ Host" : "ชื่อผู้เล่น"}
                   required
                   maxLength={24}
@@ -217,6 +232,18 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
         </span>
       </footer>
       {rules && <Rules onClose={() => setRules(false)} />}
+      {scannerOpen && (
+        <QrScannerDialog
+          onScanSuccess={(scannedCode) => {
+            setCode(scannedCode);
+            setScannerOpen(false);
+            setTimeout(() => {
+              nameInputRef.current?.focus();
+            }, 100);
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </main>
   );
 }

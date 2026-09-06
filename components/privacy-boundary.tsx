@@ -1,4 +1,5 @@
 "use client";
+import { Brand } from "./brand";
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 const PrivacyContext = createContext(false);
@@ -51,7 +52,7 @@ export function PrivacyBoundary({ hidden, snapshot, onReveal, children }: {
   return <PrivacyContext.Provider value={hidden}>
     <div ref={content} className="private-view" hidden={hidden} aria-hidden={hidden || undefined}>{children}</div>
     {hidden && <main className="privacy-screen" role="dialog" aria-modal="true" aria-labelledby="privacy-screen-title">
-      <span className="killer-logo small">KILLER</span>
+      <Brand small />
       <h1 id="privacy-screen-title">ซ่อนหน้าจอแล้ว</h1>
       <button ref={returnButton} className="primary-action" disabled={revealing} aria-busy={revealing} onClick={async () => {
         setRevealing(true);

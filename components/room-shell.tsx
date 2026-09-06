@@ -33,6 +33,8 @@ import {
   EyeOff,
   Heart,
   Hourglass,
+  Minus,
+  Plus,
   Radio,
   Shield,
   Skull,
@@ -87,7 +89,6 @@ import { RoomInvite } from "./room-invite";
 import { PrivacyBoundary, capturePrivateView, type PrivateViewSnapshot } from "./privacy-boundary";
 import {
   Brand,
-  ConnectionStatus,
   Dialog,
   GameNavigation,
   PHASE_LABELS,
@@ -742,7 +743,6 @@ function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
         <h1><Brand /></h1>
         <p>Host {room.hostName} กำลังเตรียมเกม</p>
         <p className="muted">ปิดเว็บหรือหลุดจากเครือข่าย ไม่ถือว่าถูกกำจัด</p>
-        <ConnectionStatus />
         <div className="waiting-status" role="status" aria-live="polite">
           <span aria-hidden="true" />
           <strong>รอ Host เริ่มเกม</strong>
@@ -972,7 +972,6 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         onChange={setTab}
         pending={pending.length}
       />
-      <ConnectionStatus />
       {stale && (
         <div className="error-banner" role="status">
           ข้อมูลอาจยังไม่อัปเดต{" "}
@@ -1000,7 +999,6 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                         evidence: "ตรวจหลักฐาน",
                         players: "ผู้เล่นทั้งหมด",
                         events: "บันทึกเหตุการณ์",
-                        settings: "ตั้งค่าห้อง",
                       } as Record<string, string>
                     )[tab]}
               </h1>
@@ -1010,7 +1008,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               {PHASE_LABELS[room.phase]}
             </div>
           </div>
-          {room.phase === "lobby" && (tab === "home" || tab === "settings") && (
+          {room.phase === "lobby" && tab === "home" && (
             <section className="host-room-banner" aria-label="ข้อมูลห้อง">
               <div><span className="section-kicker">รหัสเข้าร่วมห้อง</span><strong className="big-code">{room.code}</strong></div>
               <p><b>{room.players.length} คน</b> เข้าห้องแล้ว<br />แชร์รหัสนี้ให้เพื่อน แล้วจัดสรรบทบาทให้ครบ</p>
@@ -1029,7 +1027,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
             </div>
           )}
           {room.phase === "lobby" ? (
-            <div className="panel setup-panel" data-host-section="settings">
+            <div className="panel setup-panel" data-host-section="home">
               <div className="panel-heading">
                 <div>
                   <span className="section-kicker">จัดสรรบทบาท</span>
@@ -1061,7 +1059,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                         }
                         onClick={() => adjust(role, -1)}
                       >
-                        −
+                        <Minus size={18} aria-hidden="true" />
                       </button>
                       <b>{counts[role]}</b>
                       <button
@@ -1071,7 +1069,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                         }
                         onClick={() => adjust(role, 1)}
                       >
-                        +
+                        <Plus size={18} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -1181,18 +1179,9 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   <span>คิวตรวจรูป</span>
                 </div>
               </div>
-              {tab === "home" && (
-                <section className="panel schedule-preview">
-                  <Clock3 size={22} />
-                  <div><span className="muted">เวลาตำรวจชี้ตัว · เวลาไทย</span>
-                    <strong>{room.policeCheckAt ? new Date(room.policeCheckAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" }) : "ยังไม่ได้กำหนดเวลา"}</strong>
-                  </div>
-                  <button className="text-button" onClick={() => setTab("settings")}>ตั้งเวลา</button>
-                </section>
-              )}
               <div
                 className="panel action-panel police-schedule-panel"
-                data-host-section="settings"
+                data-host-section="home"
               >
                 <div className="schedule-heading">
                   <div className="schedule-icon">
@@ -1846,7 +1835,6 @@ export function PlayerRoom({
         onLeave={() => setIsLeaveModalOpen(true)}
         onHideScreen={hideScreen}
       />
-      <ConnectionStatus />
       {stale && (
         <div className="error-banner" role="status">
           ข้อมูลอาจยังไม่อัปเดต{" "}

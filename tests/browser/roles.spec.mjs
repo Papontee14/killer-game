@@ -774,7 +774,8 @@ test("responsive Thai entry and Host navigation produce review screenshots", asy
     fullPage: true,
   });
   const nav = page.getByRole("navigation", { name: "เมนู Host" });
-  await nav.getByRole("button", { name: "ตั้งค่าห้อง" }).click();
+  await expect(nav.getByRole("button")).toHaveCount(4);
+  await nav.getByRole("button").first().click();
   await expect(page.getByLabel("วันและเวลาตำรวจชี้ตัว")).toBeVisible();
   await nav.getByRole("button", { name: "ตรวจหลักฐาน" }).click();
   await expect(page.getByText("ยังไม่มีหลักฐานรอตรวจ")).toBeVisible();
@@ -977,7 +978,6 @@ test("case-file Host workflow fits mobile and desktop with actions before statis
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'artifacts/ux-review/evidence-390.png', fullPage: true });
   await page.locator('.host-nav button').first().click();
-  await page.getByRole('button', { name: 'ตั้งเวลา', exact: true }).click();
   await expect(page.getByLabel('วันและเวลาตำรวจชี้ตัว')).toBeVisible();
   const playerContext = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   try {

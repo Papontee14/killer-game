@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { Brand } from "./brand";
 import { PixelIcon } from "./pixel-ui";
 import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
 import { usePrivacyHidden } from "./privacy-boundary";
@@ -10,8 +11,6 @@ import {
   EyeOff,
   LockKeyhole,
   Shield,
-  Wifi,
-  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -20,7 +19,7 @@ import {
   type Role,
   type RoomPhase,
 } from "@/src/types";
-import { HOST_ART, ROLE_ART, roleArtAlt } from "@/src/role-art";
+import { ROLE_ART, roleArtAlt } from "@/src/role-art";
 export const PHASE_LABELS: Record<RoomPhase, string> = {
   lobby: "ห้องรอ",
   active: "กำลังเล่น",
@@ -59,22 +58,7 @@ export const ROLE_SUMMARIES: Record<Role, string> = {
   villager: "อยู่ฝ่ายเมือง มีสองหัวใจ รักษาตัวให้รอดและช่วยหาตัว Killer",
 };
 const RULE_ROLES = Object.keys(ROLE_LABELS) as Role[];
-export function Brand({ small = false }: { small?: boolean }) {
-  const letters = [
-    ["10001","10010","10100","11000","10100","10010","10001"],
-    ["111","010","010","010","010","010","111"],
-    ["1000","1000","1000","1000","1000","1000","1111"],
-    ["1000","1000","1000","1000","1000","1000","1111"],
-    ["11111","10000","10000","11110","10000","10000","11111"],
-    ["11110","10001","10001","11110","10100","10010","10001"],
-  ];
-  let offset = 0;
-  const pixels = letters.flatMap((rows) => {
-    const start = offset; offset += rows[0].length + 1;
-    return rows.flatMap((row,y) => [...row].flatMap((bit,x) => bit === "1" ? [<rect key={`${start+x}-${y}`} x={start+x} y={y} width={1} height={1} />] : []));
-  });
-  return <span className={`killer-logo ${small ? "small" : ""}`} role="img" aria-label="KILLER"><svg viewBox="0 0 31 7" aria-hidden="true" fill="currentColor" shapeRendering="crispEdges">{pixels}</svg></span>;
-}
+export { Brand } from "./brand";
 export function Dialog({
   title,
   children,
@@ -350,7 +334,6 @@ export function GameNavigation({
         ["evidence", "ตรวจหลักฐาน", "evidence"],
         ["players", "ผู้เล่น", "users"],
         ["events", "เหตุการณ์", "signal"],
-        ["settings", "ตั้งค่าห้อง", "gear"],
       ] as const)
     : ([
         ["home", "หน้าหลัก", "home"],
@@ -366,7 +349,6 @@ export function GameNavigation({
       {host && (
         <div className="nav-brand">
           <Brand small />
-          <Image className="host-nav-art" src={HOST_ART} alt="ผู้ดูแลเกม" width={54} height={54} />
           <span>ศูนย์ควบคุมเกม</span>
         </div>
       )}
@@ -390,31 +372,6 @@ export function GameNavigation({
     </nav>
   );
 }
-export function ConnectionStatus() {
-  const [online, setOnline] = useState(true);
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-  return (
-    <div
-      className={`connection-status ${online ? "" : "disconnected"}`}
-      role="status"
-    >
-      {online ? <Wifi size={14} /> : <WifiOff size={16} />}
-      {online
-        ? "เชื่อมต่อเครือข่ายแล้ว"
-        : "เครือข่ายหลุด · ข้อมูลอาจยังไม่อัปเดต กำลังรอเชื่อมต่อกลับ"}
-    </div>
-  );
-}
-
 export function RecoveryCard({
   token,
   onClose,

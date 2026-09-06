@@ -1997,11 +1997,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .avatar-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:7px; max-height:min(48svh,530px); overflow-y:auto; padding-right:4px; }
 .avatar-choice { min-width:0; padding:5px; border:1px solid var(--line); background:#061210; color:var(--text); text-align:left; }
 .avatar-choice img { width:100%; aspect-ratio:1; display:block; object-fit:cover; image-rendering:pixelated; }
-.avatar-choice strong,.avatar-choice small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.avatar-choice strong { margin-top:5px; font-size:10px; }.avatar-choice small { color:var(--muted); font-size:9px; }
+.avatar-choice small { display:block; margin-top:5px; overflow:hidden; color:var(--muted); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
 .avatar-choice.selected { outline:2px solid var(--acid); outline-offset:1px; }.avatar-choice.taken { opacity:.45; cursor:not-allowed; filter:grayscale(1); }
 .avatar-preview { display:flex; align-items:center; gap:12px; margin-top:15px; padding-top:12px; border-top:1px solid var(--line); }
-.avatar-preview > img { width:58px; height:58px; object-fit:cover; image-rendering:pixelated; }.avatar-preview > div { flex:1; }.avatar-preview strong,.avatar-preview small { display:block; }.avatar-preview small { margin-top:4px; color:var(--muted); font-size:11px; }.avatar-preview .primary-action { min-height:42px; white-space:nowrap; }
+.avatar-preview > img { width:58px; height:58px; object-fit:cover; image-rendering:pixelated; }.avatar-preview > div { flex:1; }.avatar-preview small { display:block; margin-top:4px; color:var(--muted); font-size:11px; }.avatar-preview .primary-action { min-height:42px; white-space:nowrap; }
 .player-card { gap: 12px; min-width: 0; }
 .player-meta { min-width: 0; overflow-wrap: anywhere; }
 .player-card small { line-height: 1.6; }

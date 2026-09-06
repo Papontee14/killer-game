@@ -357,7 +357,7 @@ function errorMessage(error: unknown, fallback: string) {
     "invalid room or host cannot play":
       "ไม่พบห้อง ห้องถูกปิด หรือคุณเป็น Host ซึ่งไม่สามารถร่วมเป็นผู้เล่นได้",
     "game already started":
-      "เกมเริ่มแล้ว ใช้ชื่อเดิมและรหัสกู้คืนเพื่อกลับเข้าตัวละครเดิม",
+      "เกมเริ่มแล้ว ใช้ชื่อเดิมและรหัสกู้คืนเพื่อกลับเข้าผู้เล่นเดิม",
     "not allowed":
       "ดำเนินการไม่ได้ สิทธิ์หรือสถานะเกมอาจเปลี่ยนแล้ว กรุณาตรวจสอบและลองใหม่",
     "target is dead": "เป้าหมายถูกกำจัดแล้ว กรุณาเลือกผู้เล่นใหม่",
@@ -374,9 +374,9 @@ function errorMessage(error: unknown, fallback: string) {
     "invalid player count or required roles":
       "จำนวนบทบาทต้องตรงกับผู้เล่น และต้องมี Killer กับตำรวจ",
     "invalid player count, avatar selection, or required roles":
-      "ผู้เล่นทุกคนต้องเลือกตัวละคร และจำนวนบทบาทต้องตรงกันก่อนเริ่มเกม",
-    "avatar already selected": "ตัวละครนี้มีคนเลือกแล้ว กรุณาเลือกรูปอื่น",
-    "invalid avatar": "ไม่พบตัวละครนี้ กรุณาเลือกใหม่",
+      "ผู้เล่นทุกคนต้องเลือกรูปโปรไฟล์ และจำนวนบทบาทต้องตรงกันก่อนเริ่มเกม",
+    "avatar already selected": "รูปโปรไฟล์นี้มีคนเลือกแล้ว กรุณาเลือกรูปอื่น",
+    "invalid avatar": "ไม่พบรูปโปรไฟล์นี้ กรุณาเลือกใหม่",
     "room is full": "ห้องเต็มแล้ว รับผู้เล่นได้สูงสุด 28 คน",
     "player not found": "ไม่พบผู้เล่นในห้องรอแล้ว",
     "room not found or closed": "ไม่พบห้องหรือห้องถูกปิดแล้ว",
@@ -421,7 +421,7 @@ function LeaveConfirmModal({
     <Dialog title="ออกจากเกม" onClose={close} onHideScreen={onHideScreen}>
       <p>
         พิมพ์ชื่อ <strong>{expectedName}</strong> เพื่อยืนยัน
-        ตัวละครของคุณยังอยู่ในเกม
+        สถานะผู้เล่นของคุณยังอยู่ในเกม
         การกลับจากอุปกรณ์ใหม่หรือหลังล้างข้อมูลต้องใช้รหัสกู้คืน
       </p>
       <form
@@ -540,9 +540,9 @@ function AvatarPicker({
   );
   const visible = AVATARS.filter((avatar) => filter === "all" || avatar.gender === filter);
   return (
-    <Dialog title="เลือกตัวละคร" onClose={onClose} className="avatar-dialog">
-      <p className="muted">ตัวละครในห้องเดียวกันห้ามซ้ำกัน เลือกได้จนกว่า Host จะเริ่มเกม</p>
-      <div className="avatar-filters" role="group" aria-label="กรองตัวละคร">
+    <Dialog title="เลือกรูปโปรไฟล์" onClose={onClose} className="avatar-dialog">
+      <p className="muted">รูปโปรไฟล์ในห้องเดียวกันห้ามซ้ำกัน เลือกได้จนกว่า Host จะเริ่มเกม</p>
+      <div className="avatar-filters" role="group" aria-label="กรองรูปโปรไฟล์">
         {(["all", "male", "female"] as const).map((value) => (
           <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
             {value === "all" ? "ทั้งหมด" : value === "male" ? "ชาย" : "หญิง"}
@@ -554,14 +554,13 @@ function AvatarPicker({
           const owner = owners.get(avatar.id);
           return <button key={avatar.id} className={`avatar-choice ${previewId === avatar.id ? "selected" : ""} ${owner ? "taken" : ""}`} disabled={Boolean(owner)} onClick={() => setPreviewId(avatar.id)}>
             <img src={avatar.src} alt="" loading="lazy" />
-            <strong>{avatar.name}</strong>
-            <small>{owner ? `เลือกโดย ${owner}` : avatar.gender === "male" ? "ชาย" : "หญิง"}</small>
+            {owner && <small>เลือกโดย {owner}</small>}
           </button>;
         })}
       </div>
       <div className="avatar-preview" aria-live="polite">
-        {selected ? <><img src={selected.src} alt="" /><div><strong>{selected.name}</strong><small>กดใช้ตัวละครนี้เพื่อยืนยัน</small></div></> : <span className="muted">เลือกตัวละครเพื่อดูตัวอย่าง</span>}
-        <button className="primary-action" disabled={!selected || busy} onClick={() => selected && onSelect(selected.id)}>ใช้ตัวละครนี้</button>
+        {selected ? <><img src={selected.src} alt="" /><div><small>กดใช้รูปนี้เพื่อยืนยัน</small></div></> : <span className="muted">เลือกรูปเพื่อดูตัวอย่าง</span>}
+        <button className="primary-action" disabled={!selected || busy} onClick={() => selected && onSelect(selected.id)}>ใช้รูปนี้</button>
       </div>
     </Dialog>
   );
@@ -792,7 +791,7 @@ function LobbyPlayers({
         <div className="players-grid">
           {room.players.map((player) => <div key={player.id} className="lobby-player-row">
             <PlayerCard player={player} />
-            {!player.avatarId && <small className="avatar-needed">ยังไม่ได้เลือกตัวละคร</small>}
+            {!player.avatarId && <small className="avatar-needed">ยังไม่ได้เลือกรูปโปรไฟล์</small>}
             {onRemove && <button className="remove-lobby-player" onClick={() => onRemove(player)} aria-label={`นำ ${player.name} ออกจากห้อง`}><UserMinus size={16} /> นำออก</button>}
           </div>)}
         </div>
@@ -841,8 +840,8 @@ function Waiting({ room, onLeave, onChooseAvatar, playerId }: { room: RoomState;
         </div>
         {mine && <section className="waiting-avatar panel">
           <PlayerAvatar avatarId={mine.avatarId} />
-          <div><strong>{mine.avatarId ? "เลือกตัวละครแล้ว" : "ยังไม่ได้เลือกตัวละคร"}</strong><small>{mine.avatarId ? avatarById.get(mine.avatarId)?.name : "เลือกให้เสร็จก่อน Host เริ่มเกม"}</small></div>
-          {onChooseAvatar && <button className="primary-action" onClick={onChooseAvatar}>เลือกตัวละคร</button>}
+          <div><strong>{mine.avatarId ? "เลือกรูปโปรไฟล์แล้ว" : "ยังไม่ได้เลือกรูปโปรไฟล์"}</strong><small>{mine.avatarId ? "เปลี่ยนได้จนกว่า Host จะเริ่มเกม" : "เลือกให้เสร็จก่อน Host เริ่มเกม"}</small></div>
+          {onChooseAvatar && <button className="primary-action" onClick={onChooseAvatar}>เลือกรูปโปรไฟล์</button>}
         </section>}
         <LobbyPlayers room={room} waiting />
       </div>
@@ -1117,7 +1116,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           {room.phase === "lobby" && tab === "players" && (
             <LobbyPlayers room={room} onRemove={(player) => setConfirmation({
               title: "นำผู้เล่นออกจากห้อง",
-              detail: `นำ ${player.name} ออกจากห้องรอ? ตัวละครที่เลือกจะว่างทันที`,
+              detail: `นำ ${player.name} ออกจากห้องรอ? รูปโปรไฟล์ที่เลือกจะว่างทันที`,
               action: () => act(() => removeLobbyPlayer(room.code, player.id)),
             })} />
           )}
@@ -1190,7 +1189,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   จำนวนผู้เล่น {room.players.length} คน ต้องตรงกับบทบาท {total}{" "}
                   คน จึงจะเริ่มได้
                 </p>
-              ) : room.players.some((player) => !player.avatarId) ? <p className="muted">รอเลือกตัวละคร: {room.players.filter((player) => !player.avatarId).map((player) => player.name).join(", ")}</p> : null}
+              ) : room.players.some((player) => !player.avatarId) ? <p className="muted">รอเลือกรูปโปรไฟล์: {room.players.filter((player) => !player.avatarId).map((player) => player.name).join(", ")}</p> : null}
             </div>
           ) : (
             <>
@@ -1485,7 +1484,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         </section>
         {room.phase === "lobby" && tab === "home" && <aside className="host-lobby-roster"><LobbyPlayers room={room} onRemove={(player) => setConfirmation({
           title: "นำผู้เล่นออกจากห้อง",
-          detail: `นำ ${player.name} ออกจากห้องรอ? ตัวละครที่เลือกจะว่างทันที`,
+          detail: `นำ ${player.name} ออกจากห้องรอ? รูปโปรไฟล์ที่เลือกจะว่างทันที`,
           action: () => act(() => removeLobbyPlayer(room.code, player.id)),
         })} /></aside>}
       </div>
@@ -1619,7 +1618,7 @@ export function PlayerRoom({
       });
       setReclaimToken(token);
       if (joined.reclaimToken) setShowRecovery(true);
-      else setToast("กลับเข้าตัวละครเดิมสำเร็จ");
+      else setToast("กลับเข้าผู้เล่นเดิมสำเร็จ");
       setPlayerId(joined.playerId);
       setRoom(joined.room);
     } catch (e) {
@@ -1728,7 +1727,7 @@ export function PlayerRoom({
       </main>
     );
   if (removedFromLobby)
-    return <main className="loading-screen"><UserMinus size={32} /><h1>คุณถูกนำออกจากห้องรอ</h1><p>หากต้องการเข้าร่วมอีกครั้ง ให้กลับไปเข้าห้องใหม่และเลือกตัวละครใหม่</p><a className="secondary-action" href="/">กลับหน้าแรก</a></main>;
+    return <main className="loading-screen"><UserMinus size={32} /><h1>คุณถูกนำออกจากห้องรอ</h1><p>หากต้องการเข้าร่วมอีกครั้ง ให้กลับไปเข้าห้องใหม่และเลือกรูปโปรไฟล์ใหม่</p><a className="secondary-action" href="/">กลับหน้าแรก</a></main>;
   if (privacyPlayerId && screenHidden === null)
     return (
       <main className="loading-screen">

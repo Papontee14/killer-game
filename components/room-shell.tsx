@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { PlayerAvatar, PixelIcon } from "./pixel-ui";
 import { useRouter } from "next/navigation";
 import {
   Bomb,
@@ -425,7 +426,7 @@ function Hearts({ count, max }: { count: number; max: number }) {
   return (
     <span className="hearts" aria-label={`${count} จาก ${max} หัวใจ`}>
       {Array.from({ length: max }, (_, index) => (
-        <Heart
+        <PixelIcon name="heart"
           key={index}
           size={15}
           fill={index < count ? "currentColor" : "none"}
@@ -446,7 +447,7 @@ function PlayerCard({
   const visibleState = host && state;
   return (
     <div className={`player-card ${player.health === "dead" ? "is-dead" : ""}`}>
-      <span className="avatar">{player.name.slice(0, 1)}</span>
+      <PlayerAvatar id={player.id} />
       {visibleState && (
         <img
           className="role-thumb role-thumb-player"
@@ -721,7 +722,7 @@ function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
             style={{
               background: "rgba(0,0,0,0.4)",
               border: "1px solid var(--line)",
-              borderRadius: "6px",
+              borderRadius: "0",
               cursor: "pointer",
               color: "var(--acid)",
               display: "grid",
@@ -738,7 +739,7 @@ function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
       <Skull className="waiting-skull" size={56} aria-hidden="true" />
       <div className="waiting-copy">
         <span className="section-kicker">KILLER · ห้อง {room.code}</span>
-        <h1>KILLER</h1>
+        <h1><Brand /></h1>
         <p>Host {room.hostName} กำลังเตรียมเกม</p>
         <p className="muted">ปิดเว็บหรือหลุดจากเครือข่าย ไม่ถือว่าถูกกำจัด</p>
         <ConnectionStatus />
@@ -1123,9 +1124,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                             )
                           }
                         >
-                          <span className="avatar">
-                            {player.name.slice(0, 1)}
-                          </span>
+                          <PlayerAvatar id={player.id} />
                           {player.name}
                           <Check size={16} />
                         </button>
@@ -1393,6 +1392,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
             <Events room />
           </section>
         </section>
+        {room.phase === "lobby" && tab === "home" && <aside className="host-lobby-roster"><LobbyPlayers room={room} /></aside>}
       </div>
       <ErrorBanner error={error} />
       {busy && (
@@ -2092,7 +2092,7 @@ export function PlayerRoom({
               </select>
               {target && (
                 <div className="target-confirm">
-                  <span className="avatar">{target.name.slice(0, 1)}</span>
+                  <PlayerAvatar id={target.id} />
                   <div>
                     <strong>{target.name}</strong>
                     <small>ผลลัพธ์จะแสดงหลัง Host อนุมัติ</small>

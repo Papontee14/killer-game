@@ -1,0 +1,128 @@
+[
+  {
+    "key": "hero",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-a8ed0e3d-97ea-46e0-b1f8-ab4dd990f107.png",
+    "prompt": "Create a production-ready game background illustration, landscape 3:2. Style: meticulously hand-placed chunky 8-bit pixel art, limited black/deep teal palette with luminous acid green moon and a few red neon accents. Inspired by the supplied KILLER pixel-city concept (second reference), but image only, absolutely NO TEXT, letters, logo, interface, borders or mockup. Nighttime Asian city rooftops, green full moon at upper left, mysterious young adult man in black hoodie on RIGHT third looking back while holding a glowing phone, red rimlight, windows and moody alley silhouettes. Left half predominantly dark skyline and atmospheric negative space to overlay live website text. Crisp square pixels and stepped contours, no smooth painted gradients. This is the hero background asset for a Thai social deduction party game. Save generated asset for workspace use.",
+    "output": "public/pixel/hero.webp"
+  },
+  {
+    "key": "host-desk",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-b8775421-0244-41db-8516-ae848e57c1cf.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Landscape 3:2 illustration of a nighttime game host desk, warm small lamp, open laptop with plain green screen, notebook, city outside window.",
+    "output": "public/pixel/host-desk.webp"
+  },
+  {
+    "key": "join",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-ac2efaa9-d9da-4a80-b7c5-b6fbfc60a2b2.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Landscape 3:2 illustration of a black-haired adult in dark hoodie looking at a luminous phone in a narrow teal city alley, green rimlight, character on right side.",
+    "output": "public/pixel/join.webp"
+  },
+  {
+    "key": "role-killer",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-ab813419-910e-469d-82e2-d543d200e203.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, mysterious black-haired adult man in black hoodie holding a glowing phone, red rimlight, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-killer.webp"
+  },
+  {
+    "key": "role-killer-wife",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-90cd8c81-d24a-42e5-8088-cb9df7ba5f9b.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, confident adult woman in burgundy jacket, dark bob haircut, small red and green rimlight, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-killer-wife.webp"
+  },
+  {
+    "key": "role-police",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-db16967e-8553-47a8-a194-9865eb21c239.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult police officer wearing a navy uniform and peaked cap, green rimlight, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-police.webp"
+  },
+  {
+    "key": "role-reporter",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-59b1eeca-5d32-4897-8a84-5fff63999633.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult woman reporter with short hair holding a microphone and notebook, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-reporter.webp"
+  },
+  {
+    "key": "role-bomber",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-08163b22-777f-4082-8904-000c2aa377ff.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult man in olive utility jacket holding an unlit cartoon bomb with no gore, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-bomber.webp"
+  },
+  {
+    "key": "role-detective",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-80a92ac8-b794-4bad-8086-b5dbb1af38f2.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult private detective in tan trench coat holding magnifying glass, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-detective.webp"
+  },
+  {
+    "key": "role-athlete",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-be294275-525b-4cd2-b026-0c9b04074ff6.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult male runner with athletic build wearing a green sports jersey, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-athlete.webp"
+  },
+  {
+    "key": "role-sumo",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-c24bde17-2356-4883-b342-5586d1de86db.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult male sumo wrestler, large strong build, dark teal wrestling belt, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-sumo.webp"
+  },
+  {
+    "key": "role-villager",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-7f21ab26-048b-4845-9641-54b684a767bf.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, ordinary adult town resident wearing a mustard jacket and green shirt, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-villager.webp"
+  },
+  {
+    "key": "role-host",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-ed693d64-d81c-46cd-9e6d-89ba5b4ba1e5.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square waist-up character portrait, adult game host with glasses, dark blazer and clipboard, centered, consistent medium-sized pixels, plain dark teal backdrop.",
+    "output": "public/pixel/role-host.webp"
+  },
+  {
+    "key": "avatar-0",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-343f67e0-2f98-4d06-a9e4-c055c7f9d487.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult man, black short hair, green hoodie. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-0.webp"
+  },
+  {
+    "key": "avatar-1",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-48cc63f1-ee0f-4d8d-8249-13e85c51c24a.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult woman, purple bob hair, grey shirt. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-1.webp"
+  },
+  {
+    "key": "avatar-2",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-5482f804-ccdd-4a8d-bcf9-fa40e338f664.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult man, curly brown hair, mustard jacket. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-2.webp"
+  },
+  {
+    "key": "avatar-3",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-6cd82428-88c1-4d43-a620-fbc2e87e1301.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult woman, red ponytail, dark teal shirt. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-3.webp"
+  },
+  {
+    "key": "avatar-4",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-e8d851b1-e227-430c-821b-ff865c2a9365.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult man, blue short hair, olive shirt. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-4.webp"
+  },
+  {
+    "key": "avatar-5",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-bf1eeaa6-d134-4f3f-82a7-a0ebceeb3074.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult woman, pink wavy hair, black jacket. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-5.webp"
+  },
+  {
+    "key": "avatar-6",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-805ec315-fb08-4eaf-9166-a28f67c7eb4e.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult man, brown buzzcut, orange shirt. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-6.webp"
+  },
+  {
+    "key": "avatar-7",
+    "source": "C:\\Users\\papontee\\.codex\\generated_images\\01a0759a-ece7-7ea3-97e1-3eb33992be4b\\exec-a865c630-da4a-4bf6-8924-0af304741df7.png",
+    "prompt": "Production game asset for KILLER, consistent chunky 8-bit pixel art, crisp square pixel clusters and stepped contours, dark teal #061210 background, green #A3FF72 lighting with restrained red accents, adult anime-inspired cast, no text, no lettering, no UI, no borders. Square neutral civilian avatar portrait, shoulders up adult woman, silver short hair, green jacket. Friendly but mysterious. No weapons, hats, uniforms or role symbols; ordinary city resident. Same portrait framing and pixel scale as game cast.",
+    "output": "public/pixel/avatar-7.webp"
+  }
+]

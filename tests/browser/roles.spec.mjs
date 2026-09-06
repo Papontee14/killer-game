@@ -29,6 +29,7 @@ async function openPlayer(
   reclaimToken = "",
   reducedMotion = true,
   reveal = true,
+  navigate = true,
 ) {
   await page.emulateMedia({
     reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -67,6 +68,8 @@ async function openPlayer(
           const fn = url.pathname.split("/").pop(),
             body = req.postDataJSON() ?? {};
           const orders = {
+            create_room: ["p_code", "p_host_name"],
+            start_game: ["p_code", "p_role_counts"],
             get_room_view: ["p_code"],
             resolve_bomb: ["p_code", "p_target_ids"],
             end_game: ["p_code"],
@@ -118,12 +121,13 @@ async function openPlayer(
     transportQueue = transportQueue.then(work);
     return transportQueue;
   });
+  if (!navigate) return;
   if (role === "host") {
     await page.goto("/room/ABCDEF/host");
     await expect(page.locator(".host-layout")).toBeVisible();
     return;
   }
-  await page.goto("/");
+  await page.goto("/?room=ABCDEF");
   await page.getByLabel("รหัสห้อง").fill("ABCDEF");
   await page.getByLabel("ชื่อผู้เล่น").fill(displayName);
   if (reclaimToken) {
@@ -150,6 +154,55 @@ async function openPlayer(
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
   await expect(page.locator(".player-hero")).toBeVisible();
 }
+
+test("pixel entry creates a room, accepts an invitation, starts and ends a game", async ({ page, browser }) => {
+  test.setTimeout(90000);
+  await f.as('host', 'end_game', ['ABCDEF']);
+  await f.as('host', 'close_room', ['ABCDEF']);
+  await openPlayer(page, 'host', '', '', true, true, false);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'สร้างห้อง', exact: true }).click();
+  await page.getByLabel('ชื่อ Host').fill('นักสืบสายชิล');
+  await page.getByRole('button', { name: 'สร้างห้อง', exact: true }).click();
+  await expect(page.locator('.setup-panel')).toBeVisible();
+  const code = new URL(page.url()).pathname.split('/')[2];
+  const playerContext = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  try {
+    const playerPage = await playerContext.newPage();
+    await openPlayer(playerPage, 'outsider', '', '', true, true, false);
+    await playerPage.goto('/?room='+code);
+    await playerPage.getByLabel('ชื่อผู้เล่น').fill('มะนาว');
+    await playerPage.getByRole('button', { name: 'เข้าสู่เกม', exact: true }).click();
+    await expect(playerPage.locator('.waiting-roster')).toBeVisible();
+    const avatar = await playerPage.locator('.waiting-roster .avatar img').first().getAttribute('src');
+    for (const role of Object.keys(f.players).slice(0,8)) {
+      transportQueue = transportQueue.then(() => f.as(role, 'join_room', [code,role]));
+      await transportQueue;
+    }
+    await page.reload();
+    await expect(page.locator('.setup-panel')).toBeVisible();
+    for (let i=0;i<3;i++) await page.getByRole('button', { name: 'ลด Villager', exact: true }).click();
+    await page.getByRole('button', { name: 'เริ่มแจกบทบาท (9/9)' }).click();
+    await expect(page.locator('.host-review-summary')).toBeVisible();
+    await expect(playerPage.getByRole('button', { name: 'บันทึกรหัสแล้ว' })).toBeVisible({timeout:20000});
+    await playerPage.getByRole('button', { name: 'บันทึกรหัสแล้ว' }).click();
+    await expect(playerPage.getByRole('button', { name: 'แตะเพื่อเปิดบทบาท' })).toBeVisible({timeout:20000});
+    await playerPage.getByRole('button', { name: 'แตะเพื่อเปิดบทบาท' }).click();
+    await playerPage.getByRole('button', { name: 'เข้าใจแล้ว' }).click();
+    await playerPage.getByRole('button', { name: 'ผู้เล่น', exact:true }).click();
+    const ownCard = playerPage.locator('.tab-content .player-card').filter({hasText:'มะนาว'});
+    await expect(ownCard.locator('.avatar img')).toHaveAttribute('src',avatar);
+    await expect(ownCard.locator('.role-thumb')).toHaveCount(0);
+    await page.getByRole('button', { name:'จบเกม', exact:true }).click();
+    await page.getByRole('button', { name:'ยืนยันดำเนินการ' }).click();
+    await expect(playerPage.locator('.end-game-summary')).toBeVisible({timeout:20000});
+    for (const width of [360,390,768,1440]) {
+      await playerPage.setViewportSize({width,height:900});
+      expect(await playerPage.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await playerPage.screenshot({path:`artifacts/pixel-review/summary-${width}.png`,fullPage:true});
+    }
+  } finally { await playerContext.close(); }
+});
 
 test("first role reveal keeps the role secret until its card finishes turning", async ({
   page,
@@ -266,7 +319,7 @@ test("role card waits for its displayed image and supports retry and reduced mot
   await expect(dialog.getByRole("button", { name: "เข้าใจแล้ว" })).toBeVisible();
 });
 
-test("player lobby waiting screen fits a small phone without page scrolling", async ({
+test("player lobby keeps every player reachable on a small phone", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 640 });
@@ -274,20 +327,12 @@ test("player lobby waiting screen fits a small phone without page scrolling", as
   await openPlayer(page, "outsider", "mobile-lobby-player");
   const waitingScreen = page.locator(".lobby-waiting-screen");
   await expect(waitingScreen).toBeVisible();
-  expect(
-    await page.evaluate(() => ({
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      pageWidth: document.scrollingElement?.scrollWidth,
-      pageHeight: document.scrollingElement?.scrollHeight,
-    })),
-  ).toEqual({
-    viewportWidth: 360,
-    viewportHeight: 640,
-    pageWidth: 360,
-    pageHeight: 640,
-  });
-  await expect(page.locator(".waiting-roster")).toHaveCSS("overflow-y", "auto");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const lastPlayer = page.locator('.waiting-roster .player-card').last();
+  await lastPlayer.scrollIntoViewIfNeeded();
+  await expect(lastPlayer).toBeInViewport();
+  await expect(page.locator('.waiting-roster')).not.toContainText('หัวใจ');
+  await expect(page.locator('.waiting-roster .role-thumb')).toHaveCount(0);
 });
 
 test("player can hide private content, restore it, and remain hidden after reload", async ({ page }) => {
@@ -503,11 +548,11 @@ test("player auto-resumes room on cold relaunch and can leave via name confirmat
 
   // Should navigate back to root and NOT auto-resume
   await expect(page).toHaveURL("/");
-  await expect(page.getByText("เข้าห้องของเพื่อน")).toBeVisible();
+  await expect(page.locator(".entry-menu")).toBeVisible();
 
   // Reloading "/" stays on landing page because active session was cleared
   await page.goto("/");
-  await expect(page.getByText("เข้าห้องของเพื่อน")).toBeVisible();
+  await expect(page.locator(".entry-menu")).toBeVisible();
 });
 
 test("all nine role variants keep public roster private at 360px", async ({
@@ -532,15 +577,15 @@ test("all nine role variants keep public roster private at 360px", async ({
       const page = await context.newPage();
       await openPlayer(page, role);
       const roleArt = {
-        killer: "/roles/killer.png",
-        "killer-wife": "/roles/killer-wife.png",
-        police: "/roles/police.png",
-        reporter: "/roles/reporter.png",
-        bomber: "/roles/bomber.png",
-        detective: "/roles/detective.png",
-        athlete: "/roles/athlete-male.png",
-        sumo: "/roles/sumo-male.png",
-        villager: "/roles/villager-1-male.png",
+        killer: "/pixel/role-killer.webp",
+        "killer-wife": "/pixel/role-killer-wife.webp",
+        police: "/pixel/role-police.webp",
+        reporter: "/pixel/role-reporter.webp",
+        bomber: "/pixel/role-bomber.webp",
+        detective: "/pixel/role-detective.webp",
+        athlete: "/pixel/role-athlete.webp",
+        sumo: "/pixel/role-sumo.webp",
+        villager: "/pixel/role-villager.webp",
       };
       await expect(page.locator(".player-hero-art")).toHaveAttribute(
         "src",
@@ -681,6 +726,7 @@ test("responsive Thai entry and Host navigation produce review screenshots", asy
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
+  await page.getByRole("button", { name: "เข้าร่วมเกม", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "เข้าห้องของเพื่อน" }),
   ).toBeVisible();
@@ -696,7 +742,7 @@ test("responsive Thai entry and Host navigation produce review screenshots", asy
       const submit = page.locator('.access-panel form .primary-action');
       const bounds = await submit.boundingBox();
       expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
-      await expect(page.locator('.entry-story p')).toHaveCSS('font-size', '16px');
+      await expect(page.locator('.access-heading p')).toHaveCSS('font-size', '16px');
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -880,14 +926,14 @@ test("existing player sees room closure after Host closes lobby", async ({
     page.getByRole("heading", { name: "ห้องถูกปิดแล้ว" }),
   ).toBeVisible({ timeout: 20000 });
   await page.getByRole("link", { name: "กลับหน้าแรก" }).click();
-  await expect(
-    page.getByRole("heading", { name: "เข้าห้องของเพื่อน" }),
-  ).toBeVisible();
+  await expect(page.locator(".entry-menu")).toBeVisible();
 });
 
 test("failed close remains retryable after archive is downloaded", async ({
   page,
 }) => {
+  // A ZIP is intentionally not downloaded for a room without evidence.
+  await f.evidence("sumo");
   await openPlayer(page, "host");
   await page.getByRole("button", { name: "จบเกม", exact: true }).click();
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();

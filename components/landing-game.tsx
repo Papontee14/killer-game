@@ -1,15 +1,13 @@
 ﻿"use client";
 import {
-  ArrowRight,
   BookOpen,
   ChevronRight,
-  Crown,
-  DoorOpen,
   Fingerprint,
   QrCode,
   ShieldCheck,
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { PixelButton, PixelIcon } from "./pixel-ui";
 import { useRouter } from "next/navigation";
 import { makeRoomCode } from "@/src/game";
 import { rememberRoomCredentials } from "@/src/room-session";
@@ -18,6 +16,7 @@ import { QrScannerDialog } from "./qr-scanner-dialog";
 export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"join" | "host">("join");
+  const [view, setView] = useState<"home" | "join" | "host">(initialCode ? "join" : "home");
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState("");
   const [recovery, setRecovery] = useState(false);
@@ -26,6 +25,37 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const sync = () => {
+      const screen = window.location.hash.slice(1);
+      const next = screen === "join" || screen === "host" ? screen : initialCode && screen !== "home" ? "join" : "home";
+      setView(next);
+      if (next !== "home") setMode(next);
+      setRecovery(false);
+      setScannerOpen(false);
+      setBusy(false);
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, [initialCode]);
+  useEffect(() => { headingRef.current?.focus(); }, [view]);
+  function openView(next: "home" | "join" | "host") {
+    window.history.pushState({ ...window.history.state, killerEntry: true }, "", `#${next}`);
+    setView(next);
+    if (next !== "home") setMode(next);
+    setRecovery(false);
+    setBusy(false);
+  }
+  function backToHome() {
+    if (window.history.state?.killerEntry && view !== "home") window.history.back();
+    else openView("home");
+  }
   function continueToRoom(event: React.FormEvent) {
     event.preventDefault();
     if (!name.trim() || busy) return;
@@ -40,7 +70,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
     router.push(`/room/${roomCode}${mode === "host" ? "/host" : ""}`);
   }
   return (
-    <main className="entry-page">
+    <main className={`entry-page entry-${view}`}>
       <header className="entry-header">
         <a href="/" aria-label="KILLER หน้าหลัก">
           <Brand small />
@@ -50,6 +80,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
         </button>
       </header>
       <div className="entry-layout">
+        {view === "home" ? <>
         <section className="entry-story">
           <div
             className="entry-art"
@@ -60,7 +91,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
             <span className="eyebrow">
               <i /> เกมปาร์ตี้บทบาทลับ
             </span>
-            <h1>
+            <h1 ref={headingRef} tabIndex={-1}>
               <Brand />
             </h1>
             <h2>
@@ -75,36 +106,20 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
             </p>
           </div>
         </section>
-        <section className="entry-access">
+        <section className="entry-menu" aria-label="เริ่มเล่น KILLER">
+          <span className="eyebrow">TRUST NO ONE</span>
+          <h2>พร้อมเข้าร่วม<br /><span>ความลับครั้งนี้?</span></h2>
+          <p>เพื่อนกลุ่มเดิม…<br />แต่ทุกคนมีความลับของตัวเอง</p>
+          <PixelButton variant="primary" onClick={() => openView("join")}><PixelIcon name="users" /><span>เข้าร่วมเกม</span><PixelIcon name="arrow" /></PixelButton>
+          <PixelButton onClick={() => openView("host")}><PixelIcon name="crown" /><span>สร้างห้อง</span><PixelIcon name="arrow" /></PixelButton>
+          <PixelButton onClick={() => setRules(true)}><PixelIcon name="book" /><span>วิธีเล่น</span><PixelIcon name="arrow" /></PixelButton>
+          <div className="entry-menu-note"><span className="live-dot" /> ไม่ต้องสมัครบัญชี แค่มีเพื่อนก็เริ่มได้</div>
+        </section>
+        </> : <section className="entry-access">
           <div className="access-panel">
-            <div
-              className="mode-switch"
-              role="tablist"
-              aria-label="รูปแบบการเข้าเล่น"
-            >
-              <button
-                role="tab"
-                aria-selected={mode === "join"}
-                className={mode === "join" ? "active" : ""}
-                onClick={() => {
-                  setMode("join");
-                  setRecovery(false);
-                }}
-              >
-                <DoorOpen size={18} /> เข้าร่วมเกม
-              </button>
-              <button
-                role="tab"
-                aria-selected={mode === "host"}
-                className={mode === "host" ? "active" : ""}
-                onClick={() => {
-                  setMode("host");
-                  setRecovery(false);
-                }}
-              >
-                <Crown size={18} /> สร้างห้อง
-              </button>
-            </div>
+            <div className="entry-form-header"><button type="button" className="icon-button" aria-label="กลับหน้าหลัก" onClick={backToHome}><PixelIcon name="back" /></button><h1 ref={headingRef} tabIndex={-1}>{mode === "host" ? "สร้างห้อง" : "เข้าร่วมเกม"}</h1><span aria-hidden="true">{mode === "host" ? "01" : "02"}</span></div>
+            <div className={`entry-form-art art-${mode}`} role="img" aria-label={mode === "host" ? "โต๊ะจัดเกมท่ามกลางเมืองกลางคืนแบบ pixel" : "ตัวละครถือโทรศัพท์ในตรอกเมืองแบบ pixel"} />
+            <div className="entry-form-body">
             <div className="access-heading">
               <h2>
                 {recovery
@@ -198,7 +213,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
                         ? "สร้างห้อง"
                         : "เข้าสู่เกม"}
                 </span>
-                <ArrowRight size={19} />
+                <PixelIcon name="arrow" size={24} />
               </button>
             </form>
             {mode === "join" && (
@@ -220,8 +235,9 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
                 <span>แค่มีเพื่อนและโทรศัพท์ ก็เริ่มเกมได้</span>
               </p>
             </div>
+            </div>
           </div>
-        </section>
+        </section>}
       </div>
       <footer className="entry-footer">
         <span>

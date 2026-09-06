@@ -1,20 +1,15 @@
 "use client";
 import Image from "next/image";
+import { PixelIcon } from "./pixel-ui";
 import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
 import { usePrivacyHidden } from "./privacy-boundary";
 import {
   Check,
   ChevronLeft,
   ChevronRight,
-  ClipboardCheck,
   EyeOff,
-  Home,
-  Heart,
   LockKeyhole,
-  Radio,
-  Settings,
   Shield,
-  Users,
   Wifi,
   WifiOff,
   X,
@@ -25,7 +20,7 @@ import {
   type Role,
   type RoomPhase,
 } from "@/src/types";
-import { ROLE_ART, roleArtAlt } from "@/src/role-art";
+import { HOST_ART, ROLE_ART, roleArtAlt } from "@/src/role-art";
 export const PHASE_LABELS: Record<RoomPhase, string> = {
   lobby: "ห้องรอ",
   active: "กำลังเล่น",
@@ -65,7 +60,20 @@ export const ROLE_SUMMARIES: Record<Role, string> = {
 };
 const RULE_ROLES = Object.keys(ROLE_LABELS) as Role[];
 export function Brand({ small = false }: { small?: boolean }) {
-  return <span className={`killer-logo ${small ? "small" : ""}`}>KILLER</span>;
+  const letters = [
+    ["10001","10010","10100","11000","10100","10010","10001"],
+    ["111","010","010","010","010","010","111"],
+    ["1000","1000","1000","1000","1000","1000","1111"],
+    ["1000","1000","1000","1000","1000","1000","1111"],
+    ["11111","10000","10000","11110","10000","10000","11111"],
+    ["11110","10001","10001","11110","10100","10010","10001"],
+  ];
+  let offset = 0;
+  const pixels = letters.flatMap((rows) => {
+    const start = offset; offset += rows[0].length + 1;
+    return rows.flatMap((row,y) => [...row].flatMap((bit,x) => bit === "1" ? [<rect key={`${start+x}-${y}`} x={start+x} y={y} width={1} height={1} />] : []));
+  });
+  return <span className={`killer-logo ${small ? "small" : ""}`} role="img" aria-label="KILLER"><svg viewBox="0 0 31 7" aria-hidden="true" fill="currentColor" shapeRendering="crispEdges">{pixels}</svg></span>;
 }
 export function Dialog({
   title,
@@ -265,7 +273,7 @@ function RoleCarousel() {
                   className="role-carousel-hearts"
                   aria-label={`${ROLE_HEARTS[role]} หัวใจ`}
                 >
-                  <Heart
+                  <PixelIcon name="heart"
                     className="role-carousel-heart-icon"
                     size={16}
                     fill="currentColor"
@@ -338,17 +346,17 @@ export function GameNavigation({
 }) {
   const tabs = host
     ? ([
-        ["home", "ภาพรวม", Home],
-        ["evidence", "ตรวจหลักฐาน", ClipboardCheck],
-        ["players", "ผู้เล่น", Users],
-        ["events", "เหตุการณ์", Radio],
-        ["settings", "ตั้งค่าห้อง", Settings],
+        ["home", "ภาพรวม", "home"],
+        ["evidence", "ตรวจหลักฐาน", "evidence"],
+        ["players", "ผู้เล่น", "users"],
+        ["events", "เหตุการณ์", "signal"],
+        ["settings", "ตั้งค่าห้อง", "gear"],
       ] as const)
     : ([
-        ["home", "หน้าหลัก", Home],
-        ["players", "ผู้เล่น", Users],
-        ["news", "ข่าวสาร", Radio],
-        ["more", "เพิ่มเติม", Settings],
+        ["home", "หน้าหลัก", "home"],
+        ["players", "ผู้เล่น", "users"],
+        ["news", "ข่าวสาร", "signal"],
+        ["more", "เพิ่มเติม", "gear"],
       ] as const);
   return (
     <nav
@@ -358,17 +366,18 @@ export function GameNavigation({
       {host && (
         <div className="nav-brand">
           <Brand small />
+          <Image className="host-nav-art" src={HOST_ART} alt="ผู้ดูแลเกม" width={54} height={54} />
           <span>ศูนย์ควบคุมเกม</span>
         </div>
       )}
-      {tabs.map(([key, label, Icon]) => (
+      {tabs.map(([key, label, icon]) => (
         <button
           key={key}
           aria-current={active === key ? "page" : undefined}
           className={active === key ? "active" : ""}
           onClick={() => onChange(key)}
         >
-          <Icon size={20} />
+          <PixelIcon name={icon} size={20} />
           <span>{label}</span>
           {key === "evidence" && pending > 0 && <b>{pending}</b>}
         </button>
@@ -626,7 +635,7 @@ export function RoleReveal({
           aria-label={`${hearts ?? ROLE_HEARTS[role]} หัวใจ`}
         >
           {Array.from({ length: maxHearts ?? ROLE_HEARTS[role] }, (_, i) => (
-            <Heart
+            <PixelIcon name="heart"
               key={i}
               size={24}
               fill={i < (hearts ?? ROLE_HEARTS[role]) ? "currentColor" : "none"}

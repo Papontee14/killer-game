@@ -2,18 +2,18 @@ import { ROLE_LABELS, type Role } from "./types";
 
 /** Canonical artwork used for private role surfaces and post-game reveals. */
 export const ROLE_ART: Record<Role, string> = {
-  killer: "/roles/killer.png",
-  "killer-wife": "/roles/killer-wife.png",
-  police: "/roles/police.png",
-  reporter: "/roles/reporter.png",
-  bomber: "/roles/bomber.png",
-  detective: "/roles/detective.png",
-  athlete: "/roles/athlete-male.png",
-  sumo: "/roles/sumo-male.png",
-  villager: "/roles/villager-1-male.png",
+  killer: "/pixel/role-killer.webp",
+  "killer-wife": "/pixel/role-killer-wife.webp",
+  police: "/pixel/role-police.webp",
+  reporter: "/pixel/role-reporter.webp",
+  bomber: "/pixel/role-bomber.webp",
+  detective: "/pixel/role-detective.webp",
+  athlete: "/pixel/role-athlete.webp",
+  sumo: "/pixel/role-sumo.webp",
+  villager: "/pixel/role-villager.webp",
 };
 
-export const HOST_ART = "/roles/host.png";
+export const HOST_ART = "/pixel/role-host.webp";
 
 export function roleArtAlt(role: Role) {
   return `ภาพประกอบบทบาท ${ROLE_LABELS[role]}`;

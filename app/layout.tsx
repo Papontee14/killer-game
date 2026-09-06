@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from 'next';
-import { Noto_Sans_Thai } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import './pwa.css';
 import './redesign.css';
 import { PwaRegister } from '@/components/pwa-register';
 
-const notoSansThai = Noto_Sans_Thai({
-  subsets: ['thai', 'latin'],
-  weight: ['400', '500', '600', '700', '800', '900'],
+const pixelFont = localFont({
+  src: './fonts/TA 8 bit.ttf',
+  weight: '400',
   display: 'swap',
-  variable: '--font-noto-thai',
+  variable: '--font-pixel',
 });
 
 export const metadata: Metadata = {
@@ -30,14 +30,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#080f0d',
+  themeColor: '#061210',
 };
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang='th' className={notoSansThai.variable}>
-      <body className={notoSansThai.className}>
+    <html lang='th' className={pixelFont.variable}>
+      <body className={pixelFont.className}>
         <PwaRegister />
         {children}
       </body>

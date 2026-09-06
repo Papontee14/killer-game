@@ -41,6 +41,8 @@ export type PrivatePlayerState = {
 export type Player = {
   id: string;
   name: string;
+  /** Null while the player has not chosen their public lobby character. */
+  avatarId: string | null;
   joinedAt: string;
   isOnline: boolean;
   health: HealthState;

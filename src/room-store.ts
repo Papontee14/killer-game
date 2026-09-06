@@ -104,6 +104,10 @@ function asRoom(value: unknown): RoomState {
     players: players.map((player) => ({
       id: String(player.id),
       name: String(player.name),
+      avatarId:
+        player.avatarId ?? player.avatar_id
+          ? String(player.avatarId ?? player.avatar_id)
+          : null,
       joinedAt: String(player.joinedAt ?? player.joined_at),
       isOnline: Boolean(player.isOnline ?? player.is_online),
       health: player.health as RoomState["players"][number]["health"],
@@ -172,6 +176,29 @@ async function rpcView(code: string) {
   if (error) throw error;
   if (!data) return null;
   const room = asRoom(data);
+  if (room.phase === "ended" && room.players.some(
+    (player) => !room.endGameSummary.some((entry) => entry.playerId === player.id),
+  )) {
+    // Older RPCs still return the result screen but omit the public role reveal.
+    // Keep that screen usable on network failure; normal polling retries this.
+    try {
+      const { data: session } = await client().auth.getSession();
+      const token = session.session?.access_token;
+      if (token) {
+        const response = await fetch("/api/room/summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ code: normalizedCode }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (response.ok) {
+          const summary = await response.json();
+          room.endGameSummary = asRoom({ ...data, endGameSummary: summary.endGameSummary }).endGameSummary;
+        }
+      }
+    } catch { /* Retry on the next room refresh. */ }
+  }
   if (
     (data as Json).viewerRole === "host" ||
     (data as Json).viewer_role === "host"
@@ -364,6 +391,12 @@ export async function submitEvidence(
     "evidence",
   );
   return room;
+}
+export function selectAvatar(code: string, avatarId: string) {
+  return mutate(code, "select_avatar", { p_avatar_id: avatarId });
+}
+export function removeLobbyPlayer(code: string, playerId: string) {
+  return mutate(code, "remove_lobby_player", { p_player_id: playerId });
 }
 
 export async function closeRoom(code: string) {

@@ -1981,6 +1981,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .role-thumb, .role-art, .role-carousel-art, .role-card-art, .role-reveal-art, .player-hero-art, .avatar img { image-rendering: pixelated; }
 .avatar { width: 48px; height: 48px; flex: 0 0 48px; border: 1px solid var(--line); border-radius: 0; background: #061210; overflow: hidden; }
 .avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.avatar-unselected { display:grid; place-items:center; color:var(--muted); font-family:var(--font-pixel),monospace; background:linear-gradient(135deg,#102a24,#061210); }
+.lobby-player-row { position:relative; }
+.avatar-needed { display:block; margin:3px 8px 7px 64px; color:var(--amber); font-size:10px; }
+.remove-lobby-player { width:100%; min-height:34px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid rgb(255 98 88 / 50%); color:var(--danger); background:#30131a; font-size:11px; }
+.waiting-avatar { display:flex; align-items:center; gap:12px; margin:16px 0 0; padding:12px; text-align:left; }
+.waiting-avatar > div { min-width:0; flex:1; }
+.waiting-avatar strong,.waiting-avatar small { display:block; }
+.waiting-avatar small { margin-top:4px; color:var(--muted); font-size:11px; }
+.waiting-avatar .primary-action { min-height:42px; white-space:nowrap; }
+.avatar-dialog { width:min(900px,calc(100vw - 28px)); }
+.avatar-filters { display:flex; gap:7px; margin:14px 0; }
+.avatar-filters button { min-height:36px; padding:0 12px; border:1px solid var(--line); background:#102420; color:var(--text); font-size:12px; }
+.avatar-filters button.active { color:var(--acid); border-color:var(--acid); }
+.avatar-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:7px; max-height:min(48svh,530px); overflow-y:auto; padding-right:4px; }
+.avatar-choice { min-width:0; padding:5px; border:1px solid var(--line); background:#061210; color:var(--text); text-align:left; }
+.avatar-choice img { width:100%; aspect-ratio:1; display:block; object-fit:cover; image-rendering:pixelated; }
+.avatar-choice strong,.avatar-choice small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.avatar-choice strong { margin-top:5px; font-size:10px; }.avatar-choice small { color:var(--muted); font-size:9px; }
+.avatar-choice.selected { outline:2px solid var(--acid); outline-offset:1px; }.avatar-choice.taken { opacity:.45; cursor:not-allowed; filter:grayscale(1); }
+.avatar-preview { display:flex; align-items:center; gap:12px; margin-top:15px; padding-top:12px; border-top:1px solid var(--line); }
+.avatar-preview > img { width:58px; height:58px; object-fit:cover; image-rendering:pixelated; }.avatar-preview > div { flex:1; }.avatar-preview strong,.avatar-preview small { display:block; }.avatar-preview small { margin-top:4px; color:var(--muted); font-size:11px; }.avatar-preview .primary-action { min-height:42px; white-space:nowrap; }
 .player-card { gap: 12px; min-width: 0; }
 .player-meta { min-width: 0; overflow-wrap: anywhere; }
 .player-card small { line-height: 1.6; }
@@ -2094,6 +2115,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   .role-control > div:not(.stepper) { flex: 1; }
   .role-control .stepper { flex: 0 0 auto; }
   .waiting-copy { width: 100%; }
+  .avatar-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .waiting-avatar { flex-wrap:wrap; }.waiting-avatar .primary-action { width:100%; }
+  .avatar-preview { flex-wrap:wrap; }.avatar-preview .primary-action { width:100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pixel-button, .primary-action, .secondary-action { transition: none; }
@@ -2139,121 +2163,56 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   }
 }
 
-/* Player header: give the mobile controls their own deliberate second row. */
+/* Player controls share one compact row, including on the results screen. */
 @media (max-width: 760px) {
   .player-app > .topbar {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
-    grid-template-areas:
-      "back brand"
-      "back actions";
+    grid-template-areas: "back brand" "actions actions";
     align-items: center;
-    column-gap: 12px;
-    row-gap: 10px;
-    min-height: 146px;
-    padding: max(16px, env(safe-area-inset-top)) 18px 14px;
-    border-bottom: 1px solid #41635f;
-    background:
-      linear-gradient(180deg, #0c2721 0%, #081b18 72%, #061512 100%);
-    box-shadow: 0 8px 24px #0005;
+    gap: 8px 10px;
+    min-height: 0;
+    padding: max(10px, env(safe-area-inset-top)) 16px 12px;
+    background: #081b18ee;
   }
-
-  .player-app > .topbar > .back-link {
-    grid-area: back;
-    align-self: start;
-    margin-top: 7px;
-    color: var(--acid);
-    background: transparent !important;
-    border: 1px solid transparent !important;
-  }
-
-  .player-app > .topbar > .killer-logo.small {
-    grid-area: brand;
-    justify-self: start;
-    width: 96px;
-    font-size: 0;
-  }
-
-  .player-app > .topbar > .killer-logo.small > svg {
-    width: 96px;
-    filter: drop-shadow(2px 3px 0 #183b34);
-  }
-
-  .player-app > .topbar > .topbar-title {
-    display: none;
-  }
-
+  .player-app > .topbar > .back-link { grid-area: back; margin: 0; color: var(--acid); }
+  .player-app > .topbar > .killer-logo.small { grid-area: brand; justify-self: start; width: 96px; font-size: 0; }
+  .player-app > .topbar > .killer-logo.small > svg { width: 96px; }
+  .player-app > .topbar > .topbar-title { display: none; }
   .player-app > .topbar > .topbar-actions {
     grid-area: actions;
+    display: flex;
+    align-items: center;
     width: 100%;
     min-width: 0;
-    margin-left: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 60px 60px;
-    grid-template-areas:
-      ". privacy notifications"
-      "room room room";
-    align-items: center;
     gap: 8px;
+    margin: 0;
   }
-
+  .player-app > .topbar .room-chip {
+    order: -1;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 auto 0 0;
+    padding: 0;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .player-app > .topbar .room-chip b { margin: 0; color: var(--acid); font-size: 16px; letter-spacing: .08em; }
   .player-app > .topbar .topbar-actions > .topbar-btn {
-    width: 60px;
-    min-width: 60px;
-    min-height: 52px;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
     justify-content: center;
-    color: var(--text);
-    border-color: #41635f;
+    border-color: var(--line);
     background: #102a24;
-    box-shadow: 3px 3px 0 #0006;
   }
-
+  .player-app > .topbar .topbar-actions > .topbar-btn span { display: none; }
+  .player-app > .topbar .topbar-actions > .topbar-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
   .player-app > .topbar .topbar-actions > .topbar-btn:hover,
-  .player-app > .topbar .topbar-actions > .topbar-btn:focus-visible {
-    color: var(--acid);
-    border-color: var(--acid);
-    background: #163b2a;
-  }
-
-  .player-app > .topbar .privacy-button {
-    grid-area: privacy;
-  }
-
-  .player-app > .topbar .topbar-actions > .topbar-btn:not(.privacy-button) {
-    grid-area: notifications;
-  }
-
-  .player-app > .topbar .topbar-actions > .topbar-btn span {
-    display: none;
-  }
-
-  .player-app > .topbar .room-chip {
-    grid-area: room;
-    justify-self: end;
-    align-self: center;
-    margin: 0;
-    padding: 8px 0 8px 8px;
-    color: var(--muted);
-    font-size: 11px;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-  }
-
-  .player-app > .topbar .room-chip::before {
-    content: "ห้อง";
-    display: block;
-    margin-bottom: 2px;
-    color: #6f8f85;
-    font-size: 9px;
-    letter-spacing: 0.12em;
-  }
-
-  .player-app > .topbar .room-chip b {
-    display: block;
-    margin: 0;
-    color: var(--acid);
-    font-size: 16px;
-    letter-spacing: 0.16em;
-  }
+  .player-app > .topbar .topbar-actions > .topbar-btn:focus-visible { color: var(--acid); border-color: var(--acid); }
 }

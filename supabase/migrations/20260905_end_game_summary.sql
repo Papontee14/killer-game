@@ -13,7 +13,7 @@ begin
   perform public.advance_due_accusation(r.id);
   select * into r from public.rooms where id=r.id;
   viewer_role := case when is_host then 'host' else 'player' end;
-  select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'name',p.name,'joinedAt',p.joined_at,'isOnline',p.is_online and p.last_seen_at > now()-interval '90 seconds','health',case when is_host or p.id=me.id then p.health when p.health='dead' then 'dead'::health_state else 'alive'::health_state end,
+  select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'name',p.name,'avatarId',p.avatar_id,'joinedAt',p.joined_at,'isOnline',p.is_online and p.last_seen_at > now()-interval '90 seconds','health',case when is_host or p.id=me.id then p.health when p.health='dead' then 'dead'::health_state else 'alive'::health_state end,
     'heartsVisibleToHost',case when is_host then coalesce(s.hearts,0) else 0 end,'maxHearts',case when is_host then coalesce(s.max_hearts,0) else 0 end) order by p.joined_at), '[]'::jsonb)
     into roster from public.players p left join public.player_secrets s on s.player_id=p.id where p.room_id=r.id;
   if is_host then

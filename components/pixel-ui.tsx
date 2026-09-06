@@ -1,4 +1,5 @@
 import type { SVGProps, ButtonHTMLAttributes } from "react";
+import { avatarById } from "@/src/avatar-catalog";
 
 const paths = {
   arrow: "M13 3h3v3h3v3h3v6h-3v3h-3v3h-3v-6H2V9h11V3zm0 6v6h3V9h-3z",
@@ -22,11 +23,11 @@ export function PixelButton({ variant = "secondary", className = "", ...props }:
 }
 
 /** Public ID only: appearance never depends on a secret role or health. */
-export function PlayerAvatar({ id }: { id: string }) {
-  let hash = 2166136261;
-  for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-  const index = (hash >>> 0) % 8;
+export function PlayerAvatar({ avatarId }: { avatarId?: string | null }) {
+  const avatar = avatarId ? avatarById.get(avatarId) : undefined;
   // Decorative: the adjacent player name provides the accessible identity.
   // eslint-disable-next-line @next/next/no-img-element
-  return <span className="avatar"><img src={`/pixel/avatar-${index}.webp`} alt="" width={48} height={48} loading="lazy" /></span>;
+  return <span className={`avatar ${avatar ? "" : "avatar-unselected"}`}>
+    {avatar ? <img src={avatar.src} alt="" width={48} height={48} loading="lazy" /> : <span aria-hidden="true">?</span>}
+  </span>;
 }

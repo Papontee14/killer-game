@@ -30,6 +30,7 @@ async function openPlayer(
   reducedMotion = true,
   reveal = true,
   navigate = true,
+  legacySummary = false,
 ) {
   await page.emulateMedia({
     reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -92,6 +93,7 @@ async function openPlayer(
             fn,
             orders[fn].map((key) => body[key] ?? null),
           );
+          if (legacySummary && data) delete data.endGameSummary;
         } else if (url.pathname.startsWith("/storage/v1/object/sign/")) {
           data = { signedURL: "/object/public/test-fixture.png" };
         } else if (
@@ -154,6 +156,41 @@ async function openPlayer(
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
   await expect(page.locator(".player-hero")).toBeVisible();
 }
+
+test("compact mobile header and legacy server role reveal", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  let summaryRequests = 0;
+  await page.route('**/api/room/summary', async route => {
+    summaryRequests++;
+    expect(route.request().headers().authorization).toMatch(/^Bearer /);
+    const room = await f.as('villager', 'get_room_view', ['ABCDEF']);
+    await route.fulfill({ json: { endGameSummary: room.endGameSummary } });
+  });
+  await openPlayer(page, 'villager', 'villager', '', true, true, true, true);
+  expect(summaryRequests).toBe(0);
+  for (const width of [320, 360, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const header = page.locator('.topbar');
+    const box = await header.boundingBox();
+    if (width <= 390) expect(box.height).toBeLessThan(130);
+    const room = await header.locator('.room-chip').boundingBox();
+    const buttons = await header.locator('.topbar-actions > button').all();
+    for (const button of buttons) {
+      const bounds = await button.boundingBox();
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      if (width <= 390) expect(bounds.x).toBeGreaterThanOrEqual(room.x + room.width);
+    }
+    if (width === 360) await header.screenshot({ path: 'artifacts/mobile-header-active-360.png' });
+  }
+  await f.as('host', 'end_game', ['ABCDEF']);
+  await page.reload();
+  await expect(page.locator('.end-game-role-caption')).toHaveCount(Object.keys(f.players).length);
+  expect(summaryRequests).toBeGreaterThan(0);
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect((await page.locator('.topbar').boundingBox()).height).toBeLessThan(130);
+  await page.screenshot({ path: 'artifacts/mobile-summary-360.png', fullPage: true });
+});
 
 test("pixel entry creates a room, accepts an invitation, starts and ends a game", async ({ page, browser }) => {
   test.setTimeout(90000);

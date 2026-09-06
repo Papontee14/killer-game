@@ -28,8 +28,33 @@ alter table public.rooms drop column if exists player_pin_hash;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
   user_id uuid not null references auth.users(id), name text not null, reclaim_token_hash text, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
-  health public.health_state not null default 'alive', joined_at timestamptz not null default now(), unique(room_id, user_id)
+  health public.health_state not null default 'alive', avatar_id text, joined_at timestamptz not null default now(), unique(room_id, user_id)
 );
+create table if not exists public.avatar_catalog (
+  id text primary key,
+  display_name text not null,
+  gender text not null check (gender in ('male','female'))
+);
+insert into public.avatar_catalog(id,display_name,gender) values
+  ('m-sea-01','อรุณ','male'),('f-sea-01','มะลิ','female'),('m-sea-02','วิน','male'),('f-sea-02','ฝน','female'),
+  ('m-sea-03','ภพ','male'),('f-sea-03','ลิน','female'),('m-sea-04','ก้อง','male'),('f-sea-04','ดาว','female'),
+  ('m-sea-05','ชัย','male'),('f-sea-05','พิม','female'),('m-sea-06','ปกรณ์','male'),('f-sea-06','ริน','female'),
+  ('m-ea-01','ฮารุ','male'),('f-ea-01','ยูนะ','female'),('m-ea-02','เรน','male'),('f-ea-02','มีนา','female'),
+  ('m-ea-03','เคน','male'),('f-ea-03','ซูบิน','female'),('m-ea-04','จุน','male'),('f-ea-04','อาโออิ','female'),
+  ('m-sa-01','อาร์ยัน','male'),('f-sa-01','อันยา','female'),('m-sa-02','วิกรม','male'),('f-sa-02','คิรัน','female'),
+  ('m-world-01','เอไล','male'),('f-world-01','อามารา','female'),('m-world-02','โอลิเวอร์','male'),('f-world-02','โซเฟีย','female'),
+  ('m-world-03','ซามีร์','male'),('f-world-03','เลย์ลา','female'),('m-world-04','มาเตโอ','male'),('f-world-04','คามิลา','female'),
+  ('m-jp-01','โซตะ','male'),('f-jp-01','ฮินะ','female'),('m-jp-02','ริคุ','male'),('f-jp-02','เมอิ','female'),
+  ('m-jp-03','ไคโตะ','male'),('f-jp-03','อากิระ','female'),('m-jp-04','ทาคุมิ','male'),('f-jp-04','นานะ','female'),
+  ('m-jp-05','ยูโตะ','male'),('f-jp-05','ซากุระ','female'),('m-jp-06','ไดจิ','male'),('f-jp-06','มิซากิ','female')
+on conflict (id) do update set display_name=excluded.display_name,gender=excluded.gender;
+alter table public.players add column if not exists avatar_id text;
+do $$ begin
+  if not exists(select 1 from pg_constraint where conname='players_avatar_id_fkey') then
+    alter table public.players add constraint players_avatar_id_fkey foreign key (avatar_id) references public.avatar_catalog(id);
+  end if;
+end $$;
+create unique index if not exists players_room_avatar_unique on public.players(room_id,avatar_id) where avatar_id is not null;
 create unique index if not exists players_room_name_lower on public.players(room_id, lower(name));
 create table if not exists public.player_secrets (
   player_id uuid primary key references public.players(id) on delete cascade,
@@ -65,7 +90,8 @@ alter table public.rooms
   add column if not exists closed_at timestamptz;
 alter table public.players
   add column if not exists last_seen_at timestamptz not null default now(),
-  add column if not exists reclaim_token_hash text;
+  add column if not exists reclaim_token_hash text,
+  add column if not exists avatar_id text;
 alter table public.player_secrets
   add column if not exists initial_role text not null default 'villager',
   add column if not exists role_current text not null default 'villager',
@@ -192,7 +218,7 @@ begin
   perform public.advance_due_accusation(r.id);
   select * into r from public.rooms where id=r.id;
   viewer_role := case when is_host then 'host' else 'player' end;
-  select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'name',p.name,'joinedAt',p.joined_at,'isOnline',p.is_online and p.last_seen_at > now()-interval '90 seconds','health',case when is_host or p.id=me.id then p.health when p.health='dead' then 'dead'::health_state else 'alive'::health_state end,
+  select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'name',p.name,'avatarId',p.avatar_id,'joinedAt',p.joined_at,'isOnline',p.is_online and p.last_seen_at > now()-interval '90 seconds','health',case when is_host or p.id=me.id then p.health when p.health='dead' then 'dead'::health_state else 'alive'::health_state end,
     'heartsVisibleToHost',case when is_host then coalesce(s.hearts,0) else 0 end,'maxHearts',case when is_host then coalesce(s.max_hearts,0) else 0 end) order by p.joined_at), '[]'::jsonb)
     into roster from public.players p left join public.player_secrets s on s.player_id=p.id where p.room_id=r.id;
   if is_host then
@@ -250,6 +276,7 @@ begin
     update public.players set user_id=auth.uid(),is_online=true,last_seen_at=now() where id=p.id returning * into p;
   elsif found then raise exception 'player name is already in use; enter reclaim token';
   elsif r.phase <> 'lobby' then raise exception 'game already started';
+  elsif (select count(*) from public.players where room_id=r.id) >= 28 then raise exception 'room is full';
   else
     issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
     insert into public.players(room_id,user_id,name,reclaim_token_hash) values(r.id,auth.uid(),trim(p_name),md5(issued_token)) returning * into p;
@@ -267,7 +294,7 @@ begin
     if item.key not in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo','villager') or item.amount is null or item.amount<0 or (item.key in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo') and item.amount>1) or (item.key='villager' and item.amount>20) then raise exception 'invalid roles'; end if;
     for idx in 1..item.amount loop roles := array_append(roles,item.key); end loop;
   end loop;
-  if array_length(roles,1) <> (select count(*) from public.players where room_id=r.id) or (select count(*) from unnest(roles) x where x='killer')<>1 or (select count(*) from unnest(roles) x where x='police')<1 then raise exception 'invalid player count or required roles'; end if;
+  if array_length(roles,1) <> (select count(*) from public.players where room_id=r.id) or (select count(*) from public.players where room_id=r.id and avatar_id is null)>0 or (select count(*) from unnest(roles) x where x='killer')<>1 or (select count(*) from unnest(roles) x where x='police')<1 then raise exception 'invalid player count, avatar selection, or required roles'; end if;
   idx := 1;
   for p in select * from public.players where room_id=r.id order by random() loop
     role := roles[idx]; idx := idx+1; mh := case role when 'athlete' then 3 when 'sumo' then 4 when 'killer' then 0 else 2 end;
@@ -277,6 +304,29 @@ begin
   end loop;
   update public.rooms set phase='active',quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok'),approved_attacks_in_window=0 where id=r.id;
   perform public.add_event(r.id,'system','เกมเริ่มแล้ว บทบาทถูกแจกเรียบร้อย'); return public.get_room_view(r.code);
+end $$;
+
+create or replace function public.select_avatar(p_code text,p_avatar_id text) returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.rooms; me public.players;
+begin
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
+  if not found or r.phase<>'lobby' then raise exception 'game already started'; end if;
+  select * into me from public.players where room_id=r.id and user_id=auth.uid() for update;
+  if not found then raise exception 'not allowed'; end if;
+  if not exists(select 1 from public.avatar_catalog where id=trim(coalesce(p_avatar_id,''))) then raise exception 'invalid avatar'; end if;
+  if exists(select 1 from public.players where room_id=r.id and avatar_id=trim(p_avatar_id) and id<>me.id) then raise exception 'avatar already selected'; end if;
+  update public.players set avatar_id=trim(p_avatar_id) where id=me.id;
+  return public.get_room_view(r.code);
+end $$;
+
+create or replace function public.remove_lobby_player(p_code text,p_player_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.rooms;
+begin
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
+  if not found or r.host_user_id is distinct from auth.uid() or r.phase<>'lobby' then raise exception 'not allowed'; end if;
+  delete from public.players where room_id=r.id and id=p_player_id;
+  if not found then raise exception 'player not found'; end if;
+  return public.get_room_view(r.code);
 end $$;
 
 create or replace function public.submit_evidence(p_code text,p_target_id uuid,p_storage_path text,p_captured_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
@@ -406,8 +456,8 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 create or replace function public.close_room(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;
 
-revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) from public, anon;
-grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) to authenticated;
+revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) from public, anon;
+grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) to authenticated;
 
 -- Make newly created RPC functions available to the REST API immediately.
 notify pgrst, 'reload schema';

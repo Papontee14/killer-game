@@ -1,5 +1,8 @@
 -- Upgrade a current-schema installation without resetting any room data.
 begin;
+-- Kept here as well as the later avatar migration because this file replaces
+-- start_game; PostgreSQL validates referenced columns when creating an RPC.
+alter table public.players add column if not exists avatar_id text;
 alter table public.evidence add column if not exists attack_result text check (attack_result in ('target is still alive','elimination confirmed'));
 drop policy if exists "host or owner reads evidence" on storage.objects;
 create policy "host or owner reads evidence" on storage.objects for select to authenticated using (bucket_id='evidence' and public.can_host_evidence(name));
@@ -110,6 +113,7 @@ begin
     update public.players set user_id=auth.uid(),is_online=true,last_seen_at=now() where id=p.id returning * into p;
   elsif found then raise exception 'player name is already in use; enter reclaim token';
   elsif r.phase <> 'lobby' then raise exception 'game already started';
+  elsif (select count(*) from public.players where room_id=r.id) >= 28 then raise exception 'room is full';
   else
     issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
     insert into public.players(room_id,user_id,name,reclaim_token_hash) values(r.id,auth.uid(),trim(p_name),md5(issued_token)) returning * into p;
@@ -127,7 +131,7 @@ begin
     if item.key not in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo','villager') or item.amount is null or item.amount<0 or (item.key in ('killer','killer-wife','police','reporter','bomber','detective','athlete','sumo') and item.amount>1) or (item.key='villager' and item.amount>20) then raise exception 'invalid roles'; end if;
     for idx in 1..item.amount loop roles := array_append(roles,item.key); end loop;
   end loop;
-  if array_length(roles,1) <> (select count(*) from public.players where room_id=r.id) or (select count(*) from unnest(roles) x where x='killer')<>1 or (select count(*) from unnest(roles) x where x='police')<1 then raise exception 'invalid player count or required roles'; end if;
+  if array_length(roles,1) <> (select count(*) from public.players where room_id=r.id) or (select count(*) from public.players where room_id=r.id and avatar_id is null)>0 or (select count(*) from unnest(roles) x where x='killer')<>1 or (select count(*) from unnest(roles) x where x='police')<1 then raise exception 'invalid player count, avatar selection, or required roles'; end if;
   idx := 1;
   for p in select * from public.players where room_id=r.id order by random() loop
     role := roles[idx]; idx := idx+1; mh := case role when 'athlete' then 3 when 'sumo' then 4 when 'killer' then 0 else 2 end;

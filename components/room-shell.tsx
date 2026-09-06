@@ -39,6 +39,7 @@ import {
   Shield,
   Skull,
   Trophy,
+  UserMinus,
   X,
 } from "lucide-react";
 import {
@@ -54,6 +55,8 @@ import {
   resolveBomb,
   resolvePoliceCheck,
   setAccusationAt,
+  selectAvatar,
+  removeLobbyPlayer,
   startGame,
   submitEvidence,
 } from "@/src/room-store";
@@ -73,6 +76,7 @@ import {
   type Role,
   type RoomState,
 } from "@/src/types";
+import { AVATARS, type AvatarGender, avatarById } from "@/src/avatar-catalog";
 import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 import { downloadEvidenceArchive } from "@/src/evidence-download";
 import {
@@ -232,7 +236,7 @@ function NotificationToggle({ code }: { code: string }) {
   }, [setupWebPush]);
 
   if (permission === "unsupported")
-    return <span className="muted">เบราว์เซอร์ไม่รองรับการแจ้งเตือน</span>;
+    return <button type="button" className="topbar-btn" disabled title="เบราว์เซอร์ไม่รองรับการแจ้งเตือน" aria-label="เบราว์เซอร์ไม่รองรับการแจ้งเตือน"><BellOff size={15} /><span className="notif-label">ไม่รองรับแจ้งเตือน</span></button>;
 
   const handleToggle = async () => {
     const next = await requestNotificationPermission();
@@ -247,6 +251,7 @@ function NotificationToggle({ code }: { code: string }) {
   return (
     <button
       className={`topbar-btn ${pushState === "ready" ? "" : "notice"}`}
+      aria-label={pushState === "ready" ? "แจ้งเตือนเปิดแล้ว" : pushState === "failed" ? "เปิดแจ้งเตือนอีกครั้ง" : "เปิดแจ้งเตือน"}
       disabled={pushState === "pending"}
       onClick={() => void handleToggle()}
       title={
@@ -368,6 +373,12 @@ function errorMessage(error: unknown, fallback: string) {
       "เลือกผู้เล่นที่ยังมีชีวิตได้ 0–2 คน กรุณาทบทวนรายชื่อ",
     "invalid player count or required roles":
       "จำนวนบทบาทต้องตรงกับผู้เล่น และต้องมี Killer กับตำรวจ",
+    "invalid player count, avatar selection, or required roles":
+      "ผู้เล่นทุกคนต้องเลือกตัวละคร และจำนวนบทบาทต้องตรงกันก่อนเริ่มเกม",
+    "avatar already selected": "ตัวละครนี้มีคนเลือกแล้ว กรุณาเลือกรูปอื่น",
+    "invalid avatar": "ไม่พบตัวละครนี้ กรุณาเลือกใหม่",
+    "room is full": "ห้องเต็มแล้ว รับผู้เล่นได้สูงสุด 28 คน",
+    "player not found": "ไม่พบผู้เล่นในห้องรอแล้ว",
     "room not found or closed": "ไม่พบห้องหรือห้องถูกปิดแล้ว",
     "room cannot close yet": "กรุณาจบเกมก่อนปิดห้อง",
     "Failed to fetch": "เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่",
@@ -472,7 +483,7 @@ function PlayerCard({
   const visibleState = host && state;
   return (
     <div className={`player-card ${player.health === "dead" ? "is-dead" : ""}`}>
-      <PlayerAvatar id={player.id} />
+      <PlayerAvatar avatarId={player.avatarId} />
       {visibleState && (
         <img
           className="role-thumb role-thumb-player"
@@ -502,6 +513,57 @@ function PlayerCard({
           <Hearts count={state.hearts} max={state.maxHearts} />
         ))}
     </div>
+  );
+}
+
+function AvatarPicker({
+  room,
+  playerId,
+  onSelect,
+  onClose,
+  busy,
+}: {
+  room: RoomState;
+  playerId: string;
+  onSelect: (avatarId: string) => void;
+  onClose: () => void;
+  busy: boolean;
+}) {
+  const [filter, setFilter] = useState<"all" | AvatarGender>("all");
+  const [previewId, setPreviewId] = useState<string | null>(
+    room.players.find((player) => player.id === playerId)?.avatarId ?? null,
+  );
+  const selected = previewId ? avatarById.get(previewId) : undefined;
+  const owners = new Map(
+    room.players.filter((player) => player.id !== playerId && player.avatarId)
+      .map((player) => [player.avatarId!, player.name]),
+  );
+  const visible = AVATARS.filter((avatar) => filter === "all" || avatar.gender === filter);
+  return (
+    <Dialog title="เลือกตัวละคร" onClose={onClose} className="avatar-dialog">
+      <p className="muted">ตัวละครในห้องเดียวกันห้ามซ้ำกัน เลือกได้จนกว่า Host จะเริ่มเกม</p>
+      <div className="avatar-filters" role="group" aria-label="กรองตัวละคร">
+        {(["all", "male", "female"] as const).map((value) => (
+          <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
+            {value === "all" ? "ทั้งหมด" : value === "male" ? "ชาย" : "หญิง"}
+          </button>
+        ))}
+      </div>
+      <div className="avatar-grid">
+        {visible.map((avatar) => {
+          const owner = owners.get(avatar.id);
+          return <button key={avatar.id} className={`avatar-choice ${previewId === avatar.id ? "selected" : ""} ${owner ? "taken" : ""}`} disabled={Boolean(owner)} onClick={() => setPreviewId(avatar.id)}>
+            <img src={avatar.src} alt="" loading="lazy" />
+            <strong>{avatar.name}</strong>
+            <small>{owner ? `เลือกโดย ${owner}` : avatar.gender === "male" ? "ชาย" : "หญิง"}</small>
+          </button>;
+        })}
+      </div>
+      <div className="avatar-preview" aria-live="polite">
+        {selected ? <><img src={selected.src} alt="" /><div><strong>{selected.name}</strong><small>กดใช้ตัวละครนี้เพื่อยืนยัน</small></div></> : <span className="muted">เลือกตัวละครเพื่อดูตัวอย่าง</span>}
+        <button className="primary-action" disabled={!selected || busy} onClick={() => selected && onSelect(selected.id)}>ใช้ตัวละครนี้</button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -673,7 +735,7 @@ function PlayerEndGameSummary({
                         </>
                       ) : summary?.currentRole ? (
                         ROLE_LABELS[summary.currentRole]
-                      ) : summary ? "ยังไม่ได้รับบทบาท" : "ยังไม่มีข้อมูลเฉลยบทบาท"}
+                      ) : summary ? "ยังไม่ได้รับบทบาท" : "กำลังรอข้อมูลเฉลยบทบาท"}
                     </span>
                   </div>
                   <span className={`end-game-team team-${summary?.team ?? "none"}`}>
@@ -703,10 +765,13 @@ function PlayerEndGameSummary({
 function LobbyPlayers({
   room,
   waiting = false,
+  onRemove,
 }: {
   room: RoomState;
   waiting?: boolean;
+  onRemove?: (player: RoomState["players"][number]) => void;
 }) {
+  const selectedCount = room.players.filter((player) => player.avatarId).length;
   return (
     <section
       className={waiting ? "waiting-roster" : "panel lobby-roster-panel"}
@@ -717,7 +782,7 @@ function LobbyPlayers({
           <span className="section-kicker">สมาชิกในห้อง</span>
           <h2>ผู้เล่นในห้อง</h2>
         </div>
-        <strong>{room.players.length} คน</strong>
+        <strong>{selectedCount}/{room.players.length} เลือกแล้ว</strong>
       </div>
       {room.players.length === 0 ? (
         <div className="empty-state">
@@ -725,15 +790,18 @@ function LobbyPlayers({
         </div>
       ) : (
         <div className="players-grid">
-          {room.players.map((player) => (
-            <PlayerCard key={player.id} player={player} />
-          ))}
+          {room.players.map((player) => <div key={player.id} className="lobby-player-row">
+            <PlayerCard player={player} />
+            {!player.avatarId && <small className="avatar-needed">ยังไม่ได้เลือกตัวละคร</small>}
+            {onRemove && <button className="remove-lobby-player" onClick={() => onRemove(player)} aria-label={`นำ ${player.name} ออกจากห้อง`}><UserMinus size={16} /> นำออก</button>}
+          </div>)}
         </div>
       )}
     </section>
   );
 }
-function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
+function Waiting({ room, onLeave, onChooseAvatar, playerId }: { room: RoomState; onLeave?: () => void; onChooseAvatar?: () => void; playerId?: string | null }) {
+  const mine = room.players.find((player) => player.id === playerId);
   return (
     <main className="lobby-waiting-screen">
       {onLeave && (
@@ -771,6 +839,11 @@ function Waiting({ room, onLeave }: { room: RoomState; onLeave?: () => void }) {
           <span aria-hidden="true" />
           <strong>รอ Host เริ่มเกม</strong>
         </div>
+        {mine && <section className="waiting-avatar panel">
+          <PlayerAvatar avatarId={mine.avatarId} />
+          <div><strong>{mine.avatarId ? "เลือกตัวละครแล้ว" : "ยังไม่ได้เลือกตัวละคร"}</strong><small>{mine.avatarId ? avatarById.get(mine.avatarId)?.name : "เลือกให้เสร็จก่อน Host เริ่มเกม"}</small></div>
+          {onChooseAvatar && <button className="primary-action" onClick={onChooseAvatar}>เลือกตัวละคร</button>}
+        </section>}
         <LobbyPlayers room={room} waiting />
       </div>
     </main>
@@ -1042,7 +1115,11 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           )}
           <Ended room={room} host />
           {room.phase === "lobby" && tab === "players" && (
-            <LobbyPlayers room={room} />
+            <LobbyPlayers room={room} onRemove={(player) => setConfirmation({
+              title: "นำผู้เล่นออกจากห้อง",
+              detail: `นำ ${player.name} ออกจากห้องรอ? ตัวละครที่เลือกจะว่างทันที`,
+              action: () => act(() => removeLobbyPlayer(room.code, player.id)),
+            })} />
           )}
           {room.phase === "lobby" && tab === "evidence" && (
             <div className="panel empty-state">
@@ -1102,18 +1179,18 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
               <button
                 className="primary-action start-btn"
-                disabled={busy || room.players.length !== total}
+                disabled={busy || room.players.length !== total || room.players.some((player) => !player.avatarId)}
                 onClick={() => act(() => startGame(room.code, counts))}
               >
                 เริ่มแจกบทบาท ({room.players.length}/{total}){" "}
                 <Radio size={18} />
               </button>
-              {room.players.length !== total && (
+              {room.players.length !== total ? (
                 <p className="muted">
                   จำนวนผู้เล่น {room.players.length} คน ต้องตรงกับบทบาท {total}{" "}
                   คน จึงจะเริ่มได้
                 </p>
-              )}
+              ) : room.players.some((player) => !player.avatarId) ? <p className="muted">รอเลือกตัวละคร: {room.players.filter((player) => !player.avatarId).map((player) => player.name).join(", ")}</p> : null}
             </div>
           ) : (
             <>
@@ -1147,7 +1224,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                             )
                           }
                         >
-                          <PlayerAvatar id={player.id} />
+                          <PlayerAvatar avatarId={player.avatarId} />
                           {player.name}
                           <Check size={16} />
                         </button>
@@ -1406,7 +1483,11 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
             <Events room />
           </section>
         </section>
-        {room.phase === "lobby" && tab === "home" && <aside className="host-lobby-roster"><LobbyPlayers room={room} /></aside>}
+        {room.phase === "lobby" && tab === "home" && <aside className="host-lobby-roster"><LobbyPlayers room={room} onRemove={(player) => setConfirmation({
+          title: "นำผู้เล่นออกจากห้อง",
+          detail: `นำ ${player.name} ออกจากห้องรอ? ตัวละครที่เลือกจะว่างทันที`,
+          action: () => act(() => removeLobbyPlayer(room.code, player.id)),
+        })} /></aside>}
       </div>
       <ErrorBanner error={error} />
       {busy && (
@@ -1475,7 +1556,7 @@ export function PlayerRoom({
   name?: string;
 }) {
   const router = useRouter();
-  const [room, refresh, run, setRoom, , stale] = useRoom(code);
+  const [room, refresh, run, setRoom, initialLoadComplete, stale] = useRoom(code);
   usePoliceCheckReminder(code, room?.policeCheckAt, false);
   const [tab, setTab] = useState("home");
   const [showRules, setShowRules] = useState(false);
@@ -1510,6 +1591,17 @@ export function PlayerRoom({
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [removedFromLobby, setRemovedFromLobby] = useState(false);
+  const wasMemberRef = useRef(false);
+  useEffect(() => {
+    if (room?.viewerRole === "player") wasMemberRef.current = true;
+    if (initialLoadComplete && !room && wasMemberRef.current) {
+      setRemovedFromLobby(true);
+      clearActiveRoom();
+      forgetRoomCredentials(`player:${code}`);
+    }
+  }, [room, initialLoadComplete, code]);
   const join = async (event?: React.FormEvent) => {
     event?.preventDefault();
     setJoining(true);
@@ -1551,8 +1643,8 @@ export function PlayerRoom({
     router.replace("/");
   };
   useEffect(() => {
-    if (loginName) void join();
-  }, [code]);
+    if (loginName && !removedFromLobby) void join();
+  }, [code, removedFromLobby]);
   const currentRole = playerId
     ? room?.privateStates[playerId]?.currentRole
     : undefined;
@@ -1635,6 +1727,8 @@ export function PlayerRoom({
         <Hourglass /> กำลังเชื่อมต่อห้อง...
       </main>
     );
+  if (removedFromLobby)
+    return <main className="loading-screen"><UserMinus size={32} /><h1>คุณถูกนำออกจากห้องรอ</h1><p>หากต้องการเข้าร่วมอีกครั้ง ให้กลับไปเข้าห้องใหม่และเลือกตัวละครใหม่</p><a className="secondary-action" href="/">กลับหน้าแรก</a></main>;
   if (privacyPlayerId && screenHidden === null)
     return (
       <main className="loading-screen">
@@ -1717,12 +1811,33 @@ export function PlayerRoom({
         </a>
       </main>
     );
+  const act = (operation: () => Promise<RoomState>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    operation()
+      .then((next) => {
+        setRoom(next);
+        void refresh();
+      })
+      .catch((e) => setError(errorMessage(e, "ดำเนินการไม่สำเร็จ")))
+      .finally(() => {
+        busyRef.current = false;
+        setBusy(false);
+        void refresh();
+      });
+  };
   const me = room.privateStates[playerId];
   const mine = room.players.find((player) => player.id === playerId);
   if (!me) {
     return protect(
       <>
-        <Waiting room={room} onLeave={() => setIsLeaveModalOpen(true)} />
+        <Waiting room={room} playerId={playerId ?? room.playerId} onLeave={() => setIsLeaveModalOpen(true)} onChooseAvatar={() => setAvatarPickerOpen(true)} />
+        {avatarPickerOpen && playerId && <AvatarPicker room={room} playerId={playerId} busy={busy} onClose={() => setAvatarPickerOpen(false)} onSelect={(avatarId) => {
+          act(() => selectAvatar(room.code, avatarId));
+          setAvatarPickerOpen(false);
+        }} />}
         {showRecovery && (
           <RecoveryCard
             token={reclaimToken}
@@ -1745,23 +1860,6 @@ export function PlayerRoom({
     isKiller &&
     room.phase === "active" &&
     room.attacksThisHour >= room.attackLimit;
-  const act = (operation: () => Promise<RoomState>) => {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setError("");
-    operation()
-      .then((next) => {
-        setRoom(next);
-        void refresh();
-      })
-      .catch((e) => setError(errorMessage(e, "ดำเนินการไม่สำเร็จ")))
-      .finally(() => {
-        busyRef.current = false;
-        setBusy(false);
-        void refresh();
-      });
-  };
   const target = room.players.find(
     (player) =>
       player.id === targetId &&
@@ -2106,7 +2204,7 @@ export function PlayerRoom({
               </select>
               {target && (
                 <div className="target-confirm">
-                  <PlayerAvatar id={target.id} />
+                  <PlayerAvatar avatarId={target.avatarId} />
                   <div>
                     <strong>{target.name}</strong>
                     <small>ผลลัพธ์จะแสดงหลัง Host อนุมัติ</small>

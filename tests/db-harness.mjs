@@ -97,6 +97,9 @@ export async function fixture(db) {
   const players = {};
   for (const role of roles)
     players[role] = (await as(role, "join_room", ["ABCDEF", role])).playerId;
+  const avatars = ["m-sea-01","f-sea-01","m-sea-02","f-sea-02","m-sea-03","f-sea-03","m-sea-04","f-sea-04","m-sea-05"];
+  for (const [index, role] of roles.entries())
+    await as(role, "select_avatar", ["ABCDEF", avatars[index]]);
   await as("host", "start_game", [
     "ABCDEF",
     Object.fromEntries(roles.map((role) => [role, 1])),

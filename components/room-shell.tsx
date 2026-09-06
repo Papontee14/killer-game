@@ -296,9 +296,11 @@ function Header({
           <ChevronLeft size={17} />
         </button>
       ) : (
-        <a className="back-link" href={back ? "/" : undefined}>
-          {back ? <ChevronLeft size={17} /> : <Radio size={17} />}
-        </a>
+        back ? (
+          <a className="back-link" href="/" aria-label="กลับหน้าหลัก">
+            <ChevronLeft size={17} />
+          </a>
+        ) : null
       )}
       <Brand small />
       <span className="topbar-title">{label}</span>

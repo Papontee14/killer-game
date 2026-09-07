@@ -33,7 +33,7 @@ not implement it without an explicit rule update.
 
 - Killer has no photo-based heart bar. Killer can die only through a Bomber
   explosion.
-- Killer's Wife starts on the city side with two hearts. If she transforms into
+- Killer's Wife starts on Killer Side with two hearts. If she transforms into
   a Killer, her heart bar is no longer shown to her.
 - Villager, Police, Reporter, Bomber, Detective, and Killer's Wife start with
   two hearts.

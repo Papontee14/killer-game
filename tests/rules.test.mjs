@@ -130,6 +130,13 @@ test("all nine roles have correct hearts; role pool rejects invalid setup and Ho
   assert.equal(states.find((s) => s.currentRole === "sumo").hearts, 4);
 });
 
+test("Killer's Wife belongs to Killer Side before and after transformation", async () => {
+  assert.equal((await f.state("killer-wife")).team, "killers");
+  await f.hit("killer-wife");
+  await f.hit("killer-wife");
+  assert.equal((await f.state("killer-wife")).team, "killers");
+});
+
 test("pending/rejected evidence does no damage or quota; approved nonlethal attack does all three privately", async () => {
   const id = await f.evidence("villager");
   assert.equal((await f.state("villager")).hearts, 2);
@@ -288,7 +295,10 @@ test("approving evidence against a living Police immediately gives City the win 
     assert.equal(result.phase, "ended");
     assert.equal((await f.state("police")).hearts, hearts);
     assert.equal((await view("host")).killsThisHour, 0);
-    await db.exec("update public.rooms set phase='active',winner=null");
+    assert.equal(result.endGameResult.reason, "police-attacked");
+    assert.deepEqual(result.endGameTimeline.map((entry) => entry.kind), ["police-attacked", "game-ended"]);
+    assert.ok(result.events.some((event) => event.message.includes("Host อนุมัติการโจมตี Police")));
+    await db.exec("update public.rooms set phase='active',winner=null,end_game_result=null");
     await db.query("update public.evidence set status='rejected' where id=$1", [id]);
   }
 });
@@ -437,7 +447,7 @@ test("heartbeat only changes presence for the authenticated member; internal hel
   }
 });
 
-test("latest migration publishes the kill quota and Police protection RPCs", () => {
+test("latest migrations retain the rules RPCs and add an end-game timeline projection", () => {
   const definitions = (text) =>
     new Map(
       [
@@ -447,8 +457,8 @@ test("latest migration publishes the kill quota and Police protection RPCs", () 
       ].map((match) => [match[1], match[0]]),
     );
   const latest = definitions(migration);
-  assert.match(latest.get("get_room_view"), /killLimit/);
-  assert.match(latest.get("approve_evidence"), /hourly kill quota reached/);
+  assert.match(latest.get("get_room_view"), /endGameTimeline/);
+  assert.match(latest.get("approve_evidence"), /approve_evidence_legacy/);
   assert.match(latest.get("resolve_police_check"), /'active','police-check'/);
 });
 
@@ -579,12 +589,19 @@ test("bomb ends in accusation if deadline passed; Police accusation decides eith
   );
 });
 
-test("Detective death alone continues; an approved attack on Police gives City the win", async () => {
+test("Detective death alone continues; the final Police attack explains the City victory timeline", async () => {
   await f.hit("detective");
   await f.hit("detective");
   assert.equal((await view("host")).winner, null);
   await f.resetQuota();
-  assert.equal((await f.hit("police")).winner, "city");
+  const result = await f.hit("police");
+  assert.equal(result.winner, "city");
+  assert.equal(result.endGameResult.reason, "police-attacked");
+  assert.deepEqual(result.endGameTimeline.map((entry) => entry.kind), [
+    "detective-eliminated", "police-attacked", "game-ended",
+  ]);
+  for (const role of ["host", "killer", "detective", "villager"])
+    assert.deepEqual((await view(role)).endGameTimeline, result.endGameTimeline);
 });
 
 test("Storage reads are Host-only and Realtime signals remain authorized without table grants", async () => {
@@ -640,6 +657,10 @@ test("migration upgrades an active room without changing gameplay data; legacy r
   assert.deepEqual(after, before);
   await rpc("host", "approve_evidence", pending);
   assert.equal((await f.state("athlete")).hearts, 2);
+  const policeEvidence = await f.evidence("police");
+  const ended = await rpc("host", "approve_evidence", policeEvidence);
+  assert.equal(ended.endGameResult.reason, "police-attacked");
+  assert.deepEqual(ended.endGameTimeline.map((entry) => entry.kind), ["police-attacked", "game-ended"]);
 });
 
 test("approved attack announces anonymously to everyone except the victim; pending and rejected evidence stay silent", async () => {

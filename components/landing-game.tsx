@@ -102,7 +102,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
             <p>
               รับบทบาทลับ เล่นกับเพื่อนรอบตัว
               <br />
-              Killer แอบถ่ายเป้าหมาย ส่วนฝ่ายเมืองช่วยกันหาตัวคนร้าย
+              Killer แอบถ่ายเป้าหมาย ส่วน City Side ช่วยกันหาตัวคนร้าย
             </p>
           </div>
         </section>

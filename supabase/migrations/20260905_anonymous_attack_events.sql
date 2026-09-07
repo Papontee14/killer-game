@@ -73,7 +73,7 @@ begin
     update public.evidence set attack_result=case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end where id=e.id;
     perform public.add_event(r.id,'attack',case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end,e.killer_id);
     if new_hearts=0 and t.initial_role='bomber' then update public.rooms set phase='bomb-resolution',pending_bomber_id=t.player_id where id=r.id; perform public.add_event(r.id,'bomb',target.name||' ถูกกำจัด — Bomber'); end if;
-    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else update public.rooms set phase='ended',winner='killers' where id=r.id; perform public.add_event(r.id,'winner','ฝ่าย Killer ชนะ'); end if; end if;
+    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else update public.rooms set phase='ended',winner='killers' where id=r.id; perform public.add_event(r.id,'winner','Killer Side ชนะ'); end if; end if;
   end if;
   return public.get_room_view(r.code);
 end $$;

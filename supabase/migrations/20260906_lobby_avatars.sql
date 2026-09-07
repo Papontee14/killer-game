@@ -76,7 +76,7 @@ begin
   idx := 1;
   for p in select * from public.players where room_id=r.id order by random() loop
     role := roles[idx]; idx := idx+1; mh := case role when 'athlete' then 3 when 'sumo' then 4 when 'killer' then 0 else 2 end;
-    insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role='killer' then 'killers' else 'city' end,role='killer',mh,mh) on conflict(player_id) do update set initial_role=excluded.initial_role,role_current=excluded.role_current,team=excluded.team,is_active_killer=excluded.is_active_killer,hearts=excluded.hearts,max_hearts=excluded.max_hearts,has_used_ability=false;
+    insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role in ('killer','killer-wife') then 'killers' else 'city' end,role='killer',mh,mh) on conflict(player_id) do update set initial_role=excluded.initial_role,role_current=excluded.role_current,team=excluded.team,is_active_killer=excluded.is_active_killer,hearts=excluded.hearts,max_hearts=excluded.max_hearts,has_used_ability=false;
     update public.players set health='alive' where id=p.id;
   end loop;
   update public.rooms set phase='active',quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok'),approved_attacks_in_window=0 where id=r.id;

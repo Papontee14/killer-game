@@ -489,7 +489,7 @@ function PlayerCard({
             เริ่มต้น: {ROLE_LABELS[state.initialRole]} · ปัจจุบัน:{" "}
             {ROLE_LABELS[state.currentRole]}
             <br />
-            {state.team === "killers" ? "ฝ่าย Killer" : "ฝ่ายเมือง"}
+            {state.team === "killers" ? "Killer Side" : "City Side"}
           </small>
         )}
       </div>
@@ -624,7 +624,13 @@ function Events({
   );
 }
 function EndGameReasonPanel({ room }: { room: RoomState }) {
-  if (room.phase !== "ended" || !room.endGameResult) return null;
+  if (room.phase !== "ended") return null;
+  if (!room.endGameResult) return (
+    <div className="game-end-reason" aria-label="Game end reason">
+      <span className="section-kicker">เหตุผลที่เกมจบ</span>
+      <strong>ไม่มีข้อมูลเหตุผลจบเกมที่บันทึกไว้</strong>
+    </div>
+  );
   const result = room.endGameResult;
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const actor = result.actorPlayerId ? names.get(result.actorPlayerId) : undefined;
@@ -650,10 +656,11 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
         : affected.length
           ? `ผู้ได้รับผล: ${affected.join(", ")}`
           : undefined;
+  const winningTeam = room.winner === "city" ? "City Side ชนะ" : room.winner === "killers" ? "Killer Side ชนะ" : "เกมจบแล้ว";
   return (
     <div className="game-end-reason" aria-label="Game end reason">
       <span className="section-kicker">เหตุผลที่เกมจบ</span>
-      <strong>{labels[result.reason] ?? "Game ended"}</strong>
+      <strong>{winningTeam} เพราะ {labels[result.reason] ?? "เกมจบแล้ว"}</strong>
       {detail && <span>{detail}</span>}
       <time dateTime={result.occurredAt}>
         {new Date(result.occurredAt).toLocaleString("th-TH", {
@@ -664,6 +671,64 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
       </time>
     </div>
   );
+}
+
+type ForegroundNotification = { id: string; kind: "generic" | "evidence" | "police-reminder"; created_at: string };
+
+function useRoomNotifications(code: string, onNotice: (message: string) => void, refresh: () => void) {
+  const seen = useRef(new Set<string>());
+  const connectedOnce = useRef(false);
+  useEffect(() => {
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+    let stopped = false;
+    const message = (item: ForegroundNotification) => item.kind === "police-reminder"
+      ? "ตำรวจจะทำการชี้ตัวใน 3 นาที" : item.kind === "evidence"
+        ? "มีหลักฐานใหม่รอตรวจสอบ" : "มีเหตุการณ์ใหม่ในห้อง";
+    const receive = (item: ForegroundNotification, announce: boolean) => {
+      if (seen.current.has(item.id)) return;
+      seen.current.add(item.id);
+      if (announce && Date.now() - Date.parse(item.created_at) <= 30_000) onNotice(message(item));
+      refresh();
+    };
+    const catchUp = async (announce: boolean) => {
+      const { data } = await supabase.from("room_notifications").select("id,kind,created_at")
+        .gte("created_at", new Date(Date.now() - 30_000).toISOString());
+      if (!stopped) (data || []).forEach((item) => receive(item as ForegroundNotification, announce));
+    };
+    const channel = supabase.channel(`room-notification-${code}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_notifications" }, (payload) => receive(payload.new as ForegroundNotification, true))
+      .subscribe((status) => {
+        if (status !== "SUBSCRIBED") return;
+        void catchUp(connectedOnce.current);
+        connectedOnce.current = true;
+      });
+    return () => { stopped = true; supabase.removeChannel(channel); };
+  }, [code, onNotice, refresh]);
+}
+
+function EndGameTimeline({ room }: { room: RoomState }) {
+  if (room.phase !== "ended" || room.endGameTimeline.length === 0) return null;
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const messages = room.endGameTimeline.map((entry) => {
+    const actor = entry.actorPlayerId ? names.get(entry.actorPlayerId) : undefined;
+    const target = entry.targetPlayerId ? names.get(entry.targetPlayerId) : undefined;
+    const message = entry.kind === "detective-eliminated" && target
+      ? `${target} (Detective) ถูกกำจัด`
+      : entry.kind === "detective-promoted" && target
+        ? `${target} รับตำแหน่ง Police`
+        : entry.kind === "police-attacked" && actor && target
+          ? `Host อนุมัติหลักฐานที่ ${actor} โจมตี ${target} ซึ่งเป็น Police`
+          : "ประกาศผลจบเกม";
+    return { ...entry, message };
+  });
+  return <section className="game-end-timeline" aria-label="Game end timeline">
+    <span className="section-kicker">ลำดับเหตุการณ์สำคัญ</span>
+    <ol>{messages.map((entry, index) => <li key={`${entry.kind}-${entry.occurredAt}-${index}`}>
+      <span>{entry.message}</span>
+      <time dateTime={entry.occurredAt}>{new Date(entry.occurredAt).toLocaleString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}</time>
+    </li>)}</ol>
+  </section>;
 }
 
 function Ended({
@@ -695,9 +760,9 @@ function Ended({
         </h2>
         <p>
           {resolvedRoom.winner === "city"
-            ? "ฝ่ายเมืองชนะ"
+            ? "City Side ชนะ"
             : resolvedRoom.winner === "killers"
-              ? "ฝ่าย Killer ชนะ"
+              ? "Killer Side ชนะ"
               : "จบเกมโดยไม่มีผู้ชนะ"}
         </p>
       </div>
@@ -726,6 +791,7 @@ function PlayerEndGameSummary({
           winner={room.winner && myTeam ? room.winner === myTeam : undefined}
         />
         <EndGameReasonPanel room={room} />
+        <EndGameTimeline room={room} />
         <section className="panel" aria-labelledby="end-game-roster-title">
           <div className="panel-heading">
             <div>
@@ -770,9 +836,9 @@ function PlayerEndGameSummary({
                   </div>
                   <span className={`end-game-team team-${summary?.team ?? "none"}`}>
                     {summary?.team === "killers"
-                      ? "ฝ่าย Killer"
+                      ? "Killer Side"
                       : summary?.team === "city"
-                        ? "ฝ่ายเมือง"
+                        ? "City Side"
                         : "ยังไม่มีฝ่าย"}
                   </span>
                 </li>
@@ -891,6 +957,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const creationAttemptForCode = useRef<string | null>(null);
   const [tab, setTab] = useState("home");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const busyRef = useRef(false);
   const [confirmation, setConfirmation] = useState<{
     title: string;
@@ -905,6 +972,12 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const [accusationAt, setAccusationAtInput] = useState("");
   const hostCredentials = readRoomCredentials(`host:${code}`);
   const hostName = name || hostCredentials?.name || "";
+  useRoomNotifications(code, setNotice, refresh);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -1145,6 +1218,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           )}
           <Ended room={room} host />
           <EndGameReasonPanel room={room} />
+          <EndGameTimeline room={room} />
           {room.phase === "lobby" && tab === "players" && (
             <LobbyPlayers room={room} onRemove={(player) => setConfirmation({
               title: "นำผู้เล่นออกจากห้อง",
@@ -1463,7 +1537,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                           {room.privateStates[item.targetId]?.currentRole ===
                             "police" && (
                             <p className="danger-text">
-                              หากอนุมัติการโจมตีตำรวจ ฝ่ายเมืองจะชนะทันที
+                              หากอนุมัติการโจมตีตำรวจ City Side จะชนะทันที
                             </p>
                           )}
                           <div className="evidence-actions">
@@ -1531,6 +1605,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           กำลังดำเนินการ…
         </div>
       )}
+      {notice && <div className="toast" role="status"><Bell size={16} /> {notice}</div>}
       {confirmation && (
         <Dialog
           title={confirmation.title}
@@ -1608,6 +1683,7 @@ export function PlayerRoom({
   const busyRef = useRef(false);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState("");
+  useRoomNotifications(code, setToast, refresh);
   const [mounted, setMounted] = useState(false);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [screenHidden, setScreenHidden] = useState<boolean | null>(null);
@@ -2081,7 +2157,7 @@ export function PlayerRoom({
               <Eye size={15} /> อ่านบทบาทของฉัน
             </button>
             <div className="identity-stamp">
-              {me.team === "killers" ? "ฝ่าย Killer" : "ฝ่ายเมือง"}
+              {me.team === "killers" ? "Killer Side" : "City Side"}
             </div>
           </div>
           {room.phase === "bomb-resolution" && (
@@ -2325,7 +2401,7 @@ export function PlayerRoom({
                   onClick={() =>
                     setConfirmation({
                       title: "ยืนยันผู้ต้องสงสัย",
-                      detail: `คุณกำลังชี้ตัว ${target?.name} หากถูก ฝ่ายเมืองชนะ หากผิด ฝ่าย Killer ชนะ`,
+                      detail: `คุณกำลังชี้ตัว ${target?.name} หากถูก City Side ชนะ หากผิด Killer Side ชนะ`,
                       action: () =>
                         act(() => resolvePoliceCheck(room.code, targetId)),
                     })

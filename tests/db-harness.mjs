@@ -16,6 +16,9 @@ export const migration = (
       "20260905_submission_quota.sql",
       "20260905_restore_end_game_rpc.sql",
       "20260907_kill_quota_and_police_protection.sql",
+      "20260907_end_game_timeline.sql",
+      "20260907_killer_wife_side.sql",
+      "20260907_server_notification_queue.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),
@@ -114,7 +117,7 @@ export async function fixture(db) {
       [
         players[role],
         role,
-        role === "killer" ? "killers" : "city",
+        role === "killer" || role === "killer-wife" ? "killers" : "city",
         role === "killer",
         hearts,
       ],

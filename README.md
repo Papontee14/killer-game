@@ -21,6 +21,14 @@ npm run dev
 
 หน้าเว็บรองรับ RPC รุ่นเดิมที่ไม่ส่ง `endGameSummary` ผ่าน `POST /api/room/summary` ด้วย โดยต้องตั้ง `SUPABASE_SERVICE_ROLE_KEY` ใน environment ของเซิร์ฟเวอร์ (ห้ามใช้ prefix `NEXT_PUBLIC_`) เส้นทางนี้ตรวจสมาชิกและสถานะจบเกมด้วย RPC ภายใต้ token ของผู้เรียกก่อนอ่านเฉพาะบทบาทและฝ่าย ไม่มีการเปิดเผยหัวใจหรือหลักฐาน และไม่ cache ผลตอบกลับ หากโหลดไม่สำเร็จ หน้าเว็บจะลองใหม่ในการรีเฟรชสถานะห้องรอบถัดไป
 
+## Server notification queue
+
+รัน `supabase/migrations/20260907_server_notification_queue.sql` หลัง migration ปัจจุบัน แล้ว deploy ก่อนเปิดใช้งาน queue. ตั้งค่า Vercel server environment: `SUPABASE_SERVICE_ROLE_KEY`, `WEB_PUSH_PRIVATE_KEY`, `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY`, `PUSH_DISPATCH_SECRET` และ `NEXT_PUBLIC_SITE_URL`.
+
+เมื่อ route `/api/push/dispatch` พร้อมแล้ว ให้ตั้งค่า Supabase database settings `app.notification_queue_enabled=on`, `app.push_dispatch_url=https://<origin>/api/push/dispatch` และ `app.push_dispatch_secret` ให้ตรงกับ Vercel จากนั้นเรียก `select public.install_notification_cron();` เพียงครั้งเดียว. Cron จะตรวจ deadline และเรียก worker ทุกวินาที; `cron.job_run_details` ใช้ตรวจงานที่ผิดพลาดได้. ปิด queue ได้ทันทีด้วย `app.notification_queue_enabled=off` โดยข้อมูลเกมและคิวเดิมไม่ถูกลบ.
+
 เมื่ออัปเดตกฎห้ามส่งรูปขณะโควต้าเต็ม ให้รัน `supabase/migrations/20260905_submission_quota.sql` หลัง migration ข้างต้น ก่อนเผยแพร่เว็บ โควต้ายังคงนับเฉพาะภาพที่ Host อนุมัติและรีเซ็ตเมื่อขึ้นชั่วโมงใหม่ตามเวลาไทย
 
 หากหน้า Host เรียก `POST /rest/v1/rpc/end_game` แล้วได้ `404 Not Found` ให้รัน `supabase/migrations/20260905_restore_end_game_rpc.sql` ใน Supabase SQL Editor ของ production หลัง migration ก่อนหน้า ไฟล์นี้สร้าง/รีเฟรช `end_game` แบบรันซ้ำได้ กำหนดสิทธิ์ให้ผู้ใช้ที่ล็อกอินแล้ว และสั่ง PostgREST reload schema cache ทันที
+
+ก่อนเผยแพร่หน้าสรุปผลที่อธิบายสาเหตุและลำดับเหตุการณ์จบเกม ให้รัน `supabase/migrations/20260907_kill_quota_and_police_protection.sql` แล้วตามด้วย `supabase/migrations/20260907_end_game_timeline.sql` และ `supabase/migrations/20260907_killer_wife_side.sql` ตามลำดับ. ไฟล์หลังเพิ่ม payload `endGameResult` และ `endGameTimeline` เฉพาะห้องที่จบแล้ว และกำหนดให้ Killer's Wife อยู่ Killer Side ตั้งแต่เริ่มเกม; เกมเก่าที่ไม่มีผลลัพธ์ที่บันทึกไว้จะแสดงว่าไม่มีข้อมูลเหตุผล แทนการอนุมานจากเหตุการณ์เดิม

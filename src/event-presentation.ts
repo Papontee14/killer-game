@@ -100,7 +100,7 @@ export function presentEvent(
         "mask",
       ),
       "คุณกลายเป็น Killer แล้ว": result(
-        `${subject}เปลี่ยนเป็น Killer แล้ว ขณะนี้${subject}อยู่ฝ่าย Killer`,
+        `${subject}เปลี่ยนเป็น Killer แล้ว ขณะนี้${subject}อยู่ Killer Side`,
         "danger",
         "mask",
       ),
@@ -116,9 +116,9 @@ export function presentEvent(
       ),
     },
     winner: {
-      ฝ่ายเมืองชนะ: result("เกมจบแล้ว — ฝ่ายเมืองชนะ", "success", "trophy"),
-      "ฝ่าย Killer ชนะ": result(
-        "เกมจบแล้ว — ฝ่าย Killer ชนะ",
+      "City Side ชนะ": result("เกมจบแล้ว — City Side ชนะ", "success", "trophy"),
+      "Killer Side ชนะ": result(
+        "เกมจบแล้ว — Killer Side ชนะ",
         "danger",
         "trophy",
       ),
@@ -126,6 +126,12 @@ export function presentEvent(
   };
   const known = exact[event.type]?.[event.message];
   if (known) return known;
+  if (event.type === "winner") {
+    if (event.message.startsWith("City Side ชนะ"))
+      return result(event.message, "success", "trophy");
+    if (event.message.startsWith("Killer Side ชนะ"))
+      return result(event.message, "danger", "trophy");
+  }
   if (event.type === "ability") {
     // Match the final role token only; names may themselves contain “ คือ ”.
     const match = /^บทบาทเริ่มต้นของ ([\s\S]+) คือ ([a-z-]+)$/.exec(

@@ -72,6 +72,14 @@ create table if not exists public.evidence (
   storage_path text not null unique, captured_at timestamptz not null, status public.evidence_status not null default 'pending',
   created_at timestamptz not null default now(), decision_at timestamptz
 );
+-- Web Push registrations are kept server-only; this is repeated here so a
+-- fresh schema does not require the historical push migration.
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade, endpoint text not null,
+  p256dh text not null, auth text not null, created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(), unique(user_id, endpoint)
+);
 alter table public.evidence add column if not exists attack_result text
   check (attack_result in ('target is still alive','elimination confirmed'));
 
@@ -82,6 +90,22 @@ create table if not exists public.room_events (
 alter table public.room_events add column if not exists excluded_player_id uuid references public.players(id);
 create table if not exists public.room_signals (
   room_id uuid primary key references public.rooms(id) on delete cascade, changed_at timestamptz not null default now()
+);
+create table if not exists public.room_notifications (
+  id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
+  recipient_user_id uuid not null references auth.users(id) on delete cascade, event_key text not null,
+  kind text not null default 'generic' check (kind in ('generic','evidence','police-reminder')),
+  due_at timestamptz not null default clock_timestamp(), expires_at timestamptz not null default (clock_timestamp()+interval '1 hour'),
+  state text not null default 'pending' check (state in ('pending','sending','sent','failed','cancelled')),
+  attempts integer not null default 0, lease_expires_at timestamptz, created_at timestamptz not null default clock_timestamp(),
+  sent_at timestamptz, last_error text, unique(room_id,event_key,recipient_user_id)
+);
+create index if not exists room_notifications_dispatch_idx on public.room_notifications(state,due_at,created_at);
+create table if not exists public.push_notification_deliveries (
+  notification_id uuid not null references public.room_notifications(id) on delete cascade,
+  subscription_id uuid not null references public.push_subscriptions(id) on delete cascade,
+  attempts integer not null default 0, state text not null default 'pending' check (state in ('pending','sent','failed')),
+  sent_at timestamptz, last_error text, primary key(notification_id,subscription_id)
 );
 
 -- Upgrade only the physical shape of a project that previously ran the old
@@ -114,9 +138,12 @@ alter table public.player_secrets enable row level security;
 alter table public.evidence enable row level security;
 alter table public.room_events enable row level security;
 alter table public.room_signals enable row level security;
+alter table public.push_subscriptions enable row level security;
+alter table public.room_notifications enable row level security;
+alter table public.push_notification_deliveries enable row level security;
 
 -- No table policy exposes roles, hearts or evidence. Clients use get_room_view.
-revoke all on public.rooms, public.players, public.player_secrets, public.evidence, public.room_events from anon, authenticated;
+revoke all on public.rooms, public.players, public.player_secrets, public.evidence, public.room_events, public.push_subscriptions, public.room_notifications, public.push_notification_deliveries from anon, authenticated;
 drop policy if exists "room members can read public room" on public.rooms;
 drop policy if exists "room members can read roster" on public.players;
 drop policy if exists "only owner reads private state" on public.player_secrets;
@@ -129,9 +156,15 @@ create policy "members can receive a harmless room signal" on public.room_signal
   exists (select 1 from public.players p where p.room_id = room_signals.room_id and p.user_id = auth.uid())
 );
 grant select on public.room_signals to authenticated;
+drop policy if exists "recipients read room notifications" on public.room_notifications;
+create policy "recipients read room notifications" on public.room_notifications for select to authenticated using (recipient_user_id=auth.uid());
+grant select on public.room_notifications to authenticated;
 do $$ begin
   if exists (select 1 from pg_publication where pubname='supabase_realtime') and not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='room_signals') then
     alter publication supabase_realtime add table public.room_signals;
+  end if;
+  if exists (select 1 from pg_publication where pubname='supabase_realtime') and not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='room_notifications') then
+    alter publication supabase_realtime add table public.room_notifications;
   end if;
 end $$;
 create or replace function public.touch_room_signal_room() returns trigger language plpgsql security definer set search_path=public as $$
@@ -197,6 +230,71 @@ create or replace function public.add_event(p_room_id uuid, p_type text, p_messa
 language sql security definer set search_path=public as $$ insert into public.room_events(room_id,type,message,visible_to_player_id) values (p_room_id,p_type,p_message,p_player_id) $$;
 revoke execute on function public.add_event(uuid,text,text,uuid), public.room_for_code(text) from public, anon, authenticated;
 
+create or replace function public.request_notification_dispatch() returns void language plpgsql security definer set search_path=public as $$
+declare dispatch_url text:=current_setting('app.push_dispatch_url',true); dispatch_secret text:=current_setting('app.push_dispatch_secret',true);
+begin
+  if coalesce(current_setting('app.notification_queue_enabled',true),'off')<>'on' or coalesce(dispatch_url,'')='' or coalesce(dispatch_secret,'')='' then return; end if;
+  execute format('select net.http_post(url := %L, headers := jsonb_build_object(''x-notification-dispatch-secret'', %L), body := ''{}''::jsonb)',dispatch_url,dispatch_secret);
+exception when undefined_function then return;
+end $$;
+revoke execute on function public.request_notification_dispatch() from public,anon,authenticated;
+
+create or replace function public.queue_room_notification(p_room_id uuid,p_event_key text,p_kind text default 'generic',p_recipient_user_ids uuid[] default null,p_due_at timestamptz default clock_timestamp(),p_expires_at timestamptz default (clock_timestamp()+interval '1 hour')) returns void
+language plpgsql security definer set search_path=public as $$
+begin
+  if coalesce(current_setting('app.notification_queue_enabled',true),'off') <> 'on' then return; end if;
+  if p_kind not in ('generic','evidence','police-reminder') or p_event_key='' or p_expires_at<=p_due_at then raise exception 'invalid notification'; end if;
+  insert into public.room_notifications(room_id,recipient_user_id,event_key,kind,due_at,expires_at)
+  select p_room_id,recipient_user_id,p_event_key,p_kind,p_due_at,p_expires_at from (
+    select host_user_id recipient_user_id from public.rooms where id=p_room_id union
+    select user_id from public.players where room_id=p_room_id
+  ) recipients where p_recipient_user_ids is null or recipient_user_id=any(p_recipient_user_ids)
+  on conflict(room_id,event_key,recipient_user_id) do nothing;
+  if found then perform public.request_notification_dispatch(); end if;
+end $$;
+revoke execute on function public.queue_room_notification(uuid,text,text,uuid[],timestamptz,timestamptz) from public,anon,authenticated;
+
+create or replace function public.register_push_subscription(p_code text,p_endpoint text,p_p256dh text,p_auth text) returns boolean language plpgsql security definer set search_path=public as $$
+declare r public.rooms;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null;
+  if not found or (r.host_user_id<>auth.uid() and not exists(select 1 from public.players where room_id=r.id and user_id=auth.uid())) then raise exception 'not a room member'; end if;
+  if nullif(trim(p_endpoint),'') is null or nullif(trim(p_p256dh),'') is null or nullif(trim(p_auth),'') is null then raise exception 'invalid subscription'; end if;
+  insert into public.push_subscriptions(room_id,user_id,endpoint,p256dh,auth,updated_at) values(r.id,auth.uid(),trim(p_endpoint),trim(p_p256dh),trim(p_auth),clock_timestamp())
+  on conflict(user_id,endpoint) do update set room_id=excluded.room_id,p256dh=excluded.p256dh,auth=excluded.auth,updated_at=excluded.updated_at;
+  return true;
+end $$;
+revoke execute on function public.register_push_subscription(text,text,text,text) from public,anon;
+grant execute on function public.register_push_subscription(text,text,text,text) to authenticated;
+
+create or replace function public.queue_notification_from_event() returns trigger language plpgsql security definer set search_path=public as $$
+declare recipient uuid; host_id uuid;
+begin
+  select host_user_id into host_id from public.rooms where id=new.room_id;
+  if new.type='system' and new.message in ('เกมเริ่มแล้ว บทบาทถูกแจกเรียบร้อย','Host สั่งจบเกม') then
+    perform public.queue_room_notification(new.room_id,'event:'||new.id::text);
+  elsif (new.type in ('winner','attack','bomb') and new.visible_to_player_id is null) or (new.type='warning' and new.message='ถึงเวลาตำรวจชี้ตัวแล้ว') or (new.type='ability' and new.message='Reporter has used an ability.') then
+    perform public.queue_room_notification(new.room_id,'event:'||new.id::text);
+  elsif new.type='warning' and new.message='หลักฐานถูกปฏิเสธ' then
+    select user_id into recipient from public.players where id=new.visible_to_player_id;
+    perform public.queue_room_notification(new.room_id,'event:'||new.id::text,'generic',array_remove(array[host_id,recipient],null));
+  elsif new.type='ability' and new.message like 'บทบาทเริ่มต้นของ %' then
+    select user_id into recipient from public.players where id=new.visible_to_player_id;
+    perform public.queue_room_notification(new.room_id,'event:'||new.id::text,'generic',array_remove(array[host_id,recipient],null));
+  elsif new.type='ability' and new.message='คุณถูกตรวจบทบาท' then
+    select user_id into recipient from public.players where id=new.visible_to_player_id;
+    perform public.queue_room_notification(new.room_id,'event:'||new.id::text,'generic',array_remove(array[recipient],null));
+  end if;
+  return new;
+end $$;
+drop trigger if exists room_events_notification_queue on public.room_events;
+create trigger room_events_notification_queue after insert on public.room_events for each row execute function public.queue_notification_from_event();
+create or replace function public.queue_notification_from_evidence() returns trigger language plpgsql security definer set search_path=public as $$
+declare host_id uuid; begin select host_user_id into host_id from public.rooms where id=new.room_id; perform public.queue_room_notification(new.room_id,'evidence:'||new.id::text,'evidence',array[host_id]); return new; end $$;
+drop trigger if exists evidence_notification_queue on public.evidence;
+create trigger evidence_notification_queue after insert on public.evidence for each row execute function public.queue_notification_from_evidence();
+
 -- Capture the immutable public explanation at the same time as the winning state.
 create or replace function public.finalize_game(
   p_room_id uuid, p_winner public.winning_team, p_reason text,
@@ -228,6 +326,20 @@ begin
   return false;
 end $$;
 revoke execute on function public.advance_due_accusation(uuid) from public,anon,authenticated;
+
+create or replace function public.end_game_timeline(p_room_id uuid,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare ended_at timestamptz := nullif(p_result->>'occurredAt','')::timestamptz;
+begin
+  if p_result is null then return '[]'::jsonb; end if;
+  return coalesce((select jsonb_agg(entry order by occurred_at,position) from (
+    select jsonb_build_object('kind','detective-eliminated','occurredAt',e.decision_at,'actorPlayerId',e.killer_id,'targetPlayerId',e.target_id) entry,e.decision_at occurred_at,1 position from public.evidence e join public.player_secrets target on target.player_id=e.target_id where e.room_id=p_room_id and e.status='approved' and e.attack_result='elimination confirmed' and target.initial_role='detective' and (ended_at is null or e.decision_at<=ended_at)
+    union all select jsonb_build_object('kind','detective-promoted','occurredAt',ended_at,'actorPlayerId',null,'targetPlayerId',s.player_id),ended_at,2 from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=p_room_id and s.initial_role='detective' and s.role_current='police'
+    union all select jsonb_build_object('kind','police-attacked','occurredAt',ended_at,'actorPlayerId',p_result->>'actorPlayerId','targetPlayerId',p_result->>'targetPlayerId'),ended_at,3 where p_result->>'reason'='police-attacked'
+    union all select jsonb_build_object('kind','game-ended','occurredAt',ended_at,'actorPlayerId',p_result->>'actorPlayerId','targetPlayerId',p_result->>'targetPlayerId'),ended_at,4
+  ) milestones),'[]'::jsonb);
+end $$;
+revoke execute on function public.end_game_timeline(uuid,jsonb) from public,anon,authenticated;
 
 create or replace function public.get_room_view(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb; progress jsonb := '[]'::jsonb; summary jsonb := '[]'::jsonb;
@@ -268,7 +380,7 @@ begin
     'createdAt',r.created_at,'closedAt',r.closed_at,'killLimit',r.attack_limit,'killsThisHour',case when r.quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') then r.approved_attacks_in_window else 0 end,
     'quotaWindowStart',r.quota_window_start,'policeCheckAt',r.police_check_at,'players',roster,'privateStates',states,'evidences',evidences,'killerEvidenceProgress',progress,'events',events,
     'endGameSummary',summary,'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id)
-    || case when r.phase='ended' then jsonb_build_object('endGameResult',r.end_game_result) else '{}'::jsonb end;
+    || case when r.phase='ended' then jsonb_build_object('endGameResult',r.end_game_result,'endGameTimeline',public.end_game_timeline(r.id,r.end_game_result)) else '{}'::jsonb end;
 end $$;
 
 drop function if exists public.create_room(text,text,text,text);
@@ -321,7 +433,7 @@ begin
   idx := 1;
   for p in select * from public.players where room_id=r.id order by random() loop
     role := roles[idx]; idx := idx+1; mh := case role when 'athlete' then 3 when 'sumo' then 4 when 'killer' then 0 else 2 end;
-    insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role='killer' then 'killers' else 'city' end,role='killer',mh,mh)
+    insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role in ('killer','killer-wife') then 'killers' else 'city' end,role='killer',mh,mh)
       on conflict(player_id) do update set initial_role=excluded.initial_role,role_current=excluded.role_current,team=excluded.team,is_active_killer=excluded.is_active_killer,hearts=excluded.hearts,max_hearts=excluded.max_hearts,has_used_ability=false;
     update public.players set health=case when mh=0 then 'alive'::health_state else 'alive'::health_state end where id=p.id;
   end loop;
@@ -399,7 +511,7 @@ begin
   if t.role_current='police' then
     perform public.finalize_game(r.id,'city','police-attacked',e.killer_id,t.player_id,array[t.player_id]);
     update public.rooms set quota_window_start=window_start where id=r.id;
-    perform public.add_event(r.id,'winner','ฝ่ายเมืองชนะ');
+    perform public.add_event(r.id,'winner','City Side ชนะ เพราะ Host อนุมัติการโจมตี Police');
     return public.get_room_view(r.code);
   end if;
   if r.quota_window_start<>window_start then r.approved_attacks_in_window:=0; r.quota_window_start:=window_start; end if;
@@ -428,7 +540,7 @@ begin
     update public.evidence set attack_result=case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end where id=e.id;
     perform public.add_event(r.id,'attack',case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end,e.killer_id);
     if new_hearts=0 and t.initial_role='bomber' then update public.rooms set phase='bomb-resolution',pending_bomber_id=t.player_id where id=r.id; perform public.add_event(r.id,'bomb',target.name||' ถูกกำจัด — Bomber'); end if;
-    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else perform public.finalize_game(r.id,'killers','police-eliminated-no-successor',e.killer_id,t.player_id,array[t.player_id]); perform public.add_event(r.id,'winner','ฝ่าย Killer ชนะ'); end if; end if;
+    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else perform public.finalize_game(r.id,'killers','police-eliminated-no-successor',e.killer_id,t.player_id,array[t.player_id]); perform public.add_event(r.id,'winner','Killer Side ชนะ'); end if; end if;
   end if;
   return public.get_room_view(r.code);
 end $$;
@@ -459,7 +571,7 @@ begin
   update public.rooms set pending_bomber_id=null,phase=case when winning is null then 'active'::room_phase else 'ended'::room_phase end,winner=winning where id=r.id;
   if winning is not null then
     perform public.finalize_game(r.id,winning,case when winning='city' then 'bomb-eliminated-all-killers' else 'bomb-eliminated-police-no-successor' end,r.pending_bomber_id,null,p_target_ids);
-    perform public.add_event(r.id,'winner',case when winning='city' then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end);
+    perform public.add_event(r.id,'winner',case when winning='city' then 'City Side ชนะ' else 'Killer Side ชนะ' end);
   end if;
   return public.get_room_view(r.code);
 end $$;
@@ -484,7 +596,7 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 drop function if exists public.start_due_accusations();
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
-  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; perform public.finalize_game(r.id,case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end,case when target.is_active_killer then 'police-accusation-correct' else 'police-accusation-wrong' end,me.id,target_player.id,array[target_player.id]); perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
+  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; perform public.finalize_game(r.id,case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end,case when target.is_active_killer then 'police-accusation-correct' else 'police-accusation-wrong' end,me.id,target_player.id,array[target_player.id]); perform public.add_event(r.id,'winner',case when target.is_active_killer then 'City Side ชนะ' else 'Killer Side ชนะ' end); return public.get_room_view(r.code); end $$;
 
 create or replace function public.end_game(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active','police-check','bomb-resolution') then raise exception 'not allowed'; end if; perform public.finalize_game(r.id,null,'host-ended'); perform public.add_event(r.id,'system','Host สั่งจบเกม'); return public.get_room_view(r.code); end $$;
@@ -494,6 +606,37 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 
 revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) from public, anon;
 grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) to authenticated;
+
+create or replace function public.claim_room_notifications(p_limit integer default 20)
+returns table(id uuid,room_id uuid,room_code text,recipient_user_id uuid,kind text,attempts integer)
+language plpgsql security definer set search_path=public as $$
+begin
+  update public.room_notifications set state='failed',last_error='expired',lease_expires_at=null where state in ('pending','sending') and expires_at<=clock_timestamp();
+  return query with candidates as (
+    select n.id from public.room_notifications n where n.due_at<=clock_timestamp() and n.expires_at>clock_timestamp()
+      and (n.state='pending' or (n.state='sending' and n.lease_expires_at<clock_timestamp())) and n.attempts<8
+    order by n.due_at,n.created_at for update skip locked limit greatest(1,least(p_limit,100))
+  ), claimed as (
+    update public.room_notifications n set state='sending',attempts=n.attempts+1,lease_expires_at=clock_timestamp()+interval '60 seconds'
+    from candidates c where n.id=c.id returning n.*
+  ) select c.id,c.room_id,r.code,c.recipient_user_id,c.kind,c.attempts from claimed c join public.rooms r on r.id=c.room_id;
+end $$;
+revoke execute on function public.claim_room_notifications(integer) from public,anon,authenticated;
+
+create or replace function public.advance_notification_schedule() returns integer language plpgsql security definer set search_path=public as $$
+declare r record; changed integer:=0; reminder_key text;
+begin
+  update public.room_notifications n set state='cancelled',lease_expires_at=null from public.rooms r where r.id=n.room_id and n.state in ('pending','sending') and (r.closed_at is not null or r.phase='ended' or (n.event_key like 'police-reminder:%' and n.event_key<>'police-reminder:'||r.id::text||':'||coalesce(r.police_check_at::text,'')));
+  for r in select id,police_check_at from public.rooms where closed_at is null and phase='active' and police_check_at is not null loop
+    reminder_key:='police-reminder:'||r.id::text||':'||r.police_check_at::text;
+    if r.police_check_at-interval '3 minutes'<=clock_timestamp() and r.police_check_at-interval '3 minutes'+interval '30 seconds'>clock_timestamp() then
+      perform public.queue_room_notification(r.id,reminder_key,'police-reminder',null,clock_timestamp(),r.police_check_at-interval '3 minutes'+interval '30 seconds');
+    end if;
+    if r.police_check_at<=clock_timestamp() and public.advance_due_accusation(r.id) then changed:=changed+1; end if;
+  end loop;
+  return changed;
+end $$;
+revoke execute on function public.advance_notification_schedule() from public,anon,authenticated;
 
 -- Make newly created RPC functions available to the REST API immediately.
 notify pgrst, 'reload schema';

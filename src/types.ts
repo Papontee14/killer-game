@@ -36,6 +36,14 @@ export type EndGameResult = {
   affectedPlayerIds: string[];
 };
 
+/** Public, post-game-only milestones that explain how the result was reached. */
+export type EndGameTimelineEntry = {
+  kind: "detective-eliminated" | "detective-promoted" | "police-attacked" | "game-ended";
+  occurredAt: string;
+  actorPlayerId?: string | null;
+  targetPlayerId?: string | null;
+};
+
 /** Role reveal for authorized room members after the game has ended. */
 export type EndGamePlayerSummary = {
   playerId: string;
@@ -122,6 +130,7 @@ export type RoomState = {
   winner: WinningTeam;
   /** Immutable, public-to-members explanation captured when the game ended. */
   endGameResult?: EndGameResult;
+  endGameTimeline: EndGameTimelineEntry[];
   endGameSummary: EndGamePlayerSummary[];
   bombTargets: string[];
   pendingBomberId?: string;

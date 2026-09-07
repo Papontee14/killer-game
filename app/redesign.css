@@ -2172,6 +2172,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .game-end-reason strong { color: var(--text); font-size: 14px; }
 .game-end-reason span:not(.section-kicker) { color: var(--muted); font-size: 12px; }
 .game-end-reason time { color: var(--muted); font-size: 10px; }
+.game-end-timeline { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+.game-end-timeline ol { display:grid; gap:7px; margin:0; padding:0; list-style:none; }
+.game-end-timeline li { display:flex; justify-content:space-between; gap:12px; color:var(--text); font-size:12px; }
+.game-end-timeline time { flex:0 0 auto; color:var(--muted); font-size:10px; }
 
 /* Desktop waiting room: give the lobby breathing room and keep the profile
    action from squeezing the player's status copy into a single character

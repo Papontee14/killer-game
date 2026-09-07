@@ -472,7 +472,7 @@ test("police accusation renders and resolves city victory", async ({
   await page.getByRole("button", { name: "ยืนยันการชี้ตัว" }).click();
   await page.getByRole("button", { name: "ยืนยันดำเนินการ" }).click();
   await expect(
-    page.getByText("ฝ่ายเมืองชนะ", { exact: true }).first(),
+    page.getByText("City Side ชนะ", { exact: true }).first(),
   ).toBeVisible();
 });
 
@@ -906,7 +906,7 @@ test("player summary stays readable until manual exit, even after closure and re
   await expect(summary).toContainText("Detective → Police");
   const converted = summary.locator(".end-game-player", { hasText: "killer-wife" });
   await expect(converted).toContainText("Killer's Wife → Killer");
-  await expect(converted).toContainText("ฝ่าย Killer");
+  await expect(converted).toContainText("Killer Side");
   await expect(page.locator(".player-hero")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.waitForTimeout(6000);
@@ -927,8 +927,8 @@ test("player summary stays readable until manual exit, even after closure and re
 });
 
 for (const [target, winner, personal] of [
-  ["killer", "ฝ่ายเมืองชนะ", "คุณชนะ"],
-  ["sumo", "ฝ่าย Killer ชนะ", "คุณแพ้"],
+  ["killer", "City Side ชนะ", "คุณชนะ"],
+  ["sumo", "Killer Side ชนะ", "คุณแพ้"],
 ]) {
   test(`player summary shows ${winner} after Police accusation`, async ({ page }) => {
     await openPlayer(page, "villager");

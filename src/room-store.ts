@@ -1,8 +1,8 @@
 import { ensureAnonymousSession, getSupabaseBrowser } from "./supabase-browser";
-import { notifyRoomParticipants } from "./notifications";
 import type {
   Evidence,
   EndGameResult,
+  EndGameTimelineEntry,
   KillerEvidenceProgress,
   PrivatePlayerState,
   RoomState,
@@ -175,6 +175,18 @@ function asRoom(value: unknown): RoomState {
           };
         })()
       : undefined,
+    endGameTimeline: data.phase === "ended"
+      ? ((data.endGameTimeline ?? data.end_game_timeline ?? []) as Array<Json>).map((item) => ({
+          kind: String(item.kind) as EndGameTimelineEntry["kind"],
+          occurredAt: String(item.occurredAt ?? item.occurred_at),
+          actorPlayerId: item.actorPlayerId ?? item.actor_player_id
+            ? String(item.actorPlayerId ?? item.actor_player_id)
+            : null,
+          targetPlayerId: item.targetPlayerId ?? item.target_player_id
+            ? String(item.targetPlayerId ?? item.target_player_id)
+            : null,
+        }))
+      : [],
     endGameSummary: data.phase === "ended"
       ? ((data.endGameSummary ?? []) as Array<Json>).map((item) => ({
           playerId: String(item.playerId),
@@ -315,8 +327,6 @@ async function mutate(code: string, fn: string, args: Json = {}) {
     throw new Error("ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
-  // Notify participants via Web Push if screen is off or app is closed
-  void notifyRoomParticipants(normalizedCode);
   return room;
 }
 
@@ -409,13 +419,6 @@ export async function submitEvidence(
   }
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
-  // Evidence is visible only to the Host, so notify the Host device directly.
-  void notifyRoomParticipants(
-    roomCodeValue(code),
-    undefined,
-    undefined,
-    "evidence",
-  );
   return room;
 }
 export function selectAvatar(code: string, avatarId: string) {

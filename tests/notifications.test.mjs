@@ -23,10 +23,7 @@ test('push setup subscribes a new device; missing VAPID key reports failure',asy
  const c=client({existing:false});assert.equal(await c.api.subscribeToWebPush('ABCDEF','token'),true);assert.equal(c.subscriptions(),1);
  const missing=client({key:''});assert.equal(await missing.api.subscribeToWebPush('ABCDEF','token'),false);assert.equal(missing.requests.length,0);
 });
-test('room push request survives page navigation',async()=>{
- const c=client();await c.api.notifyRoomParticipants('ABCDEF');assert.equal(c.requests[0].options.keepalive,true);
-});
-test('room push request can select a notification kind',async()=>{
+test('legacy browser dispatcher never bypasses the durable server queue',async()=>{
  const c=client();await c.api.notifyRoomParticipants('ABCDEF',undefined,undefined,'evidence');
- assert.equal(JSON.parse(c.requests[0].options.body).kind,'evidence');
+ assert.equal(c.requests.length,0);
 });

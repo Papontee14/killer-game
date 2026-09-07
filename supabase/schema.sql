@@ -22,11 +22,13 @@ create table if not exists public.rooms (
   approved_attacks_in_window integer not null default 0 check (approved_attacks_in_window >= 0),
   quota_window_start timestamptz not null default (date_trunc('hour', now() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok'),
   police_check_at timestamptz, pending_bomber_id uuid, winner public.winning_team,
+  end_game_result jsonb,
   created_at timestamptz not null default now(), closed_at timestamptz
 );
 -- Existing installations may still have the retired player PIN hash.
 alter table public.rooms drop column if exists host_pin_hash;
 alter table public.rooms drop column if exists player_pin_hash;
+alter table public.rooms add column if not exists end_game_result jsonb;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
   user_id uuid not null references auth.users(id), name text not null, reclaim_token_hash text, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
@@ -195,6 +197,24 @@ create or replace function public.add_event(p_room_id uuid, p_type text, p_messa
 language sql security definer set search_path=public as $$ insert into public.room_events(room_id,type,message,visible_to_player_id) values (p_room_id,p_type,p_message,p_player_id) $$;
 revoke execute on function public.add_event(uuid,text,text,uuid), public.room_for_code(text) from public, anon, authenticated;
 
+-- Capture the immutable public explanation at the same time as the winning state.
+create or replace function public.finalize_game(
+  p_room_id uuid, p_winner public.winning_team, p_reason text,
+  p_actor_player_id uuid default null, p_target_player_id uuid default null,
+  p_affected_player_ids uuid[] default '{}'
+) returns void language plpgsql security definer set search_path=public as $$
+begin
+  update public.rooms
+  set phase='ended', winner=p_winner,
+      end_game_result=jsonb_build_object(
+        'reason', p_reason, 'occurredAt', clock_timestamp(),
+        'actorPlayerId', p_actor_player_id, 'targetPlayerId', p_target_player_id,
+        'affectedPlayerIds', to_jsonb(coalesce(p_affected_player_ids, '{}'::uuid[]))
+      )
+  where id=p_room_id;
+end $$;
+revoke execute on function public.finalize_game(uuid,public.winning_team,text,uuid,uuid,uuid[]) from public,anon,authenticated;
+
 -- Call only after authorizing the caller. Use wall time AFTER obtaining the room lock.
 create or replace function public.advance_due_accusation(p_room_id uuid) returns boolean language plpgsql security definer set search_path=public as $$
 declare r public.rooms;
@@ -247,7 +267,8 @@ begin
   return jsonb_build_object('viewerRole',viewer_role,'playerId',case when is_host then null else me.id end,'code',r.code,'hostName',r.host_name,'phase',r.phase,
     'createdAt',r.created_at,'closedAt',r.closed_at,'killLimit',r.attack_limit,'killsThisHour',case when r.quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') then r.approved_attacks_in_window else 0 end,
     'quotaWindowStart',r.quota_window_start,'policeCheckAt',r.police_check_at,'players',roster,'privateStates',states,'evidences',evidences,'killerEvidenceProgress',progress,'events',events,
-    'endGameSummary',summary,'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id);
+    'endGameSummary',summary,'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id)
+    || case when r.phase='ended' then jsonb_build_object('endGameResult',r.end_game_result) else '{}'::jsonb end;
 end $$;
 
 drop function if exists public.create_room(text,text,text,text);
@@ -376,7 +397,8 @@ begin
   -- An approved attack on the current Police immediately ends the game for City.
   -- It neither changes the Police's hearts nor consumes the hourly kill quota.
   if t.role_current='police' then
-    update public.rooms set phase='ended',winner='city',quota_window_start=window_start where id=r.id;
+    perform public.finalize_game(r.id,'city','police-attacked',e.killer_id,t.player_id,array[t.player_id]);
+    update public.rooms set quota_window_start=window_start where id=r.id;
     perform public.add_event(r.id,'winner','ฝ่ายเมืองชนะ');
     return public.get_room_view(r.code);
   end if;
@@ -406,7 +428,7 @@ begin
     update public.evidence set attack_result=case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end where id=e.id;
     perform public.add_event(r.id,'attack',case when new_hearts=0 then 'elimination confirmed' else 'target is still alive' end,e.killer_id);
     if new_hearts=0 and t.initial_role='bomber' then update public.rooms set phase='bomb-resolution',pending_bomber_id=t.player_id where id=r.id; perform public.add_event(r.id,'bomb',target.name||' ถูกกำจัด — Bomber'); end if;
-    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else update public.rooms set phase='ended',winner='killers' where id=r.id; perform public.add_event(r.id,'winner','ฝ่าย Killer ชนะ'); end if; end if;
+    if new_hearts=0 and t.role_current='police' then select s.* into detective from public.player_secrets s join public.players p on p.id=s.player_id where p.room_id=r.id and s.role_current='detective' and p.health<>'dead' limit 1 for update; if found then update public.player_secrets set role_current='police' where player_id=detective.player_id; perform public.add_event(r.id,'ability','ตำรวจคนใหม่ได้รับตำแหน่งแบบส่วนตัว',detective.player_id); else perform public.finalize_game(r.id,'killers','police-eliminated-no-successor',e.killer_id,t.player_id,array[t.player_id]); perform public.add_event(r.id,'winner','ฝ่าย Killer ชนะ'); end if; end if;
   end if;
   return public.get_room_view(r.code);
 end $$;
@@ -435,7 +457,10 @@ begin
     end if;
   end if;
   update public.rooms set pending_bomber_id=null,phase=case when winning is null then 'active'::room_phase else 'ended'::room_phase end,winner=winning where id=r.id;
-  if winning is not null then perform public.add_event(r.id,'winner',case when winning='city' then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); end if;
+  if winning is not null then
+    perform public.finalize_game(r.id,winning,case when winning='city' then 'bomb-eliminated-all-killers' else 'bomb-eliminated-police-no-successor' end,r.pending_bomber_id,null,p_target_ids);
+    perform public.add_event(r.id,'winner',case when winning='city' then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end);
+  end if;
   return public.get_room_view(r.code);
 end $$;
 
@@ -459,10 +484,10 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 drop function if exists public.start_due_accusations();
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
-  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
+  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; perform public.finalize_game(r.id,case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end,case when target.is_active_killer then 'police-accusation-correct' else 'police-accusation-wrong' end,me.id,target_player.id,array[target_player.id]); perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
 
 create or replace function public.end_game(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active','police-check','bomb-resolution') then raise exception 'not allowed'; end if; update public.rooms set phase='ended' where id=r.id; perform public.add_event(r.id,'system','Host สั่งจบเกม'); return public.get_room_view(r.code); end $$;
+declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active','police-check','bomb-resolution') then raise exception 'not allowed'; end if; perform public.finalize_game(r.id,null,'host-ended'); perform public.add_event(r.id,'system','Host สั่งจบเกม'); return public.get_room_view(r.code); end $$;
 
 create or replace function public.close_room(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;

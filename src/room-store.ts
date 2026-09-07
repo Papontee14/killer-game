@@ -2,6 +2,7 @@ import { ensureAnonymousSession, getSupabaseBrowser } from "./supabase-browser";
 import { notifyRoomParticipants } from "./notifications";
 import type {
   Evidence,
+  EndGameResult,
   KillerEvidenceProgress,
   PrivatePlayerState,
   RoomState,
@@ -149,6 +150,31 @@ function asRoom(value: unknown): RoomState {
           : undefined,
     })),
     winner: (data.winner ?? null) as RoomState["winner"],
+    endGameResult: data.phase === "ended" && (data.endGameResult ?? data.end_game_result)
+      ? (() => {
+          const result = (data.endGameResult ?? data.end_game_result) as Json;
+          const affected = Array.isArray(result.affectedPlayerIds)
+            ? result.affectedPlayerIds
+            : Array.isArray(result.affected_player_ids)
+              ? result.affected_player_ids
+              : [];
+          return {
+            reason: String(result.reason) as EndGameResult["reason"],
+            occurredAt: String(result.occurredAt ?? result.occurred_at ?? new Date().toISOString()),
+            actorPlayerId: result.actorPlayerId
+              ? String(result.actorPlayerId)
+              : result.actor_player_id
+                ? String(result.actor_player_id)
+                : null,
+            targetPlayerId: result.targetPlayerId
+              ? String(result.targetPlayerId)
+              : result.target_player_id
+                ? String(result.target_player_id)
+                : null,
+            affectedPlayerIds: affected.map(String),
+          };
+        })()
+      : undefined,
     endGameSummary: data.phase === "ended"
       ? ((data.endGameSummary ?? []) as Array<Json>).map((item) => ({
           playerId: String(item.playerId),

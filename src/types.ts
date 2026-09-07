@@ -19,6 +19,23 @@ export type EvidenceStatus = "pending" | "approved" | "rejected";
 export type WinningTeam = "city" | "killers" | null;
 export type Team = "city" | "killers";
 
+export type EndGameReason =
+  | "police-accusation-correct"
+  | "police-accusation-wrong"
+  | "police-attacked"
+  | "police-eliminated-no-successor"
+  | "bomb-eliminated-all-killers"
+  | "bomb-eliminated-police-no-successor"
+  | "host-ended";
+
+export type EndGameResult = {
+  reason: EndGameReason;
+  occurredAt: string;
+  actorPlayerId?: string | null;
+  targetPlayerId?: string | null;
+  affectedPlayerIds: string[];
+};
+
 /** Role reveal for authorized room members after the game has ended. */
 export type EndGamePlayerSummary = {
   playerId: string;
@@ -103,6 +120,8 @@ export type RoomState = {
   killerEvidenceProgress: KillerEvidenceProgress[];
   events: RoomEvent[];
   winner: WinningTeam;
+  /** Immutable, public-to-members explanation captured when the game ended. */
+  endGameResult?: EndGameResult;
   endGameSummary: EndGamePlayerSummary[];
   bombTargets: string[];
   pendingBomberId?: string;

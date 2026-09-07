@@ -623,6 +623,49 @@ function Events({
     </>
   );
 }
+function EndGameReasonPanel({ room }: { room: RoomState }) {
+  if (room.phase !== "ended" || !room.endGameResult) return null;
+  const result = room.endGameResult;
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const actor = result.actorPlayerId ? names.get(result.actorPlayerId) : undefined;
+  const target = result.targetPlayerId ? names.get(result.targetPlayerId) : undefined;
+  const affected = result.affectedPlayerIds
+    .map((id) => names.get(id))
+    .filter((name): name is string => Boolean(name));
+  const labels: Record<string, string> = {
+    "police-accusation-correct": "ตำรวจชี้ตัว Killer ถูกต้อง",
+    "police-accusation-wrong": "ตำรวจชี้ตัวผู้บริสุทธิ์ผิด",
+    "police-attacked": "Killer โจมตีตำรวจ",
+    "police-eliminated-no-successor": "ตำรวจถูกกำจัดและไม่มี Detective รับตำแหน่งต่อ",
+    "bomb-eliminated-all-killers": "ระเบิดกำจัด Killer ที่เหลือทั้งหมด",
+    "bomb-eliminated-police-no-successor": "ระเบิดกำจัดตำรวจและไม่มี Detective รับตำแหน่งต่อ",
+    "host-ended": "Host สั่งจบเกม",
+  };
+  const detail = result.reason.startsWith("police-accusation") && actor && target
+      ? `${actor} ชี้ตัว ${target}`
+    : result.reason === "police-attacked" && actor && target
+      ? `${actor} โจมตี ${target}`
+      : result.reason === "police-eliminated-no-successor" && actor && target
+        ? `${target} ถูกกำจัดโดย ${actor}`
+        : affected.length
+          ? `ผู้ได้รับผล: ${affected.join(", ")}`
+          : undefined;
+  return (
+    <div className="game-end-reason" aria-label="Game end reason">
+      <span className="section-kicker">เหตุผลที่เกมจบ</span>
+      <strong>{labels[result.reason] ?? "Game ended"}</strong>
+      {detail && <span>{detail}</span>}
+      <time dateTime={result.occurredAt}>
+        {new Date(result.occurredAt).toLocaleString("th-TH", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "Asia/Bangkok",
+        })}
+      </time>
+    </div>
+  );
+}
+
 function Ended({
   room,
   host = false,
@@ -682,6 +725,7 @@ function PlayerEndGameSummary({
           room={room}
           winner={room.winner && myTeam ? room.winner === myTeam : undefined}
         />
+        <EndGameReasonPanel room={room} />
         <section className="panel" aria-labelledby="end-game-roster-title">
           <div className="panel-heading">
             <div>
@@ -1100,6 +1144,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
             </section>
           )}
           <Ended room={room} host />
+          <EndGameReasonPanel room={room} />
           {room.phase === "lobby" && tab === "players" && (
             <LobbyPlayers room={room} onRemove={(player) => setConfirmation({
               title: "นำผู้เล่นออกจากห้อง",

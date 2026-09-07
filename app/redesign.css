@@ -2161,6 +2161,144 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
     min-width: 0;
   }
 }
+.game-end-reason {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.game-end-reason .section-kicker { font-size: 9px; }
+.game-end-reason strong { color: var(--text); font-size: 14px; }
+.game-end-reason span:not(.section-kicker) { color: var(--muted); font-size: 12px; }
+.game-end-reason time { color: var(--muted); font-size: 10px; }
+
+/* Desktop waiting room: give the lobby breathing room and keep the profile
+   action from squeezing the player's status copy into a single character
+   column. The compact, stacked mobile layout remains unchanged below 760px. */
+@media (min-width: 900px) {
+  .lobby-waiting-screen {
+    padding-inline: clamp(28px, 5vw, 72px) !important;
+  }
+
+  .lobby-waiting-screen .waiting-copy {
+    width: min(100%, 1080px);
+    max-height: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr);
+    grid-template-areas:
+      "kicker roster"
+      "brand roster"
+      "host roster"
+      "hint roster"
+      "status roster"
+      "avatar roster";
+    align-items: center;
+    justify-items: stretch;
+    align-content: center;
+    column-gap: clamp(28px, 5vw, 64px);
+    row-gap: 0;
+    padding-block: 28px;
+  }
+
+  .lobby-waiting-screen .waiting-copy > .section-kicker {
+    grid-area: kicker;
+    margin-bottom: 4px;
+  }
+
+  .lobby-waiting-screen .waiting-copy > h1 {
+    grid-area: brand;
+    width: auto;
+    margin: 8px 0 12px;
+    text-align: left;
+  }
+
+  .lobby-waiting-screen .waiting-copy > h1 .killer-logo {
+    font-size: clamp(64px, 7vw, 96px);
+  }
+
+  .lobby-waiting-screen .waiting-copy > p:not(.muted) {
+    grid-area: host;
+    margin: 0 0 4px;
+    text-align: left;
+    font-size: 16px;
+  }
+
+  .lobby-waiting-screen .waiting-copy > p.muted {
+    grid-area: hint;
+    margin: 0 0 16px;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .lobby-waiting-screen .waiting-status {
+    grid-area: status;
+    justify-self: start;
+    width: min(100%, 360px);
+    margin-bottom: 16px;
+  }
+
+  .lobby-waiting-screen .waiting-avatar {
+    grid-area: avatar;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 14px;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .lobby-waiting-screen .waiting-avatar > div {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .lobby-waiting-screen .waiting-avatar .primary-action {
+    width: auto;
+    min-width: 176px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .lobby-waiting-screen .waiting-roster {
+    grid-area: roster;
+    align-self: stretch;
+    width: 100%;
+    max-height: min(68svh, 660px);
+    margin: 0;
+    padding: 18px;
+    overflow-y: auto;
+    background: #0d1912ee;
+    box-shadow: 0 18px 42px rgb(0 0 0 / 28%);
+  }
+
+  .lobby-waiting-screen .waiting-roster .players-grid {
+    gap: 8px;
+  }
+
+  .lobby-waiting-screen .waiting-roster .player-card {
+    min-height: 60px;
+    padding: 9px;
+  }
+}
+
+/* Small desktop/tablet widths use the single-column composition, but still
+   reserve a full row for the profile action so its copy remains readable. */
+@media (min-width: 761px) and (max-width: 899px) {
+  .lobby-waiting-screen .waiting-avatar {
+    flex-wrap: wrap;
+  }
+
+  .lobby-waiting-screen .waiting-avatar > div {
+    flex: 1 1 calc(100% - 76px);
+  }
+
+  .lobby-waiting-screen .waiting-avatar .primary-action {
+    width: 100%;
+    flex-basis: 100%;
+  }
+}
 
 /* Player controls share one compact row, including on the results screen. */
 @media (max-width: 760px) {

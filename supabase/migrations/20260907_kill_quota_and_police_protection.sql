@@ -1,5 +1,6 @@
 -- Existing column names are retained so deployed rooms can be upgraded in place.
 -- They now track kills in the Bangkok hourly bucket, rather than approvals.
+alter table public.rooms add column if not exists end_game_result jsonb;
 update public.rooms r
 set approved_attacks_in_window = coalesce((
   select count(*)
@@ -15,6 +16,20 @@ set approved_attacks_in_window = coalesce((
 ),0),
 quota_window_start=date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok',
 attack_limit=case when exists(select 1 from public.player_secrets s where s.player_id in (select p.id from public.players p where p.room_id=r.id) and s.initial_role='killer-wife' and s.is_active_killer) then 3 else 2 end;
+
+create or replace function public.finalize_game(
+  p_room_id uuid, p_winner public.winning_team, p_reason text,
+  p_actor_player_id uuid default null, p_target_player_id uuid default null,
+  p_affected_player_ids uuid[] default '{}'
+) returns void language plpgsql security definer set search_path=public as $$
+begin
+  update public.rooms set phase='ended', winner=p_winner,
+    end_game_result=jsonb_build_object('reason',p_reason,'occurredAt',clock_timestamp(),
+      'actorPlayerId',p_actor_player_id,'targetPlayerId',p_target_player_id,
+      'affectedPlayerIds',to_jsonb(coalesce(p_affected_player_ids,'{}'::uuid[])))
+  where id=p_room_id;
+end $$;
+revoke execute on function public.finalize_game(uuid,public.winning_team,text,uuid,uuid,uuid[]) from public,anon,authenticated;
 
 create or replace function public.get_room_view(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; is_host boolean; viewer_role text; states jsonb; roster jsonb; events jsonb; evidences jsonb; progress jsonb := '[]'::jsonb; summary jsonb := '[]'::jsonb;
@@ -75,4 +90,90 @@ end $$;
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id; if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
 
+notify pgrst, 'reload schema';
+
+-- Backfill structured end results around the legacy game RPCs while keeping
+-- their battle-tested validation and state transitions intact.
+do $$ begin
+  if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_room_view_legacy') then alter function public.get_room_view(text) rename to get_room_view_legacy; end if;
+  if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='approve_evidence_legacy') then alter function public.approve_evidence(text,uuid) rename to approve_evidence_legacy; end if;
+  if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='resolve_police_check_legacy') then alter function public.resolve_police_check(text,uuid) rename to resolve_police_check_legacy; end if;
+  if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='resolve_bomb_legacy') then alter function public.resolve_bomb(text,uuid[]) rename to resolve_bomb_legacy; end if;
+  if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='end_game_legacy') then alter function public.end_game(text) rename to end_game_legacy; end if;
+end $$;
+
+create or replace function public.get_room_view(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
+declare result jsonb; end_result jsonb;
+begin
+  -- Preserve the latest killLimit payload from the legacy view.
+  result := public.get_room_view_legacy(p_code);
+  if result is null or result->>'phase' <> 'ended' then return result; end if;
+  select r.end_game_result into end_result from public.rooms r where r.code=upper(trim(p_code));
+  return result || jsonb_build_object('endGameResult',end_result);
+end $$;
+
+create or replace function public.approve_evidence(p_code text,p_evidence_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
+declare result jsonb; r public.rooms; e public.evidence; target_role text;
+begin
+  -- The legacy function enforces hourly kill quota reached before this wrapper runs.
+  result := public.approve_evidence_legacy(p_code,p_evidence_id);
+  if result->>'phase'='ended' then
+    select * into r from public.rooms where code=upper(trim(p_code));
+    if r.end_game_result is null then
+      select * into e from public.evidence where id=p_evidence_id;
+      select s.role_current into target_role from public.player_secrets s where s.player_id=e.target_id;
+      if e.id is not null then
+        update public.rooms set end_game_result=jsonb_build_object(
+          'reason',case when r.winner='city' then 'police-attacked' else 'police-eliminated-no-successor' end,
+          'occurredAt',clock_timestamp(),'actorPlayerId',e.killer_id,
+          'targetPlayerId',e.target_id,'affectedPlayerIds',to_jsonb(array[e.target_id]::uuid[])) where id=r.id;
+      end if;
+    end if;
+  end if;
+  return public.get_room_view(p_code);
+end $$;
+
+create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
+declare result jsonb; r public.rooms; me public.players; target public.player_secrets;
+begin
+  -- The legacy function accepts r.phase in ('active','police-check').
+  select * into r from public.rooms where code=upper(trim(p_code));
+  select * into me from public.players where room_id=r.id and user_id=auth.uid();
+  select * into target from public.player_secrets where player_id=p_target_id;
+  result := public.resolve_police_check_legacy(p_code,p_target_id);
+  if result->>'phase'='ended' then
+    update public.rooms set end_game_result=jsonb_build_object(
+      'reason',case when target.is_active_killer then 'police-accusation-correct' else 'police-accusation-wrong' end,
+      'occurredAt',clock_timestamp(),'actorPlayerId',me.id,
+      'targetPlayerId',p_target_id,'affectedPlayerIds',to_jsonb(array[p_target_id]::uuid[])) where id=r.id and end_game_result is null;
+  end if;
+  return public.get_room_view(p_code);
+end $$;
+
+create or replace function public.resolve_bomb(p_code text,p_target_ids uuid[]) returns jsonb language plpgsql security definer set search_path=public as $$
+declare result jsonb; r public.rooms; bomber uuid;
+begin
+  select * into r from public.rooms where code=upper(trim(p_code)); bomber:=r.pending_bomber_id;
+  result := public.resolve_bomb_legacy(p_code,p_target_ids);
+  if result->>'phase'='ended' then
+    update public.rooms set end_game_result=jsonb_build_object(
+      'reason',case when result->>'winner'='city' then 'bomb-eliminated-all-killers' else 'bomb-eliminated-police-no-successor' end,
+      'occurredAt',clock_timestamp(),'actorPlayerId',bomber,
+      'targetPlayerId',null,'affectedPlayerIds',to_jsonb(coalesce(p_target_ids,'{}'::uuid[])))
+      where id=r.id and end_game_result is null;
+  end if;
+  return public.get_room_view(p_code);
+end $$;
+
+create or replace function public.end_game(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
+declare result jsonb;
+begin
+  result := public.end_game_legacy(p_code);
+  update public.rooms set end_game_result=jsonb_build_object('reason','host-ended','occurredAt',clock_timestamp(),'actorPlayerId',null,'targetPlayerId',null,'affectedPlayerIds','[]'::jsonb)
+    where code=upper(trim(p_code)) and phase='ended' and end_game_result is null;
+  return public.get_room_view(p_code);
+end $$;
+
+revoke execute on function public.get_room_view_legacy(text),public.approve_evidence_legacy(text,uuid),public.resolve_police_check_legacy(text,uuid),public.resolve_bomb_legacy(text,uuid[]),public.end_game_legacy(text) from public,anon,authenticated;
+grant execute on function public.get_room_view(text),public.approve_evidence(text,uuid),public.resolve_police_check(text,uuid),public.resolve_bomb(text,uuid[]),public.end_game(text) to authenticated;
 notify pgrst, 'reload schema';

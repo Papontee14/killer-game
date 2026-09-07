@@ -144,26 +144,13 @@ function useRoom(code: string) {
   );
   useEffect(() => {
     let stopped = false;
-    let lastEventCount: number | null = null;
-    let lastPhase: string | null = null;
 
-    const refreshIfLive = async (isSignal = false) => {
+    const refreshIfLive = async () => {
       try {
         const next = await loadRoom(code);
         if (!stopped) {
-          // If backgrounded or updated via signal with new event or phase change, notify mobile user generically
-          if (isSignal && next) {
-            const hasNewEvent =
-              lastEventCount !== null && next.events.length > lastEventCount;
-            const hasNewPhase = lastPhase !== null && next.phase !== lastPhase;
-            if (hasNewEvent || hasNewPhase) {
-              void showGenericNotification();
-            }
-          }
-          if (next) {
-            lastEventCount = next.events.length;
-            lastPhase = next.phase;
-          }
+          // Realtime updates the open view only. Web Push is the single mobile
+          // notification path, so a delayed push cannot duplicate this update.
           replaceRoom(next);
           setStale(false);
         }
@@ -173,15 +160,15 @@ function useRoom(code: string) {
         if (!stopped) setInitialLoadComplete(true);
       }
     };
-    refreshIfLive(false);
-    const timer = window.setInterval(() => void refreshIfLive(false), 15000);
+    refreshIfLive();
+    const timer = window.setInterval(() => void refreshIfLive(), 15000);
     const supabase = getSupabaseBrowser();
     const channel = supabase
       ?.channel(`room-signal-${code}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "room_signals" },
-        () => void refreshIfLive(true),
+        () => void refreshIfLive(),
       )
       .subscribe();
     return () => {
@@ -363,8 +350,8 @@ function errorMessage(error: unknown, fallback: string) {
     "target is dead": "เป้าหมายถูกกำจัดแล้ว กรุณาเลือกผู้เล่นใหม่",
     "evidence is no longer pending":
       "หลักฐานนี้ถูกจัดการแล้ว หรือเกมเปลี่ยนช่วง กรุณาตรวจสอบคิวอีกครั้ง",
-    "hourly approved attack quota reached":
-      "โควต้าอนุมัติเต็มแล้ว รอขึ้นชั่วโมงใหม่เวลาไทย",
+    "hourly kill quota reached":
+      "โควต้าคิลเต็มแล้ว อนุมัติได้เฉพาะภาพที่ไม่ทำให้เป้าหมายตายจนกว่าจะขึ้นชั่วโมงใหม่เวลาไทย",
     "killer ability unavailable": "ใช้ความสามารถ Killer ไม่ได้ในสถานะปัจจุบัน",
     "killer is not active": "ผู้ส่งหลักฐานไม่สามารถโจมตีได้แล้ว",
     "evidence is not allowed, missing, or stale":
@@ -1265,12 +1252,12 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   <span>คนในห้อง</span>
                 </div>
                 <div className="metric-card">
-                  <small>โควต้าอนุมัติคงเหลือ</small>
+                  <small>โควต้าคิล</small>
                   <strong>
-                    {Math.max(0, room.attackLimit - room.attacksThisHour)}
-                    <em>/{room.attackLimit}</em>
+                    {room.killsThisHour}
+                    <em>/{room.killLimit}</em>
                   </strong>
-                  <span>ภาพในชั่วโมงนี้ · เวลาไทย</span>
+                  <span>คิลในชั่วโมงนี้ · เวลาไทย</span>
                 </div>
                 <div className="metric-card">
                   <small>หลักฐานรอตรวจ</small>
@@ -1354,9 +1341,9 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                     {pending.length} รอตรวจ
                   </span>
                 </div>
-                {room.attacksThisHour >= room.attackLimit && (
+                {room.killsThisHour >= room.killLimit && (
                   <p className="amber-text">
-                    โควต้าเต็ม · รอขึ้นชั่วโมงใหม่เวลาไทยจึงอนุมัติได้
+                    โควต้าคิลเต็ม · อนุมัติได้เฉพาะภาพที่ไม่ทำให้เป้าหมายตาย
                   </p>
                 )}
                 {room.phase !== "active" && (
@@ -1428,12 +1415,17 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                               timeZone: "Asia/Bangkok",
                             })}
                           </small>
+                          {room.privateStates[item.targetId]?.currentRole ===
+                            "police" && (
+                            <p className="danger-text">
+                              หากอนุมัติการโจมตีตำรวจ ฝ่ายเมืองจะชนะทันที
+                            </p>
+                          )}
                           <div className="evidence-actions">
                             <button
                               className="approve-action"
                               disabled={
                                 busy ||
-                                room.attacksThisHour >= room.attackLimit ||
                                 room.phase !== "active" ||
                                 !item.imageData
                               }
@@ -1855,10 +1847,6 @@ export function PlayerRoom({
     );
   }
   const isKiller = me.isActiveKiller;
-  const quotaExhausted =
-    isKiller &&
-    room.phase === "active" &&
-    room.attacksThisHour >= room.attackLimit;
   const target = room.players.find(
     (player) =>
       player.id === targetId &&
@@ -1911,8 +1899,7 @@ export function PlayerRoom({
         !currentMe?.isActiveKiller ||
         !currentPlayer ||
         currentPlayer?.health === "dead" ||
-        !currentTarget ||
-        current.attacksThisHour >= current.attackLimit
+        !currentTarget
       ) {
         if (current) setRoom(current);
         clearPhoto();
@@ -1930,7 +1917,7 @@ export function PlayerRoom({
     }
   };
   const sendEvidence = async () => {
-    if (!photo || !target || !capturedAt || submittingEvidence || quotaExhausted) return;
+    if (!photo || !target || !capturedAt || submittingEvidence) return;
     if (Date.now() - new Date(capturedAt).getTime() >= 120000) {
       setError("รูปเกิน 2 นาทีแล้ว กรุณาถ่ายใหม่");
       return;
@@ -1942,7 +1929,7 @@ export function PlayerRoom({
       setRoom(next);
       void refresh();
       clearPhoto();
-      setToast("ส่งแล้ว · รอ Host ตรวจ รูปที่ส่งสำเร็จจะไม่หมดอายุ");
+      setToast("ส่งแล้ว · รอ Host ตรวจหลักฐานการโจมตีผู้เล่น");
     } catch (e) {
       setError(errorMessage(e, "ส่งหลักฐานไม่สำเร็จ"));
     } finally {
@@ -2108,15 +2095,15 @@ export function PlayerRoom({
           )}
           {isKiller && (
             <div className="panel quota-panel">
-              <span className="section-kicker">โควต้าอนุมัติชั่วโมงนี้</span>
+              <span className="section-kicker">โควต้าคิลชั่วโมงนี้</span>
               <h2>
-                ส่งได้อีก {Math.max(0, room.attackLimit - room.attacksThisHour)} ภาพที่อนุมัติ
+                ใช้คิลแล้ว {room.killsThisHour} / {room.killLimit} คน
               </h2>
-              <p>อนุมัติแล้ว {room.attacksThisHour} / {room.attackLimit} ภาพ · ใช้ร่วมกับทีม Killer</p>
+              <p>ใช้ร่วมกับทีม Killer · ภาพที่ไม่ทำให้เป้าหมายตายยังอนุมัติได้</p>
               <div className="quota-meter">
                 <span
                   style={{
-                    width: `${Math.min(100, (room.attacksThisHour / room.attackLimit) * 100)}%`,
+                    width: `${Math.min(100, (room.killsThisHour / room.killLimit) * 100)}%`,
                   }}
                 />
               </div>
@@ -2129,7 +2116,7 @@ export function PlayerRoom({
                   hour: "2-digit",
                   minute: "2-digit",
                 })}{" "}
-                น. เวลาไทย · นับภาพอนุมัติ ไม่ใช่จำนวนผู้ถูกกำจัด
+                น. เวลาไทย · นับเฉพาะคิล
               </p>
             </div>
           )}
@@ -2145,14 +2132,14 @@ export function PlayerRoom({
               <Hearts count={me.hearts} max={me.maxHearts} />
             </div>
           )}
-          {quotaExhausted && (
+          {isKiller && room.killsThisHour >= room.killLimit && (
             <div className="quota-cooldown-notice">
               <Clock3 size={24} />
               <div>
                 <span className="section-kicker">โควต้าชั่วโมงนี้เต็มแล้ว</span>
-                <strong>โควต้าภาพอนุมัติเต็มแล้ว</strong>
+                <strong>โควต้าคิลเต็มแล้ว</strong>
                 <p>
-                  ไม่สามารถถ่ายหรือส่งรูปได้ กรุณารอรีเซ็ตโควต้าเมื่อขึ้นชั่วโมงใหม่ตามเวลาไทย
+                  ยังส่งหลักฐานและโจมตีที่ไม่ถึงตายได้ กรุณารอคิลถัดไปเมื่อขึ้นชั่วโมงใหม่ตามเวลาไทย
                 </p>
               </div>
             </div>
@@ -2165,8 +2152,7 @@ export function PlayerRoom({
                   <h2>{photo ? "ตรวจภาพและส่ง" : target ? "ถ่ายภาพเป้าหมาย" : "เลือกเป้าหมาย"}</h2>
                 </div>
                 <span className="quota">
-                  {Math.max(0, room.attackLimit - room.attacksThisHour)}{" "}
-                  ภาพอนุมัติคงเหลือ
+                  {room.killsThisHour} / {room.killLimit} คิล
                 </span>
               </div>
               <ol className="mission-steps" aria-label="ขั้นตอนภารกิจ">
@@ -2185,7 +2171,7 @@ export function PlayerRoom({
                   clearPhoto();
                   setTargetId(e.target.value);
                 }}
-                disabled={submittingEvidence || quotaExhausted}
+                disabled={submittingEvidence}
               >
                 <option value="">เลือกผู้เล่น...</option>
                 {room.players
@@ -2220,7 +2206,7 @@ export function PlayerRoom({
               </div>
               {!target && <p className="muted">เลือกเป้าหมายก่อนเปิดกล้อง</p>}
               <NativeCamera
-                disabled={submittingEvidence || quotaExhausted || !target || tab !== "home"}
+                disabled={submittingEvidence || !target || tab !== "home"}
                 onOpen={() => {
                   cameraTargetRef.current = target?.id ?? null;
                   setError("");
@@ -2234,7 +2220,7 @@ export function PlayerRoom({
                   <button
                     type="button"
                     className="preview-remove"
-                    disabled={submittingEvidence || quotaExhausted}
+                    disabled={submittingEvidence}
                     onClick={clearPhoto}
                     aria-label="ลบรูปและถ่ายใหม่"
                   >
@@ -2254,7 +2240,6 @@ export function PlayerRoom({
                   !photo ||
                   !capturedAt ||
                   photoSeconds <= 0 ||
-                  quotaExhausted ||
                   submittingEvidence
                 }
                 onClick={sendEvidence}
@@ -2268,7 +2253,7 @@ export function PlayerRoom({
           )}
           {me.currentRole === "police" &&
             mine?.health !== "dead" &&
-            room.phase === "police-check" && (
+            ["active", "police-check"].includes(room.phase) && (
               <div className="panel action-panel">
                 <Shield size={19} />
                 <h2>ชี้ตัวผู้ต้องสงสัย</h2>

@@ -9,6 +9,10 @@ export type RoomNotificationKind =
   | 'evidence'
   | 'police-reminder';
 
+function newNotificationId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
 export const POLICE_CHECK_REMINDER =
   '\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35';
 export const EVIDENCE_RECEIVED =
@@ -116,9 +120,14 @@ export function schedulePoliceCheckReminder(
     } catch {
       // Still show the notification when storage is unavailable.
     }
-    void showGenericNotification(POLICE_CHECK_REMINDER);
     if (isHost) {
-      void notifyRoomParticipants(code, undefined, undefined, 'police-reminder');
+      void notifyRoomParticipants(
+        code,
+        undefined,
+        undefined,
+        'police-reminder',
+        `police-reminder:${code}:${policeCheckAt}`,
+      );
     }
   };
 
@@ -202,13 +211,20 @@ export async function notifyRoomParticipants(
   excludeUserId?: string,
   targetUserId?: string,
   kind: RoomNotificationKind = 'generic',
+  notificationId = newNotificationId(),
 ) {
   try {
     await fetch('/api/push/send', {
       method: 'POST',
       keepalive: true,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, excludeUserId, targetUserId, kind }),
+      body: JSON.stringify({
+        code,
+        excludeUserId,
+        targetUserId,
+        kind,
+        notificationId,
+      }),
     });
   } catch {
     // Non-blocking background call

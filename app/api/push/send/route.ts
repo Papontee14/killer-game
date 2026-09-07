@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { code, excludeUserId, targetUserId, kind = 'generic' } = body;
+    const { code, excludeUserId, targetUserId, kind = 'generic', notificationId } = body;
     if (!code) {
       return NextResponse.json({ error: 'Missing room code' }, { status: 400 });
     }
@@ -98,7 +98,10 @@ export async function POST(req: Request) {
     const payload = JSON.stringify({
       title: 'KILLER',
       body: 'มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด',
-      tag: 'killer-event',
+      notificationId:
+        typeof notificationId === 'string' && notificationId.length > 0
+          ? notificationId
+          : crypto.randomUUID(),
       url: `/room/${encodeURIComponent(String(code).trim().toUpperCase())}`,
     });
     const outgoingPayload = notificationBody

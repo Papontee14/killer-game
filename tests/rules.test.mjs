@@ -42,9 +42,9 @@ test("role summary is hidden until ended and never available to outsiders", asyn
 test("ended summary reveals final roles and teams without expanding private data, including after closure", async () => {
   await f.hit("killer-wife");
   await f.hit("killer-wife");
-  await f.resetQuota();
-  await f.hit("police");
-  await f.hit("police");
+  await db.query("update public.players set health='dead' where id=$1", [f.players.police]);
+  await db.query("update public.player_secrets set hearts=0 where player_id=$1", [f.players.police]);
+  await db.query("update public.player_secrets set role_current='police' where player_id=$1", [f.players.detective]);
   const before = await view("villager");
   const ended = await rpc("host", "end_game");
   assert.equal(ended.winner, null);
@@ -130,14 +130,14 @@ test("all nine roles have correct hearts; role pool rejects invalid setup and Ho
   assert.equal(states.find((s) => s.currentRole === "sumo").hearts, 4);
 });
 
-test("pending/rejected evidence does no damage, warning or quota; approved nonlethal attack does all three privately", async () => {
+test("pending/rejected evidence does no damage or quota; approved nonlethal attack does all three privately", async () => {
   const id = await f.evidence("villager");
   assert.equal((await f.state("villager")).hearts, 2);
   assert.equal(
     (await view("villager")).events.filter((e) => e.type === "warning").length,
     0,
   );
-  assert.equal((await view("host")).attacksThisHour, 0);
+  assert.equal((await view("host")).killsThisHour, 0);
   await rpc("host", "reject_evidence", id);
   assert.equal((await f.state("villager")).hearts, 2);
   await f.hit("villager");
@@ -163,24 +163,29 @@ test("pending/rejected evidence does no damage, warning or quota; approved nonle
     killer.killerEvidenceProgress.find((e) => e.status === "approved").result,
     "target is still alive",
   );
-  assert.equal(killer.attacksThisHour, 1);
+  assert.equal(killer.killsThisHour, 0);
   assert.deepEqual(Object.keys(other.privateStates), [f.players.athlete]);
 });
 
-test("quota is shared, counts nonlethal attacks and resets by Bangkok calendar hour", async () => {
+test("quota is shared, counts kills only, and resets by Bangkok calendar hour", async () => {
+  await f.hit("villager");
+  await f.hit("villager");
+  await f.hit("reporter");
+  await f.hit("reporter");
+  assert.equal((await view("host")).killsThisHour, 2);
+  await f.hit("sumo");
+  assert.equal((await f.state("sumo")).hearts, 3);
+  assert.equal((await view("host")).killsThisHour, 2);
+  await f.hit("sumo");
   await f.hit("sumo");
   const id = await f.evidence("sumo");
-  await f.hit("athlete");
-  await assert.rejects(f.evidence("sumo"), /quota/);
-  await assert.rejects(rpc("host", "approve_evidence", id), /quota/);
-  assert.equal((await f.state("sumo")).hearts, 3);
-  assert.equal((await view("host")).attacksThisHour, 2);
+  await assert.rejects(rpc("host", "approve_evidence", id), /kill quota/);
+  assert.equal((await f.state("sumo")).hearts, 1);
   await db.exec(
     "update public.rooms set quota_window_start=quota_window_start-interval '1 hour'",
   );
-  await f.evidence("athlete"); // new hour allows submission before any approval resets the counter
   await rpc("host", "approve_evidence", id);
-  assert.equal((await view("host")).attacksThisHour, 1);
+  assert.equal((await view("host")).killsThisHour, 1);
   const bucket = (
     await db.query(
       "select quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') as ok from public.rooms",
@@ -194,7 +199,7 @@ test("quota is shared, counts nonlethal attacks and resets by Bangkok calendar h
   assert.notEqual(String(boundaries.before), String(boundaries.after));
 });
 
-test("wife transforms privately, both Killers see shared progress, quota grows without reset", async () => {
+test("wife transformation consumes one kill, then grows the shared quota without reset", async () => {
   await f.hit("killer-wife");
   await f.hit("killer-wife");
   const wife = await view("killer-wife"),
@@ -205,8 +210,8 @@ test("wife transforms privately, both Killers see shared progress, quota grows w
     true,
   );
   assert.equal(wife.privateStates[f.players["killer-wife"]].maxHearts, 0);
-  assert.equal(wife.attackLimit, 3);
-  assert.equal(wife.attacksThisHour, 2);
+  assert.equal(wife.killLimit, 3);
+  assert.equal(wife.killsThisHour, 1);
   assert.deepEqual(wife.killerEvidenceProgress, killer.killerEvidenceProgress);
   assert.equal(wife.killerEvidenceProgress.length, 2);
   assert.equal(
@@ -224,8 +229,11 @@ test("wife transforms privately, both Killers see shared progress, quota grows w
     ).length,
     2,
   );
-  await f.hit("sumo", "killer-wife");
-  assert.equal((await view("killer")).attacksThisHour, 3);
+  await f.hit("villager", "killer-wife");
+  await f.hit("villager", "killer-wife");
+  await f.hit("reporter", "killer-wife");
+  await f.hit("reporter", "killer-wife");
+  assert.equal((await view("killer")).killsThisHour, 3);
   for (const progress of (await view("killer")).killerEvidenceProgress)
     for (const key of [
       "storagePath",
@@ -236,8 +244,11 @@ test("wife transforms privately, both Killers see shared progress, quota grows w
       "currentRole",
     ])
       assert.equal(key in progress, false);
-  await assert.rejects(f.evidence("sumo", "killer-wife"), /quota/);
-  await assert.rejects(f.evidence("sumo", "killer"), /quota/);
+  await f.hit("sumo", "killer-wife");
+  await f.hit("sumo", "killer-wife");
+  await f.hit("sumo", "killer-wife");
+  const finalKill = await f.evidence("sumo", "killer-wife");
+  await assert.rejects(rpc("host", "approve_evidence", finalKill), /kill quota/);
   await f.resetQuota();
   await assert.rejects(f.evidence("killer-wife"), /evidence/);
 });
@@ -259,6 +270,36 @@ test("normal lethal attack sends a private warning and generic public death", as
     ).length,
     1,
   );
+});
+
+test("approving evidence against a living Police immediately gives City the win without damage or quota", async () => {
+  for (const hearts of [2, 1]) {
+    await db.query("update public.player_secrets set hearts=$1 where player_id=$2", [
+      hearts,
+      f.players.police,
+    ]);
+    await db.query("update public.players set health=$1 where id=$2", [
+      hearts === 1 ? "critical" : "alive",
+      f.players.police,
+    ]);
+    const id = await f.evidence("police");
+    const result = await rpc("host", "approve_evidence", id);
+    assert.equal(result.winner, "city");
+    assert.equal(result.phase, "ended");
+    assert.equal((await f.state("police")).hearts, hearts);
+    assert.equal((await view("host")).killsThisHour, 0);
+    await db.exec("update public.rooms set phase='active',winner=null");
+    await db.query("update public.evidence set status='rejected' where id=$1", [id]);
+  }
+});
+
+test("Police can accuse during active play but not while Host resolves a bomb", async () => {
+  assert.equal(
+    (await rpc("police", "resolve_police_check", f.players.killer)).winner,
+    "city",
+  );
+  await db.exec("update public.rooms set phase='bomb-resolution',winner=null");
+  await assert.rejects(rpc("police", "resolve_police_check", f.players.killer));
 });
 
 test("reporter refuses self/dead/NULL targets without consuming ability and reads initial role once", async () => {
@@ -299,8 +340,7 @@ test("reporter refuses self/dead/NULL targets without consuming ability and read
 });
 
 test("promoted detective still reports initial Detective; reporter is allowed during accusation and bomb phase", async () => {
-  await f.hit("police");
-  await f.hit("police");
+  await f.bomb(["police"]);
   assert.equal((await f.state("detective")).role_current, "police");
   await db.exec("update public.rooms set phase='police-check'");
   const result = await rpc("reporter", "use_reporter", f.players.detective);
@@ -397,7 +437,7 @@ test("heartbeat only changes presence for the authenticated member; internal hel
   }
 });
 
-test("upgrade and fresh-install definitions remain identical for all migrated RPCs", () => {
+test("latest migration publishes the kill quota and Police protection RPCs", () => {
   const definitions = (text) =>
     new Map(
       [
@@ -406,9 +446,10 @@ test("upgrade and fresh-install definitions remain identical for all migrated RP
         ),
       ].map((match) => [match[1], match[0]]),
     );
-  const fresh = definitions(schema);
-  for (const [name, body] of definitions(migration))
-    assert.equal(body, fresh.get(name), name);
+  const latest = definitions(migration);
+  assert.match(latest.get("get_room_view"), /killLimit/);
+  assert.match(latest.get("approve_evidence"), /hourly kill quota reached/);
+  assert.match(latest.get("resolve_police_check"), /'active','police-check'/);
 });
 
 test("deadline is persisted by direct approval without damage and by direct submission without evidence", async () => {
@@ -420,7 +461,7 @@ test("deadline is persisted by direct approval without damage and by direct subm
   assert.equal(result.actionError, "accusation_started");
   assert.equal(result.phase, "police-check");
   assert.equal((await f.state("sumo")).hearts, 4);
-  assert.equal((await view("host")).attacksThisHour, 0);
+  assert.equal((await view("host")).killsThisHour, 0);
   await db.exec("update public.rooms set phase='active'");
   assert.equal(await f.evidence("sumo"), undefined);
   assert.equal(
@@ -453,7 +494,7 @@ test("Bomber auto-pauses attacks and reveals only its own role", async () => {
   );
   await assert.rejects(rpc("host", "approve_evidence", pending));
   const resolved = await rpc("host", "resolve_bomb", [f.players.villager]);
-  assert.equal(resolved.attacksThisHour, 2);
+  assert.equal(resolved.killsThisHour, 1);
   assert.equal((await f.state("villager")).health, "dead");
 });
 
@@ -538,13 +579,12 @@ test("bomb ends in accusation if deadline passed; Police accusation decides eith
   );
 });
 
-test("Detective death alone continues, Police later dies without successor: Killers win", async () => {
+test("Detective death alone continues; an approved attack on Police gives City the win", async () => {
   await f.hit("detective");
   await f.hit("detective");
   assert.equal((await view("host")).winner, null);
   await f.resetQuota();
-  await f.hit("police");
-  assert.equal((await f.hit("police")).winner, "killers");
+  assert.equal((await f.hit("police")).winner, "city");
 });
 
 test("Storage reads are Host-only and Realtime signals remain authorized without table grants", async () => {

@@ -84,9 +84,11 @@ function asRoom(value: unknown): RoomState {
       data.closedAt || data.closed_at
         ? String(data.closedAt ?? data.closed_at)
         : undefined,
-    attackLimit: Number(data.attackLimit ?? data.attack_limit ?? 2),
-    attacksThisHour: Number(
-      data.attacksThisHour ??
+    killLimit: Number(data.killLimit ?? data.kill_limit ?? data.attackLimit ?? data.attack_limit ?? 2),
+    killsThisHour: Number(
+      data.killsThisHour ??
+        data.kills_in_window ??
+        data.attacksThisHour ??
         data.approvedAttacksInWindow ??
         data.approved_attacks_in_window ??
         0,
@@ -364,8 +366,6 @@ export async function submitEvidence(
   if (!userId) throw new Error("เซสชันหมดอายุ กรุณาเข้าใหม่");
   const current = await rpcView(code);
   if (!current) throw new Error("ไม่พบห้องนี้");
-  if (current.attacksThisHour >= current.attackLimit)
-    throw new Error("hourly approved attack quota reached");
   const storagePath = `${userId}/${crypto.randomUUID()}.${imageExtension(image)}`;
   const uploaded = await supabase.storage
     .from("evidence")

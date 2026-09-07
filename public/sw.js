@@ -1,8 +1,48 @@
-const CACHE = "killer-shell-v3";
+const CACHE = "killer-shell-v4";
 const SHELL = ["/", "/manifest.webmanifest"];
 const POLICE_CHECK_REMINDER = "\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35";
 const EVIDENCE_RECEIVED = "\u0e21\u0e35\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\u0e43\u0e2b\u0e21\u0e48\u0e23\u0e2d Host \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a";
 const GENERIC_NOTIFICATION_BODY = "มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด";
+const NOTIFICATION_DB = "killer-notification-dedup";
+const NOTIFICATION_STORE = "seen";
+const NOTIFICATION_TTL = 24 * 60 * 60 * 1000;
+
+function claimNotification(notificationId) {
+  if (!notificationId || typeof indexedDB === "undefined") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const request = indexedDB.open(NOTIFICATION_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(NOTIFICATION_STORE, { keyPath: "id" });
+    request.onerror = () => resolve(true);
+    request.onsuccess = () => {
+      const db = request.result;
+      let claimed = false;
+      try {
+        const tx = db.transaction(NOTIFICATION_STORE, "readwrite");
+        const store = tx.objectStore(NOTIFICATION_STORE);
+        const now = Date.now();
+        const lookup = store.get(notificationId);
+        lookup.onsuccess = () => {
+          if (!lookup.result) {
+            claimed = true;
+            store.put({ id: notificationId, seenAt: now });
+          }
+        };
+        const cursor = store.openCursor();
+        cursor.onsuccess = () => {
+          const item = cursor.result;
+          if (!item) return;
+          if (item.value.seenAt < now - NOTIFICATION_TTL) item.delete();
+          item.continue();
+        };
+        tx.oncomplete = () => { db.close(); resolve(claimed); };
+        tx.onerror = () => { db.close(); resolve(true); };
+      } catch (_) {
+        db.close();
+        resolve(true);
+      }
+    };
+  });
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
@@ -32,20 +72,23 @@ self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data?.json() || {}; } catch (_) {}
   const requestedBody = typeof data.body === "string" ? data.body : "";
+  const notificationId = typeof data.notificationId === "string" ? data.notificationId : "";
   const body = [POLICE_CHECK_REMINDER, EVIDENCE_RECEIVED].includes(requestedBody)
     ? requestedBody
     : GENERIC_NOTIFICATION_BODY;
-  event.waitUntil(self.registration.showNotification("KILLER", {
-    body,
-    tag: "killer-event",
-    icon: "/icon-192.png?v=8bit-1",
-    badge: '/notification-badge.png?v=8bit-1',
-    // These options request the most prominent web notification available.
-    silent: false,
-    renotify: true,
-    requireInteraction: true,
-    vibrate: [200, 100, 200],
-    data: { url: typeof data.url === "string" ? data.url : "/" },
+  event.waitUntil(claimNotification(notificationId).then((claimed) => {
+    if (!claimed) return undefined;
+    return self.registration.showNotification("KILLER", {
+      body,
+      tag: notificationId ? `killer-event:${notificationId}` : "killer-event",
+      icon: "/icon-192.png?v=8bit-1",
+      badge: '/notification-badge.png?v=8bit-1',
+      silent: false,
+      renotify: false,
+      requireInteraction: true,
+      vibrate: [200, 100, 200],
+      data: { url: typeof data.url === "string" ? data.url : "/" },
+    });
   }));
 });
 self.addEventListener("notificationclick", (event) => {

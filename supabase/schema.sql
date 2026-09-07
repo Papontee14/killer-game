@@ -16,6 +16,8 @@ create table if not exists public.rooms (
   id uuid primary key default gen_random_uuid(), code text unique not null check (code ~ '^[A-Z0-9]{6}$'),
   host_user_id uuid not null references auth.users(id), host_name text not null,
   phase public.room_phase not null default 'lobby',
+  -- Legacy column names retained for deployed-room compatibility. They now count
+  -- kills, not approved evidence items.
   attack_limit integer not null default 2 check (attack_limit in (2,3)),
   approved_attacks_in_window integer not null default 0 check (approved_attacks_in_window >= 0),
   quota_window_start timestamptz not null default (date_trunc('hour', now() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok'),
@@ -243,7 +245,7 @@ begin
       into summary from public.players p left join public.player_secrets s on s.player_id=p.id where p.room_id=r.id;
   end if;
   return jsonb_build_object('viewerRole',viewer_role,'playerId',case when is_host then null else me.id end,'code',r.code,'hostName',r.host_name,'phase',r.phase,
-    'createdAt',r.created_at,'closedAt',r.closed_at,'attackLimit',r.attack_limit,'attacksThisHour',case when r.quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') then r.approved_attacks_in_window else 0 end,
+    'createdAt',r.created_at,'closedAt',r.closed_at,'killLimit',r.attack_limit,'killsThisHour',case when r.quota_window_start=(date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok') then r.approved_attacks_in_window else 0 end,
     'quotaWindowStart',r.quota_window_start,'policeCheckAt',r.police_check_at,'players',roster,'privateStates',states,'evidences',evidences,'killerEvidenceProgress',progress,'events',events,
     'endGameSummary',summary,'winner',r.winner,'bombTargets','[]'::jsonb,'pendingBomberId',r.pending_bomber_id);
 end $$;
@@ -342,10 +344,6 @@ begin
   end if;
   select * into target from public.players where id=p_target_id and room_id=r.id;
   checked_at := clock_timestamp();
-  if r.quota_window_start=(date_trunc('hour',checked_at at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok')
-    and r.approved_attacks_in_window>=r.attack_limit then
-    raise exception 'hourly approved attack quota reached';
-  end if;
   if r.phase<>'active' or target.id is null or target.health='dead' or target.id=me.id
     or not exists(select 1 from public.player_secrets where player_id=target.id and not is_active_killer)
     or nullif(trim(p_storage_path),'') is null or p_storage_path not like auth.uid()::text||'/%'
@@ -362,7 +360,7 @@ declare r public.rooms; e public.evidence;
 begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; select * into e from public.evidence where id=p_evidence_id and room_id=r.id for update; if not found or r.id is null or r.phase not in ('active','bomb-resolution','police-check') or e.status<>'pending' then raise exception 'not allowed'; end if; update public.evidence set status='rejected',decision_at=clock_timestamp() where id=e.id; perform public.add_event(r.id,'warning','หลักฐานถูกปฏิเสธ',e.killer_id); return public.get_room_view(r.code); end $$;
 
 create or replace function public.approve_evidence(p_code text,p_evidence_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; e public.evidence; k public.player_secrets; t public.player_secrets; target public.players; new_hearts integer; window_start timestamptz; detective public.player_secrets;
+declare r public.rooms; e public.evidence; k public.player_secrets; t public.player_secrets; target public.players; new_hearts integer; window_start timestamptz; detective public.player_secrets; is_kill boolean;
 begin
   select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found then raise exception 'not allowed'; end if;
   if p_evidence_id is null then raise exception 'missing evidence id'; end if;
@@ -374,10 +372,23 @@ begin
   if not found or t.player_id is null or target.health='dead' then raise exception 'target is dead'; end if;
   if t.is_active_killer then raise exception 'Killer can only be eliminated by a Bomber explosion'; end if;
   window_start := date_trunc('hour',clock_timestamp() at time zone 'Asia/Bangkok') at time zone 'Asia/Bangkok';
-  if r.quota_window_start<>window_start then r.approved_attacks_in_window:=0; r.quota_window_start:=window_start; end if;
-  if r.approved_attacks_in_window>=r.attack_limit then raise exception 'hourly approved attack quota reached'; end if;
   new_hearts := greatest(0,t.hearts-1); update public.evidence set status='approved',decision_at=clock_timestamp() where id=e.id;
-  update public.rooms set approved_attacks_in_window=r.approved_attacks_in_window+1,quota_window_start=r.quota_window_start where id=r.id;
+  -- An approved attack on the current Police immediately ends the game for City.
+  -- It neither changes the Police's hearts nor consumes the hourly kill quota.
+  if t.role_current='police' then
+    update public.rooms set phase='ended',winner='city',quota_window_start=window_start where id=r.id;
+    perform public.add_event(r.id,'winner','ฝ่ายเมืองชนะ');
+    return public.get_room_view(r.code);
+  end if;
+  if r.quota_window_start<>window_start then r.approved_attacks_in_window:=0; r.quota_window_start:=window_start; end if;
+  is_kill := new_hearts=0;
+  if is_kill and r.approved_attacks_in_window>=r.attack_limit then
+    raise exception 'hourly kill quota reached';
+  end if;
+  update public.rooms
+    set approved_attacks_in_window=r.approved_attacks_in_window+case when is_kill then 1 else 0 end,
+        quota_window_start=r.quota_window_start
+    where id=r.id;
   -- Everyone except the victim receives this public, anonymous announcement.
   -- The victim gets the private heart-loss event below instead.
   insert into public.room_events(room_id,type,message,excluded_player_id)
@@ -448,7 +459,7 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 drop function if exists public.start_due_accusations();
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; me public.players; police public.player_secrets; target public.player_secrets; target_player public.players; begin select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update; select * into me from public.players where room_id=r.id and user_id=auth.uid(); select * into police from public.player_secrets where player_id=me.id; select * into target from public.player_secrets where player_id=p_target_id; select * into target_player from public.players where id=p_target_id and room_id=r.id;
-  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase<>'police-check' or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
+  if not found or auth.uid() is null or r.id is null or r.host_user_id=auth.uid() or me.id is null or police.player_id is null or target.player_id is null or r.phase not in ('active','police-check') or me.health='dead' or police.role_current is distinct from 'police' or target_player.health='dead' or target_player.id=me.id then raise exception 'police accusation unavailable'; end if; update public.rooms set phase='ended',winner=case when target.is_active_killer then 'city'::winning_team else 'killers'::winning_team end where id=r.id; perform public.add_event(r.id,'winner',case when target.is_active_killer then 'ฝ่ายเมืองชนะ' else 'ฝ่าย Killer ชนะ' end); return public.get_room_view(r.code); end $$;
 
 create or replace function public.end_game(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','active','police-check','bomb-resolution') then raise exception 'not allowed'; end if; update public.rooms set phase='ended' where id=r.id; perform public.add_event(r.id,'system','Host สั่งจบเกม'); return public.get_room_view(r.code); end $$;

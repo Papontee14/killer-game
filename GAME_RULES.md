@@ -61,15 +61,17 @@ not implement it without an explicit rule update.
   expire while waiting for Host review; the Host still validates authenticity.
 - The final photo that eliminates a target MUST be freshly captured, not a
   pre-existing stock photo.
-- The initial Killer team may have at most two **approved attacks** during each
+- The initial Killer team may have at most two **kills** during each
   calendar hour in the `Asia/Bangkok` timezone.
-- Every photo approved by the Host consumes one shared quota unit, whether it is
-  lethal or non-lethal. Pending and rejected photos consume no quota.
+- A kill is an approved photo that reduces a target to zero hearts. An approved
+  photo that does not eliminate its target consumes no quota. Pending and
+  rejected photos consume no quota.
 - The quota resets exactly when the Bangkok calendar hour changes. For example,
   an approval at 08:50 counts in the 08:00-08:59 bucket; a new quota begins at
-  09:00. A full quota prevents further approvals until that boundary.
-- A Bomber explosion consumes no quota; the approved Bomber-killing photo still
-  consumes one quota unit because it is an approved attack.
+  09:00. A full quota prevents only approvals that would create another kill;
+  non-lethal approvals remain allowed until that boundary.
+- A Bomber explosion consumes no quota; an approved photo that eliminates a
+  Bomber consumes one kill quota unit.
 - If an approval would exceed the quota, it MUST be rejected atomically and no
   damage or quota change may be applied.
 
@@ -82,8 +84,9 @@ not implement it without an explicit rule update.
   roster.
 - After transformation, both Killers see each other, share evidence progress,
   and may cooperate on the same target.
-- After transformation, the Killer team has a shared quota of three approved
-  attacks per calendar hour.
+- The second approved attack that transforms Killer's Wife consumes one kill
+  quota unit. After transformation, the Killer team has a shared quota of three
+  kills per calendar hour without resetting the current hour's count.
 - The transformed player remains eligible to die in a Bomber explosion.
 
 ## Reporter
@@ -123,11 +126,15 @@ not implement it without an explicit rule update.
 
 - The Host sets the final accusation date and time. The standard event uses
   22:00 on the agreed game date, typically the 12th.
-- At the final time, normal attacks stop and the current Police chooses one
-  player as the suspected Killer.
+- The current Police may choose one living player as the suspected Killer at any
+  time during active play or the final accusation; normal attacks stop at the
+  final time.
 - If Police identifies any active Killer, the city team wins. Otherwise, the
   Killer team wins.
 - If Police dies, a living Detective becomes Police privately.
+- If the Host approves evidence that attacks the current living Police, the city
+  team wins immediately. The Police does not lose a heart and the evidence does
+  not consume kill quota.
 - If Police dies while no living Detective remains, the Killer team wins
   immediately.
 - If Detective dies before Police, the game continues; however, the Killer team
@@ -168,8 +175,8 @@ Before shipping a rule-related change, confirm all applicable items:
 - [ ] Damage and warnings occur only after Host approval.
 - [ ] Players see only their own hearts; Killer sees no numeric target health.
 - [ ] Hourly kill quota resets at the exact Bangkok calendar-hour boundary.
-- [ ] Every approved photo, including non-lethal damage, consumes one quota unit;
-      pending/rejected photos do not.
+- [ ] Only a kill, including Killer's Wife's transformation, consumes quota;
+      pending, rejected, and non-lethal approved photos do not.
 - [ ] Killer's Wife transformation hides her identity from public events and
       increases the shared killer quota to three.
 - [ ] Reporter result is private and reports the target's initial role only.

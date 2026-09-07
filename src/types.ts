@@ -93,8 +93,8 @@ export type RoomState = {
   phase: RoomPhase;
   createdAt: string;
   closedAt?: string;
-  attackLimit: number;
-  attacksThisHour: number;
+  killLimit: number;
+  killsThisHour: number;
   quotaWindowStart: string;
   policeCheckAt?: string;
   players: Player[];

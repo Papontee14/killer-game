@@ -15,6 +15,7 @@ export const migration = (
       "20260905_end_game_summary.sql",
       "20260905_submission_quota.sql",
       "20260905_restore_end_game_rpc.sql",
+      "20260907_kill_quota_and_police_protection.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),

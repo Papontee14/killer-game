@@ -30,16 +30,18 @@ async function waitForLocks(count) {
 }
 
 test('two approvals racing for the final quota unit: exactly one commits',async()=>{
-  await f.hit('sumo');
+  await db.query("update public.rooms set approved_attacks_in_window=1");
+  await db.query("update public.player_secrets set hearts=1 where player_id=any($1::uuid[])",[ [f.players.sumo,f.players.athlete] ]);
+  await db.query("update public.players set health='critical' where id=any($1::uuid[])",[ [f.players.sumo,f.players.athlete] ]);
   const ids=[await f.evidence('sumo'),await f.evidence('athlete')];
   await db.exec('begin; select id from public.rooms for update;');
   const pending=Promise.allSettled(ids.map(id=>concurrent('host','approve_evidence',['ABCDEF',id])));
-  await waitForLocks(2);await db.exec('commit');
+  await waitForLocks(1);await db.exec('commit');
   const results=await pending;
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
   assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.message.includes('quota')).length,1);
-  assert.equal((await f.as('host','get_room_view',['ABCDEF'])).attacksThisHour,2);
-  assert.equal((await f.state('sumo')).hearts+(await f.state('athlete')).hearts,5);
+  assert.equal((await f.as('host','get_room_view',['ABCDEF'])).killsThisHour,2);
+  assert.equal((await f.state('sumo')).hearts+(await f.state('athlete')).hearts,1);
 });
 
 test('two Reporter requests consume exactly one ability and emit one public announcement',async()=>{

@@ -3,12 +3,26 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 const source=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-function worker() {
+function worker(indexedDB) {
  const handlers={},cached=[],deleted=[],notifications=[];
  const self={location:{origin:'https://game.test'},addEventListener:(type,fn)=>handlers[type]=fn,skipWaiting:()=>{},clients:{claim:async()=>{}},registration:{showNotification:async(...args)=>notifications.push(args)}};
- const caches={open:async()=>({addAll:async()=>{},put:async(request)=>cached.push(request.url)}),keys:async()=>['killer-shell-v2','killer-shell-v3','unrelated-app'],delete:async(key)=>deleted.push(key),match:async()=>undefined};
- vm.runInNewContext(source,{self,caches,URL,Response,fetch:async()=>new Response('ok')});
+ const caches={open:async()=>({addAll:async()=>{},put:async(request)=>cached.push(request.url)}),keys:async()=>['killer-shell-v2','killer-shell-v4','unrelated-app'],delete:async(key)=>deleted.push(key),match:async()=>undefined};
+ vm.runInNewContext(source,{self,caches,URL,Response,fetch:async()=>new Response('ok'),indexedDB,setTimeout});
  return {handlers,cached,deleted,notifications};
+}
+function notificationStore() {
+ const records=new Map();
+ return {open(){
+  const db={close(){},createObjectStore(){},transaction(){
+   const tx={}; const store={
+    get(id){const req={};setTimeout(()=>{req.result=records.get(id);req.onsuccess?.();},0);return req;},
+    put(value){records.set(value.id,value);},
+    openCursor(){const req={};setTimeout(()=>{req.result=undefined;req.onsuccess?.();},0);return req;},
+   };
+   tx.objectStore=()=>store; setTimeout(()=>tx.oncomplete?.(),5); return tx;
+  }};
+  const request={result:db};setTimeout(()=>{request.onupgradeneeded?.();request.onsuccess?.();},0);return request;
+ }};
 }
 test('service worker ignores APIs, room pages, Storage URLs and signed images; only shell/static assets are cached',async()=>{
  const {handlers,cached}=worker();
@@ -52,4 +66,15 @@ test('push allows the scheduled police reminder but still rejects arbitrary text
  handlers.push({data:{json:()=>({body:'\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35'})},waitUntil:p=>done=p});
  await done;
  assert.equal(notifications[0][1].body,'\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35');
+});
+
+test('a repeated notification ID is displayed only once', async () => {
+ const {handlers,notifications}=worker(notificationStore());
+ let done;
+ const event={data:{json:()=>({notificationId:'same-event',url:'/room/ABCDEF'})},waitUntil:p=>done=p};
+ handlers.push(event);await done;
+ handlers.push(event);await done;
+ assert.equal(notifications.length,1);
+ assert.equal(notifications[0][1].tag,'killer-event:same-event');
+ assert.equal(notifications[0][1].renotify,false);
 });

@@ -1,189 +1,129 @@
-# Killer Game Rules
+# Killer game rules v2.4
 
-This file is the source of truth for game behavior. Before changing game logic,
-UI visibility, database access, or notifications, verify that the change follows
-every applicable rule below. If a proposed feature conflicts with this file, do
-not implement it without an explicit rule update.
+This is the authority for rooms with `rules_version = '2.4'`. The user adopted
+the supplied KILLER Balance Playtest v2.4 Hunt Clock specification. Future balance
+experiments in that document are not enabled rules. Existing rooms remain
+`legacy`; see [legacy rules](docs/LEGACY_GAME_RULES.md).
 
-## Terms
+## Setup and schedule
 
-- **Host**: The non-playing game moderator. The Host validates evidence and
-  resolves special events.
-- **Public**: Information every player may see.
-- **Private**: Information visible only to the authorized player or the Host.
-- **Approved attack**: A photo that the Host has accepted. A submitted or
-  pending photo has no game effect.
-- **Kill**: A player reaching zero hearts through approved attacks. Deaths from
-  a Bomber explosion are not counted as kills for the hourly quota.
+- Default 13 players plus Host: Killer, Wife, Police, Detective, Reporter,
+  Bomber, Athlete, Doctor (one each), Villager (five). No Sumo.
+- Exactly one initial Killer and Police; optional special roles 0–1, Villager
+  0–20. At least three players must match the role count and select avatars.
+- Host configures duration (121–2880 minutes; default 600) and Bomber proximity
+  rule before start, including distance and tie handling. Settings then lock.
+- Server start time anchors cutoff at Final minus 30 minutes, discussion at
+  Final minus 10 minutes, Reveal deadline at Final minus two hours. Other
+  cooldowns and Hunt durations remain fixed when game length changes.
+- Stop new attacks/abilities at cutoff. Resolve pending events before discussion
+  and Final. Communication Lock starts secret voting for three minutes. A late
+  Host resolution delays voting but still gives three minutes without reopening
+  attacks, abilities or information gathering.
 
-## Standard Setup
+## Evidence and ordered resolution
 
-- The standard room contains one Host and twelve players.
-- Default player roles are: one Killer, one Killer's Wife, one Police, one
-  Reporter, one Bomber, one Detective, one Athlete, one Sumo Wrestler, and four
-  Villagers.
-- A Host may disable any special role except Killer and Police, and may change
-  the Villager count.
-- A room MUST always have exactly one initial Killer and at least one Police.
-- Roles are random and private when the Host starts the game.
-- The Host may see all roles, hearts, evidence, and event history. Players may
-  not see another player's role or hearts unless a rule below explicitly says so.
+- Live-camera image must be submitted within two minutes of capture and before
+  cutoff. Validate timestamp, image ownership and MIME/size on the server; Host
+  validates authenticity. Pending/rejected evidence never damages the target.
+- Attack effective time is validated capture time; heal effective time is server
+  activation time. Host processes earliest pending event first; simultaneous
+  timestamps use stable action ID order.
+- Wait out the two-minute upload window before applying effects (or cutoff,
+  when no further submissions are accepted). Refuse uploads at/before the last
+  resolved timestamp instead of rewriting history retroactively.
+- Approved normal attack applies one hit and starts protection for 45 minutes
+  from effective time. Evidence within protection must be rejected even when
+  reviewed later. Attack at exactly expiry is allowed. Switching targets is allowed.
+- Both Killers share three approved attacks and one elimination per rolling
+  60 minutes. Events exactly 60 minutes old leave the window. Transformation
+  costs one attack, no kill; explosion costs neither.
+- Pending submissions reserve attack capacity, maximum two per active Killer
+  and three approved/pending attacks in the relevant window. Reject releases
+  reservations. Approval atomically rechecks protection, actor/target and quotas.
+  An ineligible attack remains pending for Host rejection without damage.
 
-## Hearts, Evidence, and Visibility
+## Hunt Clock and victory
 
-- Killer has no photo-based heart bar. Killer can die only through a Bomber
-  explosion.
-- Killer's Wife starts on Killer Side with two hearts. If she transforms into
-  a Killer, her heart bar is no longer shown to her.
-- Villager, Police, Reporter, Bomber, Detective, and Killer's Wife start with
-  two hearts.
-- Athlete starts with three hearts. Sumo Wrestler starts with four hearts.
-- Every approved photo removes exactly one heart from the chosen target.
-- A non-Killer player MUST see only their own current and maximum hearts in
-  realtime. They MUST NOT see another player's hearts.
-- Immediately after the Host approves an attack, the affected non-Killer player
-  MUST receive a private warning that they were attacked and see their updated
-  hearts.
-- A player MUST NOT receive an attack warning, lose a heart, or see a health
-  change before Host approval.
-- A Killer MUST see only either `target is still alive` or `elimination
-  confirmed` after approval. Killer MUST NOT see a target's current hearts,
-  maximum hearts, or role.
-- There is intentionally no cooldown, protection window, attack lock, or
-  restriction on switching targets after an approved attack.
+- First confirmed Killer kill must have effective time ≤ start +120 minutes.
+  Each subsequent kill resets the shared deadline to kill time +120 minutes.
+  Wife transformation and explosion never reset Hunt Clock.
+- Check only deadlines at/before cutoff. Before declaring a miss, wait out the
+  upload allowance and resolve pending events at/before the deadline. A kill
+  exactly at deadline counts; Host review time does not move the kill time.
+- Missed Hunt deadline ends the game for City, with deadline recorded as result
+  time. A later action cannot rescue a missed clock.
+- After an event first check living active Killers: none means City wins. Then
+  resolve Police succession; no living Active Police means Killer Side wins.
+  Resolve Bomber victims before these checks.
+- At Final, 0–1 confirmed Killer kills gives City victory; 2+ enters secret vote.
+  There is no 5+ automatic Killer win.
+- Server scheduler and room RPCs evaluate time idempotently. Browser countdowns
+  and notifications do not decide outcomes.
 
-## Evidence and Hourly Quota
+## Roles
 
-- Killer submits a live camera photo and selects a target. The Host validates
-  the evidence before any game state changes.
-- The web app captures the photo directly from a live camera. Evidence must be
-  submitted within two minutes of capture. Once submitted, evidence does not
-  expire while waiting for Host review; the Host still validates authenticity.
-- The final photo that eliminates a target MUST be freshly captured, not a
-  pre-existing stock photo.
-- The initial Killer team may have at most two **kills** during each
-  calendar hour in the `Asia/Bangkok` timezone.
-- A kill is an approved photo that reduces a target to zero hearts. An approved
-  photo that does not eliminate its target consumes no quota. Pending and
-  rejected photos consume no quota.
-- The quota resets exactly when the Bangkok calendar hour changes. For example,
-  an approval at 08:50 counts in the 08:00-08:59 bucket; a new quota begins at
-  09:00. A full quota prevents only approvals that would create another kill;
-  non-lethal approvals remain allowed until that boundary.
-- A Bomber explosion consumes no quota; an approved photo that eliminates a
-  Bomber consumes one kill quota unit.
-- If an approval would exceed the quota, it MUST be rejected atomically and no
-  damage or quota change may be applied.
+- **Killer:** Killer Side, active, no Heart bar, immune to normal attacks. Bomber
+  can kill them. Sees only survived/eliminated attack outcomes, not target secrets.
+- **Wife:** Killer Side, one Heart. First approved hit transforms without death.
+  Public learns only that a second Killer exists. Killers see each other after
+  transformation and share quota/clock. Untransformed Wife votes but is not an
+  active Killer that City must nominate.
+- **Police:** two Hearts, no Vest; attacks damage normally. One public Reveal
+  Badge per Active Police at/before Reveal deadline, without health/protection
+  benefit. Sends normal ballot and secret tie ranking.
+- **Detective:** two Hearts, no scan. Privately promotes when Police dies, with
+  two Hearts, no Vest, own Reveal Badge and Police voting duties.
+- **Reporter:** two Hearts; one inspection of another living player's initial
+  role before cutoff. Transformed Wife reports Wife, successor reports Detective.
+  Result private; public sees only ability-use announcement.
+- **Bomber:** two Hearts. Killer-caused death reveals Bomber and pauses resolution.
+  Host chooses 0–1 living victim using locked proximity rule. Explosion ignores
+  hearts, does not chain and does not transform Wife.
+- **Athlete:** three Hearts; normal City voting and survival rules.
+- **Doctor:** two Hearts; heal another living player +1, capped at role max.
+  No self-heal, revive or transform reversal; no protection reset/extension.
+  Four activations, 90-minute cooldown from activation. Full-HP/active-Killer
+  targets still consume charge/cooldown. An accepted heal becomes a no-op if
+  actor or target died at an earlier effective time. Public sees only
+  `Doctor treated [name]`; Doctor never learns whether health was restored.
+  Mechanical result is Host-only telemetry.
+- **Villager:** two Hearts; observe, survive, discuss and vote.
 
-## Killer's Wife
+## Secret vote
 
-- When Killer's Wife receives her second approved attack, she does not remain a
-  normal dead spectator. She becomes the second Killer.
-- Publicly announce only: `Killer has eliminated Killer's Wife. There are now
-  two Killers.` Do not announce her name or mark her as dead in the public
-  roster.
-- After transformation, both Killers see each other, share evidence progress,
-  and may cooperate on the same target.
-- The second approved attack that transforms Killer's Wife consumes one kill
-  quota unit. After transformation, the Killer team has a shared quota of three
-  kills per calendar hour without resetting the current hour's count.
-- The transformed player remains eligible to die in a Bomber explosion.
+- Freeze living voter IDs and active Killer count K (1 or 2) at opening.
+  All living players, including Killer Side, submit one ballot choosing exactly
+  K distinct other living players. Host/dead players cannot vote.
+- Submission is immutable; retries cannot replace it. Missing ballots abstain.
+  Players cannot see other ballots, live scores or fallback ranking.
+- Each selected name earns one point. Top K become nominees. City wins only
+  when nominees equal the complete living active Killer set with no extra name.
+- Police ranks every other living player with their ballot. Use ranking only
+  within tied scores. Commit a random private fallback permutation before votes
+  open. Use fallback if Police ranking is absent. Insert Police at their fallback
+  position while preserving the relative order of the other Police-ranked names.
+- Host sees ballots for moderation. Communication after lock can receive a
+  recorded warning, without automatic ballot invalidation or voting extension.
+- Publish nominees/winner at deadline. Post-game role summary remains available
+  to authenticated room members after closure.
 
-## Reporter
+## Privacy and persistence
 
-- A living Reporter may use their ability exactly once per game.
-- Reporter selects one other living player and privately learns that player's initial
-  role. A transformed Killer's Wife still returns `Killer's Wife`; a promoted
-  Detective still returns `Detective`.
-- Reporter cannot inspect themselves or a dead player. The target must still be
-  alive when the action is processed; a refused inspection consumes no ability.
-- The ability is available during active play, Bomber resolution, and final
-  accusation, but never before the game starts or after it ends.
-- Publicly announce only: `Reporter has used an ability.` Do not reveal the
-  Reporter's identity, the inspected target, or the result.
-- The inspected player receives a private notification that they were inspected
-  but MUST NOT learn who the Reporter is.
+- Supabase owns state; actions, ballots, secrets, timestamps and results survive
+  refresh/reconnect/reclaim. Public avatars never encode private roles.
+- Players see only own hearts/protection/ability counters/ballot. Killer team
+  receives permitted shared progress and Hunt/quota metadata. Host sees evidence.
+  Private tables are inaccessible directly to client roles.
+- Realtime emits harmless room signals and recipient-specific generic notices.
+  Lock-screen push cannot expose roles, targets, health or inspection information.
+- Existing close-room flow removes evidence images; summaries remain accessible.
 
-## Bomber
+## Defaults beyond the source document
 
-- When a Bomber dies, the game MUST publicly announce that player's name and
-  Bomber role immediately.
-- Bomber resolution begins automatically and pauses other death confirmations.
-- The Host chooses zero, one, or two living players nearest to the Bomber.
-- Chosen players die immediately regardless of remaining hearts.
-- Explosion deaths are announced by name but do not reveal roles, except for
-  the original Bomber announcement.
-- Bomber explosions never create another Bomber explosion or trigger Killer's
-  Wife transformation. No chain reactions exist.
-- A Killer killed by a Bomber is announced only as a dead player; the public
-  MUST NOT learn that they were a Killer.
-- If all Killers are dead, the city team wins immediately.
-- Resolve all explosion victims together before succession or victory checks.
-  If the last Killer and Police die in the same explosion, the city wins even
-  when no Detective survives. This takes priority over the Police-death loss.
-
-## Police, Detective, and Victory
-
-- The Host sets the final accusation date and time. The standard event uses
-  22:00 on the agreed game date, typically the 12th.
-- The current Police may choose one living player as the suspected Killer at any
-  time during active play or the final accusation; normal attacks stop at the
-  final time.
-- If Police identifies any active Killer, the city team wins. Otherwise, the
-  Killer team wins.
-- If Police dies, a living Detective becomes Police privately.
-- If the Host approves evidence that attacks the current living Police, the city
-  team wins immediately. The Police does not lose a heart and the evidence does
-  not consume kill quota.
-- If Police dies while no living Detective remains, the Killer team wins
-  immediately.
-- If Detective dies before Police, the game continues; however, the Killer team
-  wins immediately if Police later dies with no Detective available to promote.
-
-## Public Events and Privacy
-
-- Normal deaths announce the player's name but not their role.
-- The only mandatory role reveals are a dead Bomber and the final game result if
-  the Host elects to show it.
-- Notifications shown on a locked phone MUST be generic and must not leak role,
-  target, heart, or inspection information. Full details appear only after the
-  player opens the authenticated game view.
-- Evidence images are private: Host may view them; other players may not.
-- The Host deletes all evidence images when closing a room. Event summaries may
-  remain after closure.
-
-## Durable Multi-Day Room Requirements
-
-- A game may run for one to two days. Room state, player identity, role,
-  hearts, evidence decisions, events, and quota state MUST survive refreshes,
-  browser restarts, network loss, and an overnight gap.
-- Browser `localStorage` is not an authoritative store and cannot be the only
-  persistence mechanism.
-- Players must be able to return on the same device automatically through a
-  secure session.
-- Players must be able to reclaim their existing player identity on a new device
-  with the room code, their name, and their one-time-issued reclaim token.
-  Reclaiming MUST preserve role, hearts, and game history without allowing a
-  different player who only knows the name to take over the identity.
-- A disconnected player becomes offline; they are never automatically removed,
-  reset, or killed for disconnecting.
-
-## Compliance Checklist
-
-Before shipping a rule-related change, confirm all applicable items:
-
-- [ ] Damage and warnings occur only after Host approval.
-- [ ] Players see only their own hearts; Killer sees no numeric target health.
-- [ ] Hourly kill quota resets at the exact Bangkok calendar-hour boundary.
-- [ ] Only a kill, including Killer's Wife's transformation, consumes quota;
-      pending, rejected, and non-lethal approved photos do not.
-- [ ] Killer's Wife transformation hides her identity from public events and
-      increases the shared killer quota to three.
-- [ ] Reporter result is private and reports the target's initial role only.
-- [ ] Bomber is publicly revealed, Host selects zero to two victims, and no
-      chain reaction occurs.
-- [ ] Killer can die from a Bomber without public Killer-role disclosure.
-- [ ] Police/Detective succession and all city/Killer win paths are preserved.
-- [ ] Private roles, hearts, evidence, and notifications are protected by both
-      UI behavior and backend authorization.
-- [ ] A player can safely reconnect after a one-to-two-day interruption.
+User-selected: configurable composition/duration with fixed cooldowns; retain
+legacy rooms; Host locks proximity rule; absent voters abstain and Police ties
+have precommitted fallback. Engineering defaults: two-minute ordering watermark,
+stable same-time ordering, minimum three players, maximum 48-hour duration and
+a full three-minute vote after delayed Host resolution. These are explicit
+handling rules, not claims from the document's balance experiments.

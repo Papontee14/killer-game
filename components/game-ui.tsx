@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { V24_ROLE_DETAILS, V24_RULES } from "@/src/v24-rules";
 import { Brand } from "./brand";
 import { PixelIcon } from "./pixel-ui";
 import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -21,6 +22,9 @@ import {
 } from "@/src/types";
 import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 export const PHASE_LABELS: Record<RoomPhase, string> = {
+  resolution: "Resolution",
+  "final-discussion": "Final Discussion",
+  "secret-vote": "โหวตลับ",
   lobby: "ห้องรอ",
   active: "กำลังเล่น",
   "bomb-resolution": "จัดการระเบิด",
@@ -28,6 +32,7 @@ export const PHASE_LABELS: Record<RoomPhase, string> = {
   ended: "จบเกม",
 };
 export const ROLE_DETAILS: Record<Role, string> = {
+  doctor: V24_ROLE_DETAILS.doctor,
   killer:
     "เลือกเป้าหมาย ถ่ายภาพด้วยกล้องสด และส่งให้ Host ภายใน 2 นาที ทุกภาพที่อนุมัติลด 1 หัวใจ คุณไม่มีแถบหัวใจ แต่ตายได้จากระเบิด Bomber",
   "killer-wife":
@@ -47,6 +52,7 @@ export const ROLE_DETAILS: Record<Role, string> = {
     "คุณมี 2 หัวใจ อยู่ City Side รักษาตัวให้รอดและช่วยกันสังเกตว่าใครคือ Killer",
 };
 export const ROLE_SUMMARIES: Record<Role, string> = {
+  doctor: V24_ROLE_DETAILS.doctor,
   killer: "เลือกเป้าหมาย ถ่ายภาพด้วยกล้องสด และส่งให้ Host ตรวจภายใน 2 นาที",
   "killer-wife": "อยู่ Killer Side ตลอดทั้งเกม และเมื่อถูกโจมตีครบสองครั้งจะเปลี่ยนเป็น Killer",
   police: "ชี้ตัวผู้ต้องสงสัยที่ยังมีชีวิตได้ตลอดช่วงเล่น",
@@ -57,7 +63,6 @@ export const ROLE_SUMMARIES: Record<Role, string> = {
   sumo: "อยู่ City Side มีสี่หัวใจและช่วยกันสังเกตผู้ต้องสงสัย",
   villager: "อยู่ City Side มีสองหัวใจ รักษาตัวให้รอดและช่วยหาตัว Killer",
 };
-const RULE_ROLES = Object.keys(ROLE_LABELS) as Role[];
 export { Brand } from "./brand";
 export function Dialog({
   title,
@@ -118,7 +123,8 @@ export function Dialog({
     </dialog>
   );
 }
-export function Rules({ onClose }: { onClose: () => void }) {
+export function Rules({ onClose, rulesVersion = "2.4" }: { onClose: () => void; rulesVersion?: "legacy" | "2.4" }) {
+  if(rulesVersion === "2.4") return <Dialog title="กติกา v2.4 · Hunt Clock" onClose={onClose}><div className="rules-steps">{V24_RULES.map(rule => <p key={rule}>{rule}</p>)}</div><h3>9 บทบาท · ทุกคนมีความลับ</h3><RoleCarousel rulesVersion="2.4" /></Dialog>;
   return (
     <Dialog title="วิธีเล่น KILLER" onClose={onClose}>
       <p className="muted">
@@ -157,7 +163,8 @@ export function Rules({ onClose }: { onClose: () => void }) {
   );
 }
 
-function RoleCarousel() {
+function RoleCarousel({ rulesVersion = "legacy" }: { rulesVersion?: "legacy" | "2.4" }) {
+  const RULE_ROLES = (Object.keys(ROLE_LABELS) as Role[]).filter(role => rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor");
   const viewportRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -255,7 +262,7 @@ function RoleCarousel() {
               {ROLE_HEARTS[role] ? (
                 <span
                   className="role-carousel-hearts"
-                  aria-label={`${ROLE_HEARTS[role]} หัวใจ`}
+                  aria-label={`${rulesVersion === "2.4" && role === "killer-wife" ? 1 : ROLE_HEARTS[role]} หัวใจ`}
                 >
                   <PixelIcon name="heart"
                     className="role-carousel-heart-icon"
@@ -263,7 +270,7 @@ function RoleCarousel() {
                     fill="currentColor"
                     aria-hidden="true"
                   />
-                  <span aria-hidden="true">× {ROLE_HEARTS[role]}</span>
+                  <span aria-hidden="true">× {rulesVersion === "2.4" && role === "killer-wife" ? 1 : ROLE_HEARTS[role]}</span>
                 </span>
               ) : (
                 <span className="role-carousel-hearts role-carousel-hearts-none">
@@ -271,10 +278,10 @@ function RoleCarousel() {
                 </span>
               )}
             </div>
-            <p>{ROLE_SUMMARIES[role]}</p>
+            <p>{rulesVersion === "2.4" ? V24_ROLE_DETAILS[role] : ROLE_SUMMARIES[role]}</p>
             <details className="role-carousel-details">
               <summary>อ่านรายละเอียดบทบาท</summary>
-              <p>{ROLE_DETAILS[role]}</p>
+              <p>{rulesVersion === "2.4" ? V24_ROLE_DETAILS[role] : ROLE_DETAILS[role]}</p>
             </details>
           </article>
         ))}
@@ -434,6 +441,7 @@ function MysteryCardBack() {
 }
 
 export function RoleReveal({
+  rulesVersion,
   role,
   previous,
   hearts,
@@ -445,6 +453,7 @@ export function RoleReveal({
   artVariantKey,
 }: {
   role: Role;
+  rulesVersion?: "legacy" | "2.4";
   previous?: Role;
   hearts?: number;
   maxHearts?: number;
@@ -588,7 +597,7 @@ export function RoleReveal({
           เก็บตัวตนใหม่เป็นความลับ
         </p>
       )}
-      {isRevealed && <p>{ROLE_DETAILS[role]}</p>}
+      {isRevealed && <p>{rulesVersion === "2.4" ? V24_ROLE_DETAILS[role] : ROLE_DETAILS[role]}</p>}
       {isRevealed && role !== "killer" && (
         <div
           className="reveal-hearts"

@@ -10,6 +10,7 @@ export const VILLAGER_ART = [
 
 /** Canonical artwork used for private role surfaces and post-game reveals. */
 export const ROLE_ART: Record<Role, string> = {
+  doctor: "/pixel/role-doctor.webp",
   killer: "/pixel/role-killer.webp",
   "killer-wife": "/pixel/role-killer-wife.webp",
   police: "/pixel/role-police.webp",

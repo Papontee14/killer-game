@@ -12,6 +12,7 @@ afterEach(async () => { await db?.exec("rollback"); });
 
 test("lobby avatars are exclusive, required to start, and released when Host removes a player", async () => {
   await f.as("outsider", "create_room", ["UVWXYZ", "Other"]);
+  await db.exec("update public.rooms set rules_version='legacy' where code='UVWXYZ'");
   const first = await f.as("villager", "join_room", ["UVWXYZ", "visitor"]);
   const second = await f.as("athlete", "join_room", ["UVWXYZ", "runner"]);
   await f.as("villager", "select_avatar", ["UVWXYZ", "m-sea-01"]);

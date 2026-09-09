@@ -36,7 +36,7 @@ export async function database() {
   return db;
 }
 
-export async function initializeDatabase(db, native = false) {
+export async function initializeDatabase(db, native = false, schemaSql = schema) {
   await db.exec(`
     create role anon; create role authenticated;
     create schema auth; create schema storage;
@@ -53,15 +53,15 @@ export async function initializeDatabase(db, native = false) {
   `);
   await db.exec(
     native
-      ? schema
-      : schema.replace(
+      ? schemaSql
+      : schemaSql.replace(
           "create extension if not exists pgcrypto with schema extensions;",
           "-- pgcrypto unused by these functions; built-in gen_random_uuid is available.",
         ),
   );
 }
 
-export async function fixture(db) {
+export async function fixture(db, { legacySchema = false } = {}) {
   await db.exec(
     "reset role; truncate public.rooms,auth.users,storage.objects cascade;",
   );
@@ -98,6 +98,8 @@ export async function fixture(db) {
     }
   }
   await as("host", "create_room", ["ABCDEF", "Moderator"]);
+  // Existing suites intentionally exercise the preserved legacy rule engine.
+  if (!legacySchema) await db.exec("update public.rooms set rules_version='legacy' where code='ABCDEF'");
   const players = {};
   for (const role of roles)
     players[role] = (await as(role, "join_room", ["ABCDEF", role])).playerId;

@@ -8,6 +8,37 @@ before(async()=>{server=await nativeDatabase();db=server.db;});
 after(async()=>{await server?.close();});
 beforeEach(async()=>{f=await fixture(db);});
 afterEach(async()=>{await db?.exec('rollback');});
+async function v24() {
+  await db.exec("update public.rooms set rules_version='2.4',v24=jsonb_build_object('stage','active','startedAt',clock_timestamp()-interval '1 hour','cutoffAt',clock_timestamp()+interval '8 hours','finalAt',clock_timestamp()+interval '9 hours','huntDeadline',clock_timestamp()+interval '1 hour')");
+  await db.query("update public.player_secrets set role_current='doctor',initial_role='doctor',doctor_uses=0 where player_id=$1",[f.players.sumo]);
+}
+test('v24 concurrent Doctor uses consume exactly one charge',async()=>{
+  await v24();
+  const results=await Promise.allSettled(['villager','athlete'].map(role=>concurrent('sumo','use_doctor',['ABCDEF',f.players[role]])));
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1); assert.equal((await f.state('sumo')).doctor_uses,1);
+});
+test('v24 repeated concurrent approval applies damage only once',async()=>{
+  await v24();
+  const id=(await db.query("insert into public.v24_actions(room_id,actor_id,target_id,kind,effective_at) values($1,$2,$3,'attack',clock_timestamp()-interval '3 minutes') returning id",[f.roomId,f.players.killer,f.players.villager])).rows[0].id;
+  await Promise.all([0,1].map(()=>concurrent('host','v24_apply',['ABCDEF',id,true])));
+  assert.equal((await f.state('villager')).hearts,1);
+  assert.equal((await db.query("select count(*)::int n from public.v24_actions where status='approved'")).rows[0].n,1);
+});
+test('v24 racing ballots retain a single immutable vote',async()=>{
+  await v24(); const ids=Object.values(f.players);
+  await db.query("update public.rooms set v24=v24||jsonb_build_object('stage','secret-vote','cutoffAt',clock_timestamp()-interval '30 minutes','finalAt',clock_timestamp()-interval '1 minute','voteEndsAt',clock_timestamp()+interval '2 minutes','nomineeCount',1,'fallback',$1::jsonb,'voters',$1::jsonb)",[JSON.stringify(ids)]);
+  await Promise.all(['killer','police'].map(role=>concurrent('villager','submit_final_ballot',['ABCDEF',[f.players[role]],[]])));
+  assert.equal((await db.query('select count(*)::int n from public.v24_ballots')).rows[0].n,1);
+});
+test('v24 Reporter waiting on a room lock cannot cross cutoff',async()=>{
+  await v24();
+  await db.exec("begin; update public.rooms set v24=v24||jsonb_build_object('cutoffAt',clock_timestamp()+interval '1 second')");
+  const pending=Promise.allSettled([concurrent('reporter','use_reporter',['ABCDEF',f.players.villager])]);
+  await waitForLocks(1);
+  await waitFor(async()=>(await db.query("select clock_timestamp()>=(v24->>'cutoffAt')::timestamptz as due from public.rooms")).rows[0].due);
+  await db.exec('commit');
+  assert.equal((await pending)[0].status,'rejected');assert.equal((await f.state('reporter')).has_used_ability,false);
+});
 async function concurrent(role,fn,args) {
   const client=await server.newClient();
   try {

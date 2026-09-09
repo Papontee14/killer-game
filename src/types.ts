@@ -7,10 +7,14 @@ export type Role =
   | "detective"
   | "athlete"
   | "sumo"
+  | "doctor"
   | "villager";
 export type RoomPhase =
   | "lobby"
   | "active"
+  | "resolution"
+  | "final-discussion"
+  | "secret-vote"
   | "police-check"
   | "bomb-resolution"
   | "ended";
@@ -20,6 +24,11 @@ export type WinningTeam = "city" | "killers" | null;
 export type Team = "city" | "killers";
 
 export type EndGameReason =
+  | "hunt-clock-expired"
+  | "all-killers-eliminated"
+  | "police-lineage-eliminated"
+  | "final-low-kills"
+  | "final-vote"
   | "police-accusation-correct"
   | "police-accusation-wrong"
   | "police-attacked"
@@ -53,6 +62,10 @@ export type EndGamePlayerSummary = {
 };
 
 export type PrivatePlayerState = {
+  protectionUntil?: string;
+  doctorUses?: number;
+  doctorReadyAt?: string;
+  badgeRevealed?: boolean;
   playerId: string;
   initialRole: Role;
   currentRole: Role;
@@ -111,6 +124,8 @@ export type KillerEvidenceProgress = Pick<
 };
 
 export type RoomState = {
+  rulesVersion?: "legacy" | "2.4";
+  v24?: V24State;
   viewerRole: "host" | "player";
   playerId?: string;
   code: string;
@@ -137,6 +152,7 @@ export type RoomState = {
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
+  doctor: "Doctor",
   killer: "Killer",
   "killer-wife": "Killer's Wife",
   police: "Police",
@@ -149,6 +165,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_HEARTS: Record<Role, number> = {
+  doctor: 2,
   killer: 0,
   "killer-wife": 2,
   police: 2,
@@ -161,6 +178,7 @@ export const ROLE_HEARTS: Record<Role, number> = {
 };
 
 export const DEFAULT_ROLE_COUNTS: Record<Role, number> = {
+  doctor: 1,
   killer: 1,
   "killer-wife": 1,
   police: 1,
@@ -168,8 +186,18 @@ export const DEFAULT_ROLE_COUNTS: Record<Role, number> = {
   bomber: 1,
   detective: 1,
   athlete: 1,
-  sumo: 1,
-  villager: 4,
+  sumo: 0,
+  villager: 5,
+};
+
+export type V24Action = { id: string; actor_id: string; target_id: string; kind: "attack" | "heal"; effective_at: string; evidence_id?: string; status: "pending" | "approved" | "rejected"; lethal: boolean; healed: boolean };
+export type V24State = {
+  durationMinutes?: number; proximityRule?: string; startedAt?: string; cutoffAt?: string;
+  finalAt?: string; revealEndsAt?: string; voteEndsAt?: string; serverNow: string;
+  huntDeadline?: string; huntPending?: boolean; attacksUsed?: number; killsUsed?: number; pendingAttacks?: number;
+  nomineeCount?: number; nominees?: string[]; actions?: V24Action[];
+  myBallot?: { nominees: string[]; ranking: string[]; submittedAt: string } | null;
+  ballots?: { voter_id: string; nominees: string[]; ranking: string[] }[];
 };
 
 export function healthState(hearts: number, maxHearts: number): HealthState {

@@ -19,7 +19,50 @@ test.afterAll(async () => {
   await db?.close();
 });
 test.beforeEach(async () => {
+  await db.exec("alter table public.rooms alter column rules_version set default '2.4'");
   f = await fixture(db);
+});
+
+async function enableV24() {
+  await db.exec(`update public.rooms set rules_version='2.4',police_check_at=null,v24=jsonb_build_object('stage','active','startedAt',clock_timestamp()-interval '30 minutes','finalAt',clock_timestamp()+interval '570 minutes','cutoffAt',clock_timestamp()+interval '540 minutes','revealEndsAt',clock_timestamp()+interval '450 minutes','huntDeadline',clock_timestamp()+interval '90 minutes','proximityRule','Nearest player within two metres; ties use seat order')`);
+  await db.query("update public.player_secrets set initial_role='doctor',role_current='doctor',hearts=2,max_hearts=2 where player_id=$1",[f.players.sumo]);
+}
+test('v24 Doctor mobile controls consume one charge and survive reload', async ({page}) => {
+  await enableV24(); await page.setViewportSize({width:360,height:900});
+  await openPlayer(page,'sumo');
+  await expect(page.locator('.v24-panel')).toBeVisible();
+  await page.getByLabel('เป้าหมาย Doctor').selectOption(f.players.villager);
+  await page.getByRole('button',{name:'ใช้ 1 ครั้ง · ส่งการรักษา'}).click();
+  await expect(page.getByText(/เหลือ 3 ครั้ง/)).toBeVisible();
+  await page.reload(); await expect(page.getByText(/เหลือ 3 ครั้ง/)).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.getByRole('button',{name:'เข้าใจแล้ว'}).click();
+  await expect(page.locator('.v24-panel')).toBeVisible();
+  await page.screenshot({path:'artifacts/v24-doctor-360.png',fullPage:true});
+});
+test('v24 Police reveals without an accusation button',async({page})=>{
+  await enableV24(); await page.setViewportSize({width:390,height:900}); await openPlayer(page,'police');
+  await expect(page.getByRole('button',{name:/ยืนยันการชี้ตัว/})).toHaveCount(0);
+  await page.getByRole('button',{name:'เปิดเผยตัวว่าเป็น Police'}).click();
+  await expect(page.getByRole('button',{name:'เปิดเผยตัวแล้ว'})).toBeDisabled();
+  await page.screenshot({path:'artifacts/v24-police-390.png',fullPage:true});
+});
+test('v24 secret vote submits a private immutable ballot',async({page})=>{
+  await enableV24(); const ids=Object.values(f.players);
+  await db.query("update public.rooms set v24=v24||jsonb_build_object('stage','secret-vote','cutoffAt',clock_timestamp()-interval '30 minutes','finalAt',clock_timestamp()-interval '1 minute','voteEndsAt',clock_timestamp()+interval '3 minutes','nomineeCount',1,'fallback',$1::jsonb,'voters',$1::jsonb)",[JSON.stringify(ids)]);
+  await openPlayer(page,'villager');
+  await page.getByRole('checkbox',{name:'killer',exact:true}).check();
+  await page.getByRole('button',{name:'ตรวจ ballot ก่อนส่ง'}).click();
+  await page.getByRole('button',{name:'ส่ง ballot ลับ · แก้ไม่ได้'}).click();
+  await expect(page.getByText(/ส่ง ballot แล้ว: killer/)).toBeVisible();
+  const reporter=await f.as('reporter','get_room_view',['ABCDEF']); expect(reporter.v24.myBallot).toBeNull(); expect(reporter.v24.ballots).toBeUndefined();
+  await page.screenshot({path:'artifacts/v24-vote-390.png',fullPage:true});
+});
+test('v24 Host shows ordered queue and settings without legacy schedule',async({page})=>{
+  await enableV24(); await page.setViewportSize({width:1440,height:1000}); await openPlayer(page,'host');
+  await expect(page.getByRole('heading',{name:'คิวตาม effective time'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'ตั้งเวลาตำรวจชี้ตัว'})).not.toBeVisible();
+  await page.screenshot({path:'artifacts/v24-host-1440.png',fullPage:true});
 });
 
 async function openPlayer(
@@ -79,6 +122,13 @@ async function openPlayer(
             join_room: ["p_code", "p_name", "p_reclaim_token"],
             heartbeat: ["p_code"],
             use_reporter: ["p_code", "p_target_id"],
+            configure_v24: ["p_code", "p_duration_minutes", "p_proximity_rule"],
+            use_doctor: ["p_code", "p_target_id"],
+            reveal_police: ["p_code"],
+            v24_apply: ["p_code", "p_action_id", "p_approve"],
+            submit_final_ballot: ["p_code", "p_nominees", "p_ranking"],
+            resolve_final: ["p_code"],
+            record_v24_warning: ["p_code", "p_message"],
             submit_evidence: [
               "p_code",
               "p_target_id",
@@ -193,6 +243,8 @@ test("compact mobile header and legacy server role reveal", async ({ page }) => 
 });
 
 test("pixel entry creates a room, accepts an invitation, starts and ends a game", async ({ page, browser }) => {
+  // This regression scenario deliberately starts a legacy room.
+  await db.exec("alter table public.rooms alter column rules_version set default 'legacy'");
   test.setTimeout(90000);
   await f.as('host', 'end_game', ['ABCDEF']);
   await f.as('host', 'close_room', ['ABCDEF']);
@@ -211,11 +263,15 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
     await playerPage.getByLabel('ชื่อผู้เล่น').fill('มะนาว');
     await playerPage.getByRole('button', { name: 'เข้าสู่เกม', exact: true }).click();
     await expect(playerPage.locator('.waiting-roster')).toBeVisible();
+    await f.as('outsider','select_avatar',[code,'m-sea-01']);
+    await expect(playerPage.locator('.waiting-roster .avatar img').first()).toBeVisible({timeout:20000});
     const avatar = await playerPage.locator('.waiting-roster .avatar img').first().getAttribute('src');
     for (const role of Object.keys(f.players).slice(0,8)) {
       transportQueue = transportQueue.then(() => f.as(role, 'join_room', [code,role]));
       await transportQueue;
     }
+    const avatarIds=['f-sea-01','m-sea-02','f-sea-02','m-sea-03','f-sea-03','m-sea-04','f-sea-04','m-sea-05'];
+    for (const [index,role] of Object.keys(f.players).slice(0,8).entries()) await f.as(role,'select_avatar',[code,avatarIds[index]]);
     await page.reload();
     await expect(page.locator('.setup-panel')).toBeVisible();
     for (let i=0;i<3;i++) await page.getByRole('button', { name: 'ลด Villager', exact: true }).click();
@@ -414,15 +470,14 @@ test("Killer opens the device camera, converts its photo, and sends it to Host",
   await expect(page.getByText("รอ Host ตรวจ", { exact: true })).toBeVisible();
 });
 
-test("full quota blocks the device camera and submission until reset", async ({
+test("legacy full kill quota still allows nonlethal evidence", async ({
   page,
 }) => {
-  await f.hit("sumo");
-  await f.hit("athlete");
+  await db.exec("update public.rooms set approved_attacks_in_window=2");
   await openPlayer(page, "killer");
   await expect(page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "ส่งหลักฐานให้ Host" })).toBeDisabled();
-  await expect(page.locator(".quota-cooldown-notice")).toContainText("ไม่สามารถถ่ายหรือส่งรูปได้");
+  await expect(page.locator(".quota-cooldown-notice")).toContainText("ยังส่งหลักฐาน");
   await db.exec("update public.rooms set quota_window_start=quota_window_start-interval '1 hour'");
   await expect(page.locator("select")).toBeEnabled({ timeout: 20000 });
   await page.locator("select").selectOption(f.players.sumo);
@@ -493,7 +548,7 @@ test("Host can review evidence and both Killer sessions receive the same result"
     for (const [index, role] of ["host", "killer", "killer-wife"].entries())
       await openPlayer(pages[index], role);
     await expect(pages[0].locator(".host-review-summary")).toBeVisible();
-    await expect(pages[0].locator(".police-schedule-panel")).toBeHidden();
+    await expect(pages[0].locator(".police-schedule-panel")).toBeVisible();
     await pages[0].locator('.host-nav button').nth(2).click();
     await expect(
       pages[0].getByText("เฉพาะ Host · บทบาทและหัวใจ"),
@@ -704,7 +759,7 @@ test("live private role transitions show new actions without leaking identity", 
   await expect(
     page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".quota-panel")).toContainText("2 / 3");
+  await expect(page.locator(".quota-panel")).toContainText("1 / 3");
   await page.getByRole("button", { name: "ผู้เล่น", exact: true }).click();
   await expect(
     page
@@ -873,8 +928,7 @@ test("Detective privately receives Police role after Police death", async ({
   page,
 }) => {
   await openPlayer(page, "detective");
-  await f.hit("police");
-  await f.hit("police");
+  await f.bomb(["police"]);
   await expect(
     page.getByRole("heading", { name: "บทบาทของคุณเปลี่ยนแล้ว" }),
   ).toBeVisible({ timeout: 20000 });
@@ -891,8 +945,7 @@ test("player summary stays readable until manual exit, even after closure and re
   await f.hit("killer-wife");
   await f.hit("killer-wife");
   await f.resetQuota();
-  await f.hit("police");
-  await f.hit("police");
+  await f.bomb(["police"]);
   await db.query("update public.players set name=$1 where id=$2", ["ผู้เล่นชื่อยาวสำหรับทดสอบ", f.players.sumo]);
   await f.as("host", "end_game", ["ABCDEF"]);
   const summary = page.locator(".end-game-summary");
@@ -1173,7 +1226,7 @@ test("privacy cancels an outdated ability confirmation and hides a pending respo
 test("role changes and game results stay hidden and restore the latest screen", async ({ page }) => {
   await openPlayer(page, 'detective');
   await page.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
-  await f.hit('police'); await f.hit('police');
+  await f.bomb(['police']);
   await expect(page.locator('.player-hero h1')).toHaveText('Police', { timeout: 20000 });
   await expect(page.locator('.privacy-screen')).toBeVisible();
   await expect(page.locator('dialog[open]')).toHaveCount(0);

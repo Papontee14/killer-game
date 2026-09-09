@@ -77,6 +77,8 @@ import {
   type RoomState,
 } from "@/src/types";
 import { AVATARS, type AvatarGender, avatarById } from "@/src/avatar-catalog";
+import { V24Panel } from "./v24-panel";
+import { V24_ROLE_DETAILS } from "@/src/v24-rules";
 import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 import { downloadEvidenceArchive } from "@/src/evidence-download";
 import {
@@ -350,6 +352,21 @@ function errorMessage(error: unknown, fallback: string) {
     "target is dead": "เป้าหมายถูกกำจัดแล้ว กรุณาเลือกผู้เล่นใหม่",
     "evidence is no longer pending":
       "หลักฐานนี้ถูกจัดการแล้ว หรือเกมเปลี่ยนช่วง กรุณาตรวจสอบคิวอีกครั้ง",
+    "resolve earlier event first": "ต้อง resolve เหตุการณ์ก่อนหน้าในคิวก่อน",
+    "waiting for capture upload window": "รอครบ 2 นาทีจาก effective time เพื่อให้เรียงภาพที่ยังส่งไม่ครบได้ถูกต้อง",
+    "resolve bomb first": "กรุณาตัดสินผล Bomber ก่อน",
+    "target protected; reject evidence": "ภาพอยู่ในช่วง protection ของเป้าหมาย กรุณาปฏิเสธหลักฐาน",
+    "rolling attack quota reached; reject evidence": "เกินโควตา 3 attacks ต่อ rolling 60 นาที กรุณาปฏิเสธหลักฐาน",
+    "rolling kill quota reached; reject evidence": "เกินโควตา 1 kill ต่อ rolling 60 นาที กรุณาปฏิเสธหลักฐาน",
+    "rolling attack reservations full": "โควตาโจมตีถูกใช้หรือจองเต็มแล้ว รอคิวเดิมหรือ rolling window คืนโควตา",
+    "pending evidence limit reached": "มีหลักฐานรอตรวจครบ 2 ชิ้นแล้ว",
+    "doctor ability unavailable": "Doctor ใช้ความสามารถไม่ได้ ตรวจเวลา จำนวนครั้ง และเป้าหมาย",
+    "reveal unavailable": "Reveal ใช้ไม่ได้ในสถานะปัจจุบันหรือพ้นกำหนดแล้ว",
+    "invalid ballot": "เลือกผู้เล่นอื่นที่ยังมีชีวิตให้ครบจำนวนและไม่ซ้ำกัน",
+    "invalid police ranking": "กรุณาจัดลำดับผู้เล่นอื่นที่ยังมีชีวิตทุกคน",
+    "vote unavailable": "ยังไม่เปิดโหวตหรือหมดเวลาลงคะแนนแล้ว",
+    "configure proximity rule before start": "กรุณาบันทึก proximity rule ก่อนเริ่มเกม",
+    "invalid v24 settings": "เวลาเกมต้องมากกว่า 120 นาที และระบุ proximity rule อย่างน้อย 10 ตัวอักษร",
     "hourly kill quota reached":
       "โควต้าคิลเต็มแล้ว อนุมัติได้เฉพาะภาพที่ไม่ทำให้เป้าหมายตายจนกว่าจะขึ้นชั่วโมงใหม่เวลาไทย",
     "killer ability unavailable": "ใช้ความสามารถ Killer ไม่ได้ในสถานะปัจจุบัน",
@@ -645,6 +662,11 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
     "police-eliminated-no-successor": "ตำรวจถูกกำจัดและไม่มี Detective รับตำแหน่งต่อ",
     "bomb-eliminated-all-killers": "ระเบิดกำจัด Killer ที่เหลือทั้งหมด",
     "bomb-eliminated-police-no-successor": "ระเบิดกำจัดตำรวจและไม่มี Detective รับตำแหน่งต่อ",
+    "hunt-clock-expired": "Killer ไม่ทัน Hunt Clock",
+    "all-killers-eliminated": "ไม่มี active Killer ที่ยังมีชีวิต",
+    "police-lineage-eliminated": "ไม่มี living Police หลัง succession",
+    "final-low-kills": "Final มี confirmed kills ต่ำกว่า 2",
+    "final-vote": "ตัดสินจากผลโหวตลับ",
     "host-ended": "Host สั่งจบเกม",
   };
   const detail = result.reason.startsWith("police-accusation") && actor && target
@@ -662,6 +684,7 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
       <span className="section-kicker">เหตุผลที่เกมจบ</span>
       <strong>{winningTeam} เพราะ {labels[result.reason] ?? "เกมจบแล้ว"}</strong>
       {detail && <span>{detail}</span>}
+      {room.v24?.nominees && <span>Final nominees: {room.v24.nominees.map(id => room.players.find(p => p.id === id)?.name ?? "—").join(", ")}</span>}
       <time dateTime={result.occurredAt}>
         {new Date(result.occurredAt).toLocaleString("th-TH", {
           dateStyle: "medium",
@@ -941,6 +964,7 @@ function Waiting({ room, onLeave, onChooseAvatar, playerId }: { room: RoomState;
           {onChooseAvatar && <button className="primary-action" onClick={onChooseAvatar}>เลือกรูปโปรไฟล์</button>}
         </section>}
         <LobbyPlayers room={room} waiting />
+        {room.rulesVersion === "2.4" && <section className="panel v24-panel"><h2>กติกา v2.4 · {room.v24?.durationMinutes ?? 600} นาที</h2><p>Hunt Clock 120 นาที · โหวตลับตอน Final</p><p>Proximity rule: {room.v24?.proximityRule || "รอ Host กำหนดก่อนเริ่ม"}</p></section>}
       </div>
     </main>
   );
@@ -968,6 +992,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const [largeImage, setLargeImage] = useState("");
   const [archiveReady, setArchiveReady] = useState(false);
   const [counts, setCounts] = useState(DEFAULT_ROLE_COUNTS);
+  useEffect(() => { if(room?.rulesVersion === "legacy" && room.phase === "lobby") setCounts({...DEFAULT_ROLE_COUNTS,doctor:0,sumo:1,villager:4}); }, [room?.code,room?.rulesVersion]);
   const [bombSelection, setBombSelection] = useState<string[]>([]);
   const [accusationAt, setAccusationAtInput] = useState("");
   const hostCredentials = readRoomCredentials(`host:${code}`);
@@ -1063,6 +1088,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const pending = room.evidences.filter(
     (evidence) => evidence.status === "pending",
   );
+  if (room.rulesVersion === "2.4") pending.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt));
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const adjust = (role: Role, delta: number) =>
     setCounts((current) => ({
@@ -1233,6 +1259,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               <p>คิวหลักฐานจะเริ่มเมื่อ Host แจกบทบาทแล้ว</p>
             </div>
           )}
+          {room.rulesVersion === "2.4" && <V24Panel room={room} act={act} busy={busy} />}
           {room.phase === "lobby" ? (
             <div className="panel setup-panel" data-host-section="home">
               <div className="panel-heading">
@@ -1243,7 +1270,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                 <span className="count-total">{total} คน</span>
               </div>
               <div className="role-grid">
-                {(Object.keys(DEFAULT_ROLE_COUNTS) as Role[]).map((role) => (
+                {(Object.keys(DEFAULT_ROLE_COUNTS) as Role[]).filter(role => room.rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor").map((role) => (
                   <div className="role-control" key={role}>
                     <img
                       className="role-thumb role-thumb-control"
@@ -1253,7 +1280,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                     />
                     <div>
                       <strong>{ROLE_LABELS[role]}</strong>
-                      <small>{ROLE_HEARTS[role] || "ไม่มี"} หัวใจ</small>
+                      <small>{room.rulesVersion === "2.4" && role === "killer-wife" ? 1 : ROLE_HEARTS[role] || "ไม่มี"} หัวใจ</small>
                     </div>
                     <div className="stepper">
                       <button
@@ -1284,8 +1311,8 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
               <button
                 className="primary-action start-btn"
-                disabled={busy || room.players.length !== total || room.players.some((player) => !player.avatarId)}
-                onClick={() => act(() => startGame(room.code, counts))}
+                disabled={busy || (room.rulesVersion === "2.4" && !room.v24?.proximityRule) || room.players.length !== total || room.players.some((player) => !player.avatarId)}
+                onClick={() => act(() => startGame(room.code, Object.fromEntries(Object.entries(counts).filter(([role]) => room.rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor"))))}
               >
                 เริ่มแจกบทบาท ({room.players.length}/{total}){" "}
                 <Radio size={18} />
@@ -1306,7 +1333,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                       <span className="section-kicker danger-kicker">
                         เหตุการณ์เร่งด่วน
                       </span>
-                      <h2>เลือกผู้เล่นใกล้ Bomber 0–2 คน</h2>
+                      <h2>เลือกผู้เล่นใกล้ Bomber 0–{room.rulesVersion === "2.4" ? 1 : 2} คน</h2>
                     </div>
                     <Skull />
                   </div>
@@ -1323,7 +1350,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                             setBombSelection((current) =>
                               current.includes(player.id)
                                 ? current.filter((id) => id !== player.id)
-                                : current.length < 2
+                                : current.length < (room.rulesVersion === "2.4" ? 1 : 2)
                                   ? [...current, player.id]
                                   : current,
                             )
@@ -1360,7 +1387,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                 <div>
                   <span className="section-kicker">งานรอตรวจ</span>
                   <h2>{pending.length} หลักฐานรอตรวจ</h2>
-                  <p>{room.phase !== "active" ? "พักการอนุมัติในช่วงนี้" : pending.length ? "เปิดภาพและตรวจเป้าหมายก่อนตัดสินผล" : "ตรวจครบแล้ว รอหลักฐานใหม่จากผู้เล่น"}</p>
+                  <p>{!["active", "resolution"].includes(room.phase) ? "พักการอนุมัติในช่วงนี้" : pending.length ? "เปิดภาพและตรวจเป้าหมายก่อนตัดสินผลตามลำดับเวลา" : "ตรวจครบแล้ว รอหลักฐานใหม่จากผู้เล่น"}</p>
                 </div>
                 <button className="primary-action" onClick={() => setTab("evidence")}>ตรวจหลักฐาน <Camera size={18} /></button>
               </section>
@@ -1373,10 +1400,10 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                 <div className="metric-card">
                   <small>โควต้าคิล</small>
                   <strong>
-                    {room.killsThisHour}
-                    <em>/{room.killLimit}</em>
+                    {room.rulesVersion === "2.4" ? room.v24?.killsUsed ?? 0 : room.killsThisHour}
+                    <em>/{room.rulesVersion === "2.4" ? 1 : room.killLimit}</em>
                   </strong>
-                  <span>คิลในชั่วโมงนี้ · เวลาไทย</span>
+                  <span>{room.rulesVersion === "2.4" ? "คิลใน rolling 60 นาที" : "คิลในชั่วโมงนี้ · เวลาไทย"}</span>
                 </div>
                 <div className="metric-card">
                   <small>หลักฐานรอตรวจ</small>
@@ -1388,6 +1415,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
               <div
                 className="panel action-panel police-schedule-panel"
+                hidden={room.rulesVersion === "2.4"}
                 data-host-section="home"
               >
                 <div className="schedule-heading">
@@ -1460,12 +1488,12 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                     {pending.length} รอตรวจ
                   </span>
                 </div>
-                {room.killsThisHour >= room.killLimit && (
+                {(room.rulesVersion === "2.4" ? (room.v24?.killsUsed ?? 0) >= 1 : room.killsThisHour >= room.killLimit) && (
                   <p className="amber-text">
                     โควต้าคิลเต็ม · อนุมัติได้เฉพาะภาพที่ไม่ทำให้เป้าหมายตาย
                   </p>
                 )}
-                {room.phase !== "active" && (
+                {!["active", "resolution"].includes(room.phase) && (
                   <p className="muted">
                     พักการอนุมัติระหว่าง{PHASE_LABELS[room.phase]}
                   </p>
@@ -1534,18 +1562,20 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                               timeZone: "Asia/Bangkok",
                             })}
                           </small>
-                          {room.privateStates[item.targetId]?.currentRole ===
+                          {room.rulesVersion !== "2.4" && room.privateStates[item.targetId]?.currentRole ===
                             "police" && (
                             <p className="danger-text">
                               หากอนุมัติการโจมตีตำรวจ City Side จะชนะทันที
                             </p>
                           )}
                           <div className="evidence-actions">
+                            {room.rulesVersion === "2.4" && room.v24?.actions?.find(a => a.status === "pending")?.evidence_id !== item.id && <p className="muted">รอ resolve เหตุการณ์ก่อนหน้าในคิว</p>}
                             <button
                               className="approve-action"
                               disabled={
                                 busy ||
-                                room.phase !== "active" ||
+                                (room.rulesVersion === "2.4" && room.v24?.actions?.find(a => a.status === "pending")?.evidence_id !== item.id) ||
+                                !["active", "resolution"].includes(room.phase) ||
                                 !item.imageData
                               }
                               onClick={() =>
@@ -1968,6 +1998,10 @@ export function PlayerRoom({
     );
   }
   const isKiller = me.isActiveKiller;
+  const v24SubmissionBlocked = room.rulesVersion === "2.4" && (
+    room.killerEvidenceProgress.filter(item => item.killerId === playerId && item.status === "pending").length >= 2 ||
+    (room.v24?.attacksUsed ?? 0) + room.killerEvidenceProgress.filter(item => item.status === "pending" && Date.parse(item.capturedAt) > now - 3600000).length >= 3
+  );
   const target = room.players.find(
     (player) =>
       player.id === targetId &&
@@ -2152,7 +2186,7 @@ export function PlayerRoom({
             />
             <span className="section-kicker">บัตรบทบาท · ลับเฉพาะคุณ</span>
             <h1>{ROLE_LABELS[me.currentRole]}</h1>
-            <p>{ROLE_SUMMARIES[me.currentRole]}</p>
+            <p>{room.rulesVersion === "2.4" ? V24_ROLE_DETAILS[me.currentRole] : ROLE_SUMMARIES[me.currentRole]}</p>
             <button className="text-button" onClick={() => setRoleOpen(true)}>
               <Eye size={15} /> อ่านบทบาทของฉัน
             </button>
@@ -2193,7 +2227,7 @@ export function PlayerRoom({
               </div>
             </div>
           )}
-          {me.currentRole === "police" &&
+          {room.rulesVersion !== "2.4" && me.currentRole === "police" &&
             !room.policeCheckAt &&
             room.phase === "active" && (
               <div className="panel">
@@ -2214,7 +2248,8 @@ export function PlayerRoom({
               </button>
             </div>
           )}
-          {isKiller && (
+          {room.rulesVersion === "2.4" && <V24Panel room={room} act={act} busy={busy} />}
+          {room.rulesVersion !== "2.4" && isKiller && (
             <div className="panel quota-panel">
               <span className="section-kicker">โควต้าคิลชั่วโมงนี้</span>
               <h2>
@@ -2253,7 +2288,7 @@ export function PlayerRoom({
               <Hearts count={me.hearts} max={me.maxHearts} />
             </div>
           )}
-          {isKiller && room.killsThisHour >= room.killLimit && (
+          {room.rulesVersion !== "2.4" && isKiller && room.killsThisHour >= room.killLimit && (
             <div className="quota-cooldown-notice">
               <Clock3 size={24} />
               <div>
@@ -2273,7 +2308,7 @@ export function PlayerRoom({
                   <h2>{photo ? "ตรวจภาพและส่ง" : target ? "ถ่ายภาพเป้าหมาย" : "เลือกเป้าหมาย"}</h2>
                 </div>
                 <span className="quota">
-                  {room.killsThisHour} / {room.killLimit} คิล
+                  {room.rulesVersion === "2.4" ? `${room.v24?.attacksUsed ?? 0} / 3 attacks` : `${room.killsThisHour} / ${room.killLimit} คิล`}
                 </span>
               </div>
               <ol className="mission-steps" aria-label="ขั้นตอนภารกิจ">
@@ -2326,8 +2361,9 @@ export function PlayerRoom({
                 </span>
               </div>
               {!target && <p className="muted">เลือกเป้าหมายก่อนเปิดกล้อง</p>}
+              {v24SubmissionBlocked && <p role="status">ช่องส่งหลักฐานเต็ม · รอ Host ตรวจหลักฐานเดิม หรือรอ rolling quota คืนช่องว่าง</p>}
               <NativeCamera
-                disabled={submittingEvidence || !target || tab !== "home"}
+                disabled={submittingEvidence || v24SubmissionBlocked || !target || tab !== "home"}
                 onOpen={() => {
                   cameraTargetRef.current = target?.id ?? null;
                   setError("");
@@ -2361,6 +2397,7 @@ export function PlayerRoom({
                   !photo ||
                   !capturedAt ||
                   photoSeconds <= 0 ||
+                  v24SubmissionBlocked ||
                   submittingEvidence
                 }
                 onClick={sendEvidence}
@@ -2372,7 +2409,7 @@ export function PlayerRoom({
               </button>
             </div>
           )}
-          {me.currentRole === "police" &&
+          {room.rulesVersion !== "2.4" && me.currentRole === "police" &&
             mine?.health !== "dead" &&
             ["active", "police-check"].includes(room.phase) && (
               <div className="panel action-panel">
@@ -2478,7 +2515,7 @@ export function PlayerRoom({
           </div>
         </aside>
       </div>
-      {showRules && <Rules onClose={() => setShowRules(false)} />}
+      {showRules && <Rules rulesVersion={room.rulesVersion} onClose={() => setShowRules(false)} />}
       {showRecovery && (
           <RecoveryCard
             token={reclaimToken}
@@ -2488,6 +2525,7 @@ export function PlayerRoom({
       )}
       {roleOpen && !showRecovery && room.phase !== "ended" && (
         <RoleReveal
+          rulesVersion={room.rulesVersion}
           key={`${room.code}:${room.createdAt}:${playerId}`}
           revealStorageKey={`killer_role_revealed:${room.code}:${room.createdAt}:${playerId}`}
           role={me.currentRole}

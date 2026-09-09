@@ -37,6 +37,10 @@ function asPrivateState(value: Json): PrivatePlayerState {
   );
   return {
     playerId: String(value.playerId ?? value.player_id),
+    protectionUntil: value.protectionUntil ? String(value.protectionUntil) : undefined,
+    doctorUses: Number(value.doctorUses ?? 0),
+    doctorReadyAt: value.doctorReadyAt ? String(value.doctorReadyAt) : undefined,
+    badgeRevealed: Boolean(value.badgeRevealed),
     initialRole,
     currentRole: isActiveKiller ? "killer" : currentRole,
     team: String(value.team ?? (isActiveKiller ? "killers" : "city")) as Team,
@@ -76,6 +80,8 @@ function asRoom(value: unknown): RoomState {
   return {
     viewerRole:
       (data.viewerRole ?? data.viewer_role) === "host" ? "host" : "player",
+    rulesVersion: data.rulesVersion === "2.4" ? "2.4" : "legacy",
+    v24: data.v24 as RoomState["v24"],
     playerId: data.playerId ? String(data.playerId) : undefined,
     code: String(data.code),
     hostName: String(data.hostName ?? data.host_name ?? "Host"),
@@ -324,7 +330,7 @@ async function mutate(code: string, fn: string, args: Json = {}) {
   });
   if (error) throw error;
   if (data?.actionError)
-    throw new Error("ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
+    throw new Error(data.actionError === "game_ended" ? "เกมจบแล้ว ไม่สามารถใช้ action เพิ่มได้" : "ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");
   return room;
@@ -351,6 +357,15 @@ export function resolvePoliceCheck(code: string, targetId: string) {
 export function reporterAbility(code: string, targetId: string) {
   return mutate(code, "use_reporter", { p_target_id: targetId });
 }
+export function configureV24(code: string, durationMinutes: number, proximityRule: string) {
+  return mutate(code, "configure_v24", { p_duration_minutes: durationMinutes, p_proximity_rule: proximityRule });
+}
+export function doctorAbility(code: string, targetId: string) { return mutate(code, "use_doctor", { p_target_id: targetId }); }
+export function revealPolice(code: string) { return mutate(code, "reveal_police"); }
+export function resolveV24Action(code: string, actionId: string) { return mutate(code, "v24_apply", { p_action_id: actionId, p_approve: true }); }
+export function submitFinalBallot(code: string, nominees: string[], ranking: string[]) { return mutate(code, "submit_final_ballot", { p_nominees: nominees, p_ranking: ranking }); }
+export function resolveFinal(code: string) { return mutate(code, "resolve_final"); }
+export function recordV24Warning(code: string, message: string) { return mutate(code, "record_v24_warning", { p_message: message }); }
 export function setAccusationAt(code: string, accusationAt: string) {
   return mutate(code, "set_accusation_at", { p_at: accusationAt });
 }
@@ -415,7 +430,7 @@ export async function submitEvidence(
   });
   if (error || data?.actionError) {
     await supabase.storage.from("evidence").remove([storagePath]);
-    throw error || new Error("ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
+    throw error || new Error(data?.actionError === "game_ended" ? "เกมจบแล้ว ไม่สามารถโจมตีได้" : "ถึงเวลาตำรวจชี้ตัวแล้ว ไม่สามารถโจมตีได้");
   }
   const room = await rpcView(code);
   if (!room) throw new Error("ไม่พบห้องนี้");

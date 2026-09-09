@@ -1,5 +1,6 @@
 import { ensureAnonymousSession, getSupabaseBrowser } from "./supabase-browser";
 import type {
+  AttackActivity,
   Evidence,
   EndGameResult,
   EndGameTimelineEntry,
@@ -132,6 +133,16 @@ function asRoom(value: unknown): RoomState {
       ]),
     ),
     evidences,
+    canViewAttackActivity: Boolean(data.canViewAttackActivity ?? data.can_view_attack_activity),
+    attackActivity: ((data.attackActivity ?? data.attack_activity ?? []) as Array<Json>).map((item) => ({
+      id: String(item.id),
+      killerId: String(item.killerId ?? item.killer_id),
+      targetId: String(item.targetId ?? item.target_id),
+      storagePath: String(item.storagePath ?? item.storage_path ?? ""),
+      capturedAt: String(item.capturedAt ?? item.captured_at),
+      decisionAt: item.decisionAt ?? item.decision_at ? String(item.decisionAt ?? item.decision_at) : undefined,
+      result: (item.result ?? item.attackResult ?? item.attack_result ?? null) as AttackActivity["result"],
+    })),
     killerEvidenceProgress: (
       (data.killerEvidenceProgress ?? []) as Array<Json>
     ).map((item) => ({
@@ -264,6 +275,16 @@ async function rpcView(code: string) {
   return room;
 }
 
+/** Storage independently verifies that this viewer may see the attack image. */
+export async function loadAttackActivityImage(storagePath: string) {
+  const { data, error } = await client().storage
+    .from("evidence")
+    .createSignedUrl(storagePath, 300);
+  if (error || !data?.signedUrl)
+    throw error ?? new Error("โหลดรูปหลักฐานไม่สำเร็จ");
+  return data.signedUrl;
+}
+
 export async function loadRoom(code: string) {
   return rpcView(code);
 }
@@ -357,8 +378,8 @@ export function resolvePoliceCheck(code: string, targetId: string) {
 export function reporterAbility(code: string, targetId: string) {
   return mutate(code, "use_reporter", { p_target_id: targetId });
 }
-export function configureV24(code: string, durationMinutes: number, proximityRule: string) {
-  return mutate(code, "configure_v24", { p_duration_minutes: durationMinutes, p_proximity_rule: proximityRule });
+export function configureV24(code: string, durationMinutes: number) {
+  return mutate(code, "configure_v24", { p_duration_minutes: durationMinutes });
 }
 export function doctorAbility(code: string, targetId: string) { return mutate(code, "use_doctor", { p_target_id: targetId }); }
 export function revealPolice(code: string) { return mutate(code, "reveal_police"); }

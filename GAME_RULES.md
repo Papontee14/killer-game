@@ -7,12 +7,13 @@ experiments in that document are not enabled rules. Existing rooms remain
 
 ## Setup and schedule
 
-- Default 13 players plus Host: Killer, Wife, Police, Detective, Reporter,
-  Bomber, Athlete, Doctor (one each), Villager (five). No Sumo.
+- Default 12 players plus Host: Killer, Wife, Police, Detective, Reporter,
+  Bomber, Athlete, Doctor (one each), Villager (four). No Sumo.
 - Exactly one initial Killer and Police; optional special roles 0–1, Villager
   0–20. At least three players must match the role count and select avatars.
-- Host configures duration (121–2880 minutes; default 600) and Bomber proximity
-  rule before start, including distance and tie handling. Settings then lock.
+- Host configures duration (121–2880 minutes; default 600) before start. Settings
+  then lock. During a Bomber explosion, Host judges the closest living player
+  from the evidence image.
 - Server start time anchors cutoff at Final minus 30 minutes, discussion at
   Final minus 10 minutes, Reveal deadline at Final minus two hours. Other
   cooldowns and Hunt durations remain fixed when game length changes.
@@ -78,7 +79,7 @@ experiments in that document are not enabled rules. Existing rooms remain
   role before cutoff. Transformed Wife reports Wife, successor reports Detective.
   Result private; public sees only ability-use announcement.
 - **Bomber:** two Hearts. Killer-caused death reveals Bomber and pauses resolution.
-  Host chooses 0–1 living victim using locked proximity rule. Explosion ignores
+  Host chooses 0–1 living victim by judging the evidence image. Explosion ignores
   hearts, does not chain and does not transform Wife.
 - **Athlete:** three Hearts; normal City voting and survival rules.
 - **Doctor:** two Hearts; heal another living player +1, capped at role max.
@@ -122,7 +123,7 @@ experiments in that document are not enabled rules. Existing rooms remain
 ## Defaults beyond the source document
 
 User-selected: configurable composition/duration with fixed cooldowns; retain
-legacy rooms; Host locks proximity rule; absent voters abstain and Police ties
+legacy rooms; Host judges Bomber proximity from the evidence image; absent voters abstain and Police ties
 have precommitted fallback. Engineering defaults: two-minute ordering watermark,
 stable same-time ordering, minimum three players, maximum 48-hour duration and
 a full three-minute vote after delayed Host resolution. These are explicit

@@ -123,6 +123,17 @@ export type KillerEvidenceProgress = Pick<
   result: "target is still alive" | "elimination confirmed" | null;
 };
 
+/** Approved attack evidence visible only to the Host and eliminated players. */
+export type AttackActivity = {
+  id: string;
+  killerId: string;
+  targetId: string;
+  storagePath: string;
+  capturedAt: string;
+  decisionAt?: string;
+  result: "target is still alive" | "elimination confirmed" | null;
+};
+
 export type RoomState = {
   rulesVersion?: "legacy" | "2.4";
   v24?: V24State;
@@ -140,6 +151,8 @@ export type RoomState = {
   players: Player[];
   privateStates: Record<string, PrivatePlayerState>;
   evidences: Evidence[];
+  canViewAttackActivity: boolean;
+  attackActivity: AttackActivity[];
   killerEvidenceProgress: KillerEvidenceProgress[];
   events: RoomEvent[];
   winner: WinningTeam;
@@ -152,11 +165,11 @@ export type RoomState = {
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
-  doctor: "Doctor",
   killer: "Killer",
   "killer-wife": "Killer's Wife",
   police: "Police",
   reporter: "Reporter",
+  doctor: "Doctor",
   bomber: "Bomber",
   detective: "Detective",
   athlete: "Athlete",
@@ -178,21 +191,21 @@ export const ROLE_HEARTS: Record<Role, number> = {
 };
 
 export const DEFAULT_ROLE_COUNTS: Record<Role, number> = {
-  doctor: 1,
   killer: 1,
   "killer-wife": 1,
   police: 1,
   reporter: 1,
+  doctor: 1,
   bomber: 1,
   detective: 1,
   athlete: 1,
   sumo: 0,
-  villager: 5,
+  villager: 4,
 };
 
 export type V24Action = { id: string; actor_id: string; target_id: string; kind: "attack" | "heal"; effective_at: string; evidence_id?: string; status: "pending" | "approved" | "rejected"; lethal: boolean; healed: boolean };
 export type V24State = {
-  durationMinutes?: number; proximityRule?: string; startedAt?: string; cutoffAt?: string;
+  durationMinutes?: number; startedAt?: string; cutoffAt?: string;
   finalAt?: string; revealEndsAt?: string; voteEndsAt?: string; serverNow: string;
   huntDeadline?: string; huntPending?: boolean; attacksUsed?: number; killsUsed?: number; pendingAttacks?: number;
   nomineeCount?: number; nominees?: string[]; actions?: V24Action[];

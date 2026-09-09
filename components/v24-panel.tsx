@@ -29,6 +29,12 @@ function countdown(value: string | undefined, now: number) {
   const seconds = Math.max(0, Math.ceil((Date.parse(value) - now) / 1000));
   return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
+function formatDuration(totalMinutes: number) {
+  totalMinutes = Math.max(0, totalMinutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours} ชั่วโมง${minutes ? ` ${minutes} นาที` : ""}`;
+}
 export function V24Panel({ room, act, busy }: Props) {
   const v = room.v24;
   const [elapsed, setElapsed] = useState(0);
@@ -39,8 +45,15 @@ export function V24Panel({ room, act, busy }: Props) {
     return () => clearInterval(timer);
   }, [v?.serverNow]);
   const now = Date.parse(v?.serverNow || new Date().toISOString()) + elapsed;
-  const [duration, setDuration] = useState(v?.durationMinutes ?? 600);
-  const [proximity, setProximity] = useState(v?.proximityRule ?? "");
+  const savedDuration = v?.durationMinutes ?? 600;
+  const [durationHours, setDurationHours] = useState(Math.floor(savedDuration / 60));
+  const [durationMinutes, setDurationMinutes] = useState(savedDuration % 60);
+  const duration = durationHours * 60 + durationMinutes;
+  useEffect(() => {
+    if (v?.durationMinutes == null) return;
+    setDurationHours(Math.floor(v.durationMinutes / 60));
+    setDurationMinutes(v.durationMinutes % 60);
+  }, [v?.durationMinutes]);
   const [target, setTarget] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [ranking, setRanking] = useState<string[]>([]);
@@ -66,56 +79,55 @@ export function V24Panel({ room, act, busy }: Props) {
   if (room.phase === "lobby")
     return host ? (
       <section className="panel v24-panel" data-host-section="home">
-        <span className="section-kicker">กติกา v2.4 · Hunt Clock</span>
         <h2>ตั้งค่าก่อนเริ่ม</h2>
-        <label>
-          ระยะเวลาเกม (นาที)
-          <input
-            type="number"
-            min={121}
-            max={2880}
-            value={duration}
-            onChange={(e) => setDuration(Number(e.target.value))}
-          />
-        </label>
+        <fieldset className="duration-fields">
+          <legend>ระยะเวลาเกม</legend>
+          <label>
+            ชั่วโมง
+            <input
+              type="number"
+              min={0}
+              max={48}
+              value={durationHours}
+              onChange={(e) => setDurationHours(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </label>
+          <label>
+            นาที
+            <input
+              type="number"
+              min={0}
+              max={59}
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(Math.min(59, Math.max(0, Number(e.target.value) || 0)))}
+            />
+          </label>
+        </fieldset>
         <p>
-          cutoff นาที {duration - 30} · discussion นาที {duration - 10} · Reveal
-          ถึงนาที {duration - 120} · โหวตอีก 3 นาที
+          cutoff {formatDuration(duration - 30)} · discussion {formatDuration(duration - 10)} · Reveal
+          ถึง {formatDuration(duration - 120)} · โหวตอีก 3 นาที
         </p>
-        <label>
-          Proximity rule ของ Bomber
-          <textarea
-            rows={3}
-            maxLength={1000}
-            value={proximity}
-            onChange={(e) => setProximity(e.target.value)}
-            placeholder="ระบุระยะ วิธีหาเหยื่อใกล้สุด และวิธีตัดสินเมื่อระยะเท่ากัน"
-          />
-        </label>
         <button
           className="primary-action"
           disabled={
             busy ||
             duration <= 120 ||
-            duration > 2880 ||
-            proximity.trim().length < 10
+            duration > 2880
           }
-          onClick={() =>
-            act(() => configureV24(room.code, duration, proximity))
-          }
+          onClick={() => act(() => configureV24(room.code, duration))}
         >
           บันทึกกติกาก่อนเริ่ม
         </button>
         <p role="status">
-          {v.proximityRule
-            ? `ค่าที่บันทึก: ${v.durationMinutes} นาที · ${v.proximityRule}`
-            : "ต้องบันทึก proximity rule ก่อนแจกบทบาท"}
+          {v.durationMinutes
+            ? `ค่าที่บันทึก: ${formatDuration(v.durationMinutes)}`
+            : "ต้องบันทึกระยะเวลาเกมก่อนแจกบทบาท"}
         </p>
       </section>
     ) : (
       <section className="panel v24-panel">
-        <h2>ห้องกติกา v2.4</h2>
-        <p>{v.proximityRule || "รอ Host กำหนดกติกา"}</p>
+        <h2>ห้องรอเริ่มเกม</h2>
+        <p>{v.durationMinutes ? `ระยะเวลาเกม: ${formatDuration(v.durationMinutes)}` : "รอ Host กำหนดระยะเวลาเกม"}</p>
       </section>
     );
   return (
@@ -172,10 +184,6 @@ export function V24Panel({ room, act, busy }: Props) {
           <strong>{countdown(me.protectionUntil, now)}</strong>
         </p>
       )}
-      <details>
-        <summary>Proximity rule ที่ล็อกไว้</summary>
-        <p>{v.proximityRule}</p>
-      </details>
       {alive && me?.currentRole === "doctor" && (
         <div className="v24-action">
           <h3>Doctor · รักษาผู้เล่นอื่น</h3>

@@ -49,6 +49,7 @@ import {
   endGame,
   heartbeat,
   joinOrCreateDemo,
+  loadAttackActivityImage,
   loadRoom,
   rejectEvidence,
   reporterAbility,
@@ -121,6 +122,13 @@ const EVENT_ICONS: Record<EventIcon, typeof Radio> = {
   stop: CircleStop,
   radio: Radio,
 };
+
+function formatDuration(totalMinutes: number) {
+  totalMinutes = Math.max(0, totalMinutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours} ชั่วโมง${minutes ? ` ${minutes} นาที` : ""}`;
+}
 
 let latestRoom: RoomState | null = null;
 function useRoom(code: string) {
@@ -365,8 +373,8 @@ function errorMessage(error: unknown, fallback: string) {
     "invalid ballot": "เลือกผู้เล่นอื่นที่ยังมีชีวิตให้ครบจำนวนและไม่ซ้ำกัน",
     "invalid police ranking": "กรุณาจัดลำดับผู้เล่นอื่นที่ยังมีชีวิตทุกคน",
     "vote unavailable": "ยังไม่เปิดโหวตหรือหมดเวลาลงคะแนนแล้ว",
-    "configure proximity rule before start": "กรุณาบันทึก proximity rule ก่อนเริ่มเกม",
-    "invalid v24 settings": "เวลาเกมต้องมากกว่า 120 นาที และระบุ proximity rule อย่างน้อย 10 ตัวอักษร",
+    "configure proximity rule before start": "กรุณาบันทึกระยะเวลาเกมก่อนเริ่มเกม",
+    "invalid v24 settings": "เวลาเกมต้องอยู่ระหว่าง 2 ชั่วโมง 1 นาที ถึง 48 ชั่วโมง",
     "hourly kill quota reached":
       "โควต้าคิลเต็มแล้ว อนุมัติได้เฉพาะภาพที่ไม่ทำให้เป้าหมายตายจนกว่าจะขึ้นชั่วโมงใหม่เวลาไทย",
     "killer ability unavailable": "ใช้ความสามารถ Killer ไม่ได้ในสถานะปัจจุบัน",
@@ -640,6 +648,61 @@ function Events({
     </>
   );
 }
+function AttackActivityPanel({ room }: { room: RoomState }) {
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [images, setImages] = useState<Record<string, string>>({});
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<{ url: string; label: string } | null>(null);
+  const visible = room.attackActivity.slice(0, visibleCount);
+  const signature = visible.map((item) => item.id).join(",");
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(visible.map(async (item) => {
+      if (!item.storagePath || images[item.id] || failed[item.id]) return;
+      try {
+        const url = await loadAttackActivityImage(item.storagePath);
+        if (!cancelled) setImages((current) => ({ ...current, [item.id]: url }));
+      } catch {
+        if (!cancelled) setFailed((current) => ({ ...current, [item.id]: true }));
+      }
+    }));
+    return () => { cancelled = true; };
+  }, [signature, room.code]);
+  useEffect(() => { setVisibleCount(20); setImages({}); setFailed({}); }, [room.code]);
+  if (!room.canViewAttackActivity) return null;
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const retry = (id: string) => {
+    setFailed((current) => ({ ...current, [id]: false }));
+    setImages((current) => { const next = { ...current }; delete next[id]; return next; });
+  };
+  return <section className="attack-activity" aria-label="Activity การโจมตี">
+    <div className="panel-heading"><div><span className="section-kicker">เฉพาะผู้ถูกกำจัดและ Host</span><h2>Activity การโจมตี</h2></div><Clock3 size={16} className="muted" /></div>
+    {room.attackActivity.length === 0 ? <div className="empty-state"><Radio size={24} /><p>ยังไม่มีการโจมตีที่อนุมัติ</p><small>รายการที่ Host อนุมัติจะแสดงที่นี่</small></div> : <div className="attack-activity-grid">
+      {visible.map((item) => {
+        const actor = names.get(item.killerId) ?? "ไม่ทราบชื่อ";
+        const target = names.get(item.targetId) ?? "ไม่ทราบชื่อ";
+        const label = `${actor} โจมตี ${target}`;
+        const image = images[item.id];
+        return <article className="attack-activity-card" key={item.id}>
+          <div className="attack-activity-image">
+            {image ? <button aria-label={`ขยายรูป ${label}`} onClick={() => setExpanded({ url: image, label })}><img src={image} alt={`หลักฐาน: ${label}`} onError={() => retry(item.id)} /></button>
+              : failed[item.id] ? <div><span>โหลดรูปไม่สำเร็จ</span><button className="text-button" onClick={() => retry(item.id)}>ลองใหม่</button></div>
+              : <span>กำลังโหลดรูป…</span>}
+          </div>
+          <div className="attack-activity-info">
+            <strong>{label}</strong>
+            <small>เวลาถ่าย: {new Date(item.capturedAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}</small>
+            <small>Host อนุมัติ: {item.decisionAt ? new Date(item.decisionAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }) : "ไม่มีข้อมูลเวลา"}</small>
+            <span className={`attack-result ${item.result === "elimination confirmed" ? "lethal" : ""}`}>{item.result === "elimination confirmed" ? "ถูกกำจัดจากการโจมตีครั้งนี้" : item.result === "target is still alive" ? "เป้าหมายยังมีชีวิต" : "ไม่มีข้อมูลผลการโจมตี"}</span>
+          </div>
+        </article>;
+      })}
+    </div>}
+    {visibleCount < room.attackActivity.length && <button className="secondary-action activity-more" onClick={() => setVisibleCount((count) => count + 20)}>โหลดเพิ่มเติม</button>}
+    {expanded && <Dialog title={expanded.label} onClose={() => setExpanded(null)}><img className="attack-activity-expanded" src={expanded.url} alt={`หลักฐาน: ${expanded.label}`} /></Dialog>}
+  </section>;
+}
+
 function EndGameReasonPanel({ room }: { room: RoomState }) {
   if (room.phase !== "ended") return null;
   if (!room.endGameResult) return (
@@ -964,7 +1027,7 @@ function Waiting({ room, onLeave, onChooseAvatar, playerId }: { room: RoomState;
           {onChooseAvatar && <button className="primary-action" onClick={onChooseAvatar}>เลือกรูปโปรไฟล์</button>}
         </section>}
         <LobbyPlayers room={room} waiting />
-        {room.rulesVersion === "2.4" && <section className="panel v24-panel"><h2>กติกา v2.4 · {room.v24?.durationMinutes ?? 600} นาที</h2><p>Hunt Clock 120 นาที · โหวตลับตอน Final</p><p>Proximity rule: {room.v24?.proximityRule || "รอ Host กำหนดก่อนเริ่ม"}</p></section>}
+        {room.rulesVersion === "2.4" && <section className="panel v24-panel"><h2>ตั้งค่าเกม · {formatDuration(room.v24?.durationMinutes ?? 600)}</h2><p>Hunt Clock 120 นาที · โหวตลับตอน Final</p></section>}
       </div>
     </main>
   );
@@ -1311,7 +1374,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
               <button
                 className="primary-action start-btn"
-                disabled={busy || (room.rulesVersion === "2.4" && !room.v24?.proximityRule) || room.players.length !== total || room.players.some((player) => !player.avatarId)}
+                disabled={busy || room.players.length !== total || room.players.some((player) => !player.avatarId)}
                 onClick={() => act(() => startGame(room.code, Object.fromEntries(Object.entries(counts).filter(([role]) => room.rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor"))))}
               >
                 เริ่มแจกบทบาท ({room.players.length}/{total}){" "}
@@ -1333,7 +1396,8 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                       <span className="section-kicker danger-kicker">
                         เหตุการณ์เร่งด่วน
                       </span>
-                      <h2>เลือกผู้เล่นใกล้ Bomber 0–{room.rulesVersion === "2.4" ? 1 : 2} คน</h2>
+                      <h2>Host เลือกผู้เล่นที่ใกล้ Bomber ที่สุด 0–{room.rulesVersion === "2.4" ? 1 : 2} คน</h2>
+                      <p className="muted">Host ตัดสินจากภาพหลักฐานเองว่าใครอยู่ใกล้ Bomber ที่สุด แล้วเลือกให้เสียชีวิตได้</p>
                     </div>
                     <Skull />
                   </div>
@@ -1621,6 +1685,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           <section className="panel" data-host-section="events">
             <div className="panel-heading"><h2>บันทึกเหตุการณ์</h2><Clock3 size={16} className="muted" /></div>
             <Events room />
+            <AttackActivityPanel room={room} />
           </section>
         </section>
         {room.phase === "lobby" && tab === "home" && <aside className="host-lobby-roster"><LobbyPlayers room={room} onRemove={(player) => setConfirmation({
@@ -2134,6 +2199,7 @@ export function PlayerRoom({
             <span className="section-kicker">อัปเดตจากห้องเกม</span>
             <h1>ข่าวสาร</h1>
             <Events room={room} playerId={playerId} />
+            <AttackActivityPanel room={room} />
           </section>
         )}
         {tab === "more" && (
@@ -2496,6 +2562,7 @@ export function PlayerRoom({
               <div>
                 <strong>คุณถูกกำจัดแล้ว</strong>
                 <p>รับชมเกมต่อได้ แต่ใช้ความสามารถไม่ได้</p>
+                <button className="text-button" onClick={() => setTab("news")}>ดู Activity การโจมตี</button>
               </div>
             </div>
           )}

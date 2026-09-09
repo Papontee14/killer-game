@@ -11,7 +11,7 @@ export const V24_ROLE_DETAILS: Record<Role, string> = {
   reporter:
     "2 Hearts · ตรวจ initial role ของคนอื่นที่ยังมีชีวิตได้ 1 ครั้งก่อน cutoff · ผลเป็นความลับ",
   bomber:
-    "2 Hearts · เมื่อถูก Killer ฆ่า เปิดเผย Bomber และเกิดระเบิด · เหยื่อ 0–1 คนตาม proximity rule ที่ล็อกก่อนเริ่ม · ไม่เกิด chain reaction",
+    "2 Hearts · เมื่อถูก Killer ฆ่า เปิดเผย Bomber และเกิดระเบิด · Host ใช้ภาพหลักฐานตัดสินผู้เล่นที่อยู่ใกล้ Bomber ที่สุด 0–1 คน · ไม่เกิด chain reaction",
   athlete: "3 Hearts · City Side · เอาตัวรอด สังเกต และร่วมโหวตลับ",
   doctor:
     "2 Hearts · รักษาคนอื่น +1 Heart ไม่เกิน Max HP · 4 ครั้งต่อเกม / cooldown 90 นาที · ห้าม self-heal · ใช้ charge แม้ไม่มีผล และไม่บอกผลสำเร็จ · ไม่ต่อ protection หรือชุบชีวิต",
@@ -19,7 +19,7 @@ export const V24_ROLE_DETAILS: Record<Role, string> = {
   sumo: "ใช้เฉพาะห้องกฎเดิม",
 };
 export const V24_RULES = [
-  "ค่าเริ่มต้น 13 คน / 10 ชั่วโมง · Doctor แทน Sumo · Host ปรับจำนวนและเวลาก่อนเริ่มได้",
+  "ค่าเริ่มต้น 12 คน / 10 ชั่วโมง · Doctor แทน Sumo · Host ปรับจำนวนและเวลาก่อนเริ่มได้",
   "approved normal attack ลด 1 Heart และให้ protection 45 นาที · ภาพ pending/rejected ไม่ทำ damage",
   "3 attacks และ 1 elimination ต่อ rolling 60 นาทีร่วมทั้งทีม · pending สูงสุด 2 ต่อ Killer",
   "Hunt Clock: kill แรก ≤120 นาที แล้ว kill ใหม่ทุก ≤120 นาที · transform/ระเบิดไม่นับ · ตรวจถึง cutoff และรอ Host เคลียร์หลักฐานก่อนตัดสิน",

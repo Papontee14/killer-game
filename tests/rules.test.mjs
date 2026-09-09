@@ -630,6 +630,36 @@ test("Storage reads are Host-only and Realtime signals remain authorized without
   }
 });
 
+test("approved attack activity and its image are available only to the Host and eliminated members", async () => {
+  const evidenceId = await f.evidence("villager");
+  await f.as("host", "approve_evidence", ["ABCDEF", evidenceId]);
+  await f.evidence("sumo"); // Pending evidence must never enter the activity stream.
+
+  const hostView = await f.as("host", "get_room_view", ["ABCDEF"]);
+  assert.equal(hostView.canViewAttackActivity, true);
+  assert.equal(hostView.attackActivity.length, 1);
+  assert.equal(hostView.attackActivity[0].targetId, f.players.villager);
+
+  const aliveView = await f.as("villager", "get_room_view", ["ABCDEF"]);
+  assert.equal(aliveView.canViewAttackActivity, false);
+  assert.deepEqual(aliveView.attackActivity, []);
+
+  await db.query("update public.players set health='dead' where id=$1", [f.players.villager]);
+  const eliminatedView = await f.as("villager", "get_room_view", ["ABCDEF"]);
+  assert.equal(eliminatedView.canViewAttackActivity, true);
+  assert.equal(eliminatedView.attackActivity.length, 1);
+
+  for (const role of ["villager", "reporter"]) {
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [f.users[role]]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await db.query("select * from storage.objects")).rows.length, role === "villager" ? 1 : 0);
+    } finally {
+      await db.exec("reset role");
+    }
+  }
+});
+
 test("migration upgrades an active room without changing gameplay data; legacy results stay unknown", async () => {
   await f.hit("sumo");
   const pending = await f.evidence("athlete");

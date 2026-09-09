@@ -803,13 +803,20 @@ begin
  return result||jsonb_build_object('rulesVersion','2.4','phase',case when r.phase in ('lobby','ended','bomb-resolution') then r.phase::text else coalesce(r.v24->>'stage','active') end,'v24',meta,'privateStates',coalesce(result->'privateStates','{}')||extra,'policeCheckAt',null);
 end $$;
 
-create or replace function public.configure_v24(p_code text,p_duration_minutes integer,p_proximity_rule text) returns jsonb language plpgsql security definer set search_path=public as $$
+create or replace function public.configure_v24(p_code text,p_duration_minutes integer) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin
  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
  if r.host_user_id is distinct from auth.uid() or r.rules_version<>'2.4' or r.phase<>'lobby' then raise exception 'not allowed'; end if;
- if p_duration_minutes is null or p_duration_minutes<=120 or p_duration_minutes>2880 or length(trim(coalesce(p_proximity_rule,''))) not between 10 and 1000 then raise exception 'invalid v24 settings'; end if;
- update public.rooms set v24=jsonb_build_object('durationMinutes',p_duration_minutes,'proximityRule',trim(p_proximity_rule)) where id=r.id;
+ if p_duration_minutes is null or p_duration_minutes<=120 or p_duration_minutes>2880 then raise exception 'invalid v24 settings'; end if;
+ update public.rooms set v24=jsonb_build_object('durationMinutes',p_duration_minutes) where id=r.id;
  return public.get_room_view(p_code);
+end $$;
+
+-- Keep the old RPC shape callable for already deployed clients; the proximity
+-- rule is intentionally ignored and is no longer part of the game setup.
+create or replace function public.configure_v24(p_code text,p_duration_minutes integer,p_proximity_rule text) returns jsonb language plpgsql security definer set search_path=public as $$
+begin
+ return public.configure_v24(p_code,p_duration_minutes);
 end $$;
 
 create or replace function public.start_game(p_code text,p_role_counts jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
@@ -819,8 +826,7 @@ begin
  t:=clock_timestamp();
  if r.rules_version<>'2.4' then return public.start_game_pre24(p_code,p_role_counts); end if;
  if r.host_user_id is distinct from auth.uid() or r.phase<>'lobby' then raise exception 'not allowed'; end if;
- duration:=coalesce((r.v24->>'durationMinutes')::int,600);
- if length(trim(coalesce(r.v24->>'proximityRule','')))<10 then raise exception 'configure proximity rule before start'; end if;
+duration:=coalesce((r.v24->>'durationMinutes')::int,600);
  if p_role_counts is null or jsonb_typeof(p_role_counts)<>'object' then raise exception 'invalid roles'; end if;
  for item in select key,value::int amount from jsonb_each_text(p_role_counts) loop
   if item.key not in ('killer','killer-wife','police','detective','reporter','bomber','athlete','doctor','villager') or item.amount is null or item.amount<0 or item.amount>(case when item.key='villager' then 20 else 1 end) then raise exception 'invalid roles'; end if;
@@ -832,7 +838,7 @@ begin
   insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role in ('killer','killer-wife') then 'killers' else 'city' end,role='killer',hp,hp);
  end loop;
  update public.rooms set phase='active',police_check_at=null,v24=v24||jsonb_build_object('stage','active','startedAt',t,'finalAt',t+make_interval(mins=>duration),'cutoffAt',t+make_interval(mins=>duration-30),'revealEndsAt',t+make_interval(mins=>duration-120),'huntDeadline',t+interval '120 minutes') where id=r.id;
- perform public.add_event(r.id,'system','เกมเริ่มแล้ว · กติกา v2.4'); return public.get_room_view(p_code);
+ perform public.add_event(r.id,'system','เกมเริ่มแล้ว'); return public.get_room_view(p_code);
 end $$;
 -- All mutations serialize on the room row. The two-minute watermark prevents
 -- a later upload from inserting an attack ahead of an already resolved heal.
@@ -893,7 +899,7 @@ begin
    perform public.add_event(r.id,'attack',target.name||' เสียชีวิต');
    if s.role_current='bomber' then
     update public.rooms set phase='bomb-resolution',pending_bomber_id=target.id,v24=v24||jsonb_build_object('bombAt',a.effective_at) where id=r.id;
-    perform public.add_event(r.id,'bomb',target.name||' คือ Bomber · รอ Host ตรวจ proximity rule');
+    perform public.add_event(r.id,'bomb',target.name||' คือ Bomber · รอ Host ตรวจภาพและเลือกผู้เล่นที่ใกล้ที่สุด');
    else perform public.v24_victory(r.id,a.effective_at); end if;
   end if;
  end if;
@@ -1054,5 +1060,119 @@ do $$ declare f record; begin
   perform cron.schedule('killer-v24-clock','* * * * *','select public.advance_v24_schedule()');
  end if;
 end $$;
+notify pgrst,'reload schema';
+commit;
+
+-- Remove the pre-game Bomber proximity rule. Host judges the closest player
+-- from the submitted image during bomb resolution.
+begin;
+
+create or replace function public.configure_v24(p_code text,p_duration_minutes integer) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare r public.rooms;
+begin
+ select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
+ if r.host_user_id is distinct from auth.uid() or r.rules_version<>'2.4' or r.phase<>'lobby' then raise exception 'not allowed'; end if;
+ if p_duration_minutes is null or p_duration_minutes<=120 or p_duration_minutes>2880 then raise exception 'invalid v24 settings'; end if;
+ update public.rooms set v24=jsonb_build_object('durationMinutes',p_duration_minutes) where id=r.id;
+ return public.get_room_view(p_code);
+end $$;
+
+-- Backward-compatible for clients that still send the removed third argument.
+create or replace function public.configure_v24(p_code text,p_duration_minutes integer,p_proximity_rule text) returns jsonb
+language plpgsql security definer set search_path=public as $$
+begin
+ return public.configure_v24(p_code,p_duration_minutes);
+end $$;
+
+create or replace function public.start_game(p_code text,p_role_counts jsonb) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare r public.rooms; p public.players; roles text[]:='{}'; item record; role text; hp int; idx int:=1; t timestamptz:=clock_timestamp(); duration int;
+begin
+ select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
+ t:=clock_timestamp();
+ if r.rules_version<>'2.4' then return public.start_game_pre24(p_code,p_role_counts); end if;
+ if r.host_user_id is distinct from auth.uid() or r.phase<>'lobby' then raise exception 'not allowed'; end if;
+ duration:=coalesce((r.v24->>'durationMinutes')::int,600);
+ if p_role_counts is null or jsonb_typeof(p_role_counts)<>'object' then raise exception 'invalid roles'; end if;
+ for item in select key,value::int amount from jsonb_each_text(p_role_counts) loop
+  if item.key not in ('killer','killer-wife','police','detective','reporter','bomber','athlete','doctor','villager') or item.amount is null or item.amount<0 or item.amount>(case when item.key='villager' then 20 else 1 end) then raise exception 'invalid roles'; end if;
+  roles:=roles||array_fill(item.key,array[item.amount]);
+ end loop;
+ if cardinality(roles)<3 or cardinality(roles)<>(select count(*) from public.players where room_id=r.id) or coalesce((p_role_counts->>'killer')::int,0)<>1 or coalesce((p_role_counts->>'police')::int,0)<>1 or exists(select 1 from public.players where room_id=r.id and avatar_id is null) then raise exception 'invalid player count, avatar selection, or required roles'; end if;
+ for p in select * from public.players where room_id=r.id order by random() loop
+  role:=roles[idx]; idx:=idx+1; hp:=case role when 'killer' then 0 when 'killer-wife' then 1 when 'athlete' then 3 else 2 end;
+  insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role in ('killer','killer-wife') then 'killers' else 'city' end,role='killer',hp,hp);
+ end loop;
+ update public.rooms set phase='active',police_check_at=null,v24=v24||jsonb_build_object('stage','active','startedAt',t,'finalAt',t+make_interval(mins=>duration),'cutoffAt',t+make_interval(mins=>duration-30),'revealEndsAt',t+make_interval(mins=>duration-120),'huntDeadline',t+interval '120 minutes') where id=r.id;
+ perform public.add_event(r.id,'system','เกมเริ่มแล้ว'); return public.get_room_view(p_code);
+end $$;
+
+update public.rooms set v24=v24-'proximityRule' where rules_version='2.4' and v24 ? 'proximityRule';
+
+revoke all on function public.configure_v24(text,integer),public.configure_v24(text,integer,text) from public,anon,authenticated;
+grant execute on function public.configure_v24(text,integer),public.configure_v24(text,integer,text) to authenticated;
+revoke all on function public.start_game(text,jsonb) from public,anon,authenticated;
+grant execute on function public.start_game(text,jsonb) to authenticated;
+notify pgrst,'reload schema';
+commit;
+
+-- Approved attack history is visible to the Host and members eliminated from the room.
+begin;
+
+alter function public.get_room_view(text) rename to get_room_view_attack_activity_base;
+
+create or replace function public.can_read_attack_activity_evidence(p_path text) returns boolean
+language sql stable security definer set search_path=public as $$
+  select exists(
+    select 1
+    from public.evidence e
+    join public.rooms r on r.id=e.room_id
+    left join public.players p on p.room_id=r.id and p.user_id=auth.uid()
+    where e.storage_path=p_path
+      and (r.host_user_id=auth.uid() or (e.status='approved' and p.health='dead'))
+  )
+$$;
+revoke all on function public.can_read_attack_activity_evidence(text) from public,anon;
+grant execute on function public.can_read_attack_activity_evidence(text) to authenticated;
+
+drop policy if exists "host or owner reads evidence" on storage.objects;
+create policy "host, owner, or eliminated member reads evidence" on storage.objects
+  for select to authenticated using (
+    bucket_id='evidence' and public.can_read_attack_activity_evidence(name)
+  );
+
+create or replace function public.get_room_view(p_code text) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare result jsonb; r public.rooms; me public.players; allowed boolean := false; activity jsonb := '[]'::jsonb;
+begin
+  result := public.get_room_view_attack_activity_base(p_code);
+  if result is null then return null; end if;
+  select * into r from public.rooms where code=upper(trim(p_code));
+  if r.id is null or auth.uid() is null then return result; end if;
+  if r.host_user_id=auth.uid() then
+    allowed := true;
+  else
+    select * into me from public.players where room_id=r.id and user_id=auth.uid();
+    allowed := me.id is not null and me.health='dead';
+  end if;
+  if allowed then
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id',e.id,'killerId',e.killer_id,'targetId',e.target_id,
+      'storagePath',e.storage_path,'capturedAt',e.captured_at,
+      'decisionAt',e.decision_at,'result',e.attack_result
+    ) order by e.captured_at desc,e.id desc),'[]'::jsonb)
+    into activity from public.evidence e
+    where e.room_id=r.id and e.status='approved';
+  end if;
+  return result || jsonb_build_object(
+    'canViewAttackActivity',allowed,
+    'attackActivity',activity
+  );
+end $$;
+revoke all on function public.get_room_view_attack_activity_base(text) from public,anon,authenticated;
+revoke all on function public.get_room_view(text) from public,anon;
+grant execute on function public.get_room_view(text) to authenticated;
+
 notify pgrst,'reload schema';
 commit;

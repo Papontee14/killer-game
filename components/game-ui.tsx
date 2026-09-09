@@ -124,7 +124,7 @@ export function Dialog({
   );
 }
 export function Rules({ onClose, rulesVersion = "2.4" }: { onClose: () => void; rulesVersion?: "legacy" | "2.4" }) {
-  if(rulesVersion === "2.4") return <Dialog title="กติกา v2.4 · Hunt Clock" onClose={onClose}><div className="rules-steps">{V24_RULES.map(rule => <p key={rule}>{rule}</p>)}</div><h3>9 บทบาท · ทุกคนมีความลับ</h3><RoleCarousel rulesVersion="2.4" /></Dialog>;
+  if(rulesVersion === "2.4") return <Dialog title="กติกาเกม" onClose={onClose}><div className="rules-steps">{V24_RULES.map(rule => <p key={rule}>{rule}</p>)}</div><h3>9 บทบาท · ทุกคนมีความลับ</h3><RoleCarousel rulesVersion="2.4" /></Dialog>;
   return (
     <Dialog title="วิธีเล่น KILLER" onClose={onClose}>
       <p className="muted">

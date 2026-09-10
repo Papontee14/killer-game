@@ -77,7 +77,7 @@ function MetricCard({ label, value, selected, onOpen }: MetricCardProps) {
     >
       <span>{label}</span>
       <strong>{value}</strong>
-      <small>กดค้างเพื่อดูรายละเอียด</small>
+      <small>กดเพื่อดูรายละเอียด</small>
     </button>
   );
 }
@@ -208,7 +208,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
     );
   return (
     <section className="panel v24-panel" data-host-section="urgent">
-      <span className="section-kicker">v2.4 · เวลาเซิร์ฟเวอร์</span>
+      <span className="section-kicker">เวลาเซิร์ฟเวอร์</span>
       <h2>
         {room.phase === "secret-vote"
           ? "Communication Lock · โหวตลับ"
@@ -312,7 +312,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
                 aria-label="ปิดรายละเอียด"
                 onClick={() => setMetricInfo(null)}
               >
-                ปิด
+                ×
               </button>
             </div>
           )}

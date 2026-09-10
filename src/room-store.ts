@@ -316,11 +316,25 @@ export async function joinOrCreateDemo(
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   if (!normalizedName) throw new Error("กรุณาระบุชื่อผู้เล่น");
   await ensureAnonymousSession();
-  const { data, error } = await client().rpc("join_room", {
-    p_code: normalizedCode,
-    p_name: normalizedName,
-  });
-  if (error) throw error;
+  let data: unknown;
+  try {
+    const result = await client().rpc("join_room", {
+      p_code: normalizedCode,
+      p_name: normalizedName,
+    });
+    if (result.error) throw result.error;
+    data = result.data;
+  } catch (error) {
+    // The write may have committed before the connection lost its response.
+    // Recover only the authenticated viewer, never another player's name.
+    const existing = await rpcView(normalizedCode).catch(() => null);
+    const player = existing?.players.find((item) => item.id === existing.playerId);
+    if (existing?.viewerRole === "player" && player &&
+        player.name.toLowerCase() === normalizedName.toLowerCase()) {
+      return { room: existing, playerId: player.id };
+    }
+    throw error;
+  }
   const room = asRoom(data);
   const requested = String(
     (data as Json).playerId ?? (data as Json).player_id ?? "",

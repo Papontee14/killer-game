@@ -21,16 +21,9 @@ const ACTIVE_ROOM_KEY = 'killer_active_room';
 const inMemoryCredentials = new Map<string, RoomCredentials>();
 let inMemoryActiveRoom: ActiveRoomRecord | null = null;
 
-function isBrowser(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-  );
-}
-
 function safeGetStorage(): Storage | null {
-  if (!isBrowser()) return null;
   try {
-    return window.localStorage;
+    return typeof window === 'undefined' ? null : window.localStorage;
   } catch {
     return null;
   }

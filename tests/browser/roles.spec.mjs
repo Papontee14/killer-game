@@ -73,6 +73,7 @@ async function openPlayer(
   reveal = true,
   navigate = true,
   legacySummary = false,
+  loseJoinResponse = false,
 ) {
   await page.emulateMedia({
     reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -142,6 +143,10 @@ async function openPlayer(
             fn,
             orders[fn].map((key) => body[key] ?? null),
           );
+          if (fn === "join_room" && loseJoinResponse) {
+            await route.abort("connectionreset");
+            return;
+          }
           if (legacySummary && data) delete data.endGameSummary;
         } else if (url.pathname.startsWith("/storage/v1/object/sign/")) {
           data = { signedURL: "/object/public/test-fixture.png" };
@@ -199,6 +204,16 @@ async function openPlayer(
   await page.getByRole("button", { name: "เข้าใจแล้ว" }).click();
   await expect(page.locator(".player-hero")).toBeVisible();
 }
+
+test("mobile join recovers a committed membership after losing the response", async ({ page }) => {
+  await db.exec("update public.rooms set phase='lobby'");
+  await openPlayer(page, 'outsider', 'outsider', true, true, true, false, true);
+  await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  const host = await f.as('host', 'get_room_view', ['ABCDEF']);
+  expect(host.players.filter(player => player.name === 'outsider')).toHaveLength(1);
+});
 
 test("compact mobile header and legacy server role reveal", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });

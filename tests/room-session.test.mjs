@@ -34,6 +34,23 @@ const {
   clearActiveRoom,
 } = await import('../src/room-session.ts');
 
+test('room-session survives a blocked localStorage getter after joining', () => {
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    get() { throw new DOMException('Storage blocked', 'SecurityError'); },
+  });
+  try {
+    rememberActiveRoom({ role: 'player', code: 'MOB123', name: 'Mobile' });
+    assert.equal(readActiveRoom()?.code, 'MOB123');
+    assert.equal(readRoomCredentials('player:MOB123')?.name, 'Mobile');
+    forgetRoomCredentials('player:MOB123');
+    assert.equal(readActiveRoom(), null);
+    assert.equal(readRoomCredentials('player:MOB123'), undefined);
+  } finally {
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: mockStorage });
+  }
+});
+
 test('room-session persists only the player name in localStorage', () => {
   mockStorage.clear();
   rememberRoomCredentials('player:ABC123', {

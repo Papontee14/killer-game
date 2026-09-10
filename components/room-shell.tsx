@@ -1915,6 +1915,7 @@ export function PlayerRoom({
   }, [room, initialLoadComplete, code]);
   const join = async (event?: React.FormEvent) => {
     event?.preventDefault();
+    setError("");
     setJoining(true);
     try {
       const joined = await joinOrCreateDemo(code, loginName);

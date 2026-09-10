@@ -233,6 +233,13 @@ export const DEFAULT_ROLE_COUNTS: Record<Role, number> = {
 };
 
 export type V24Action = { id: string; actor_id: string; target_id: string; kind: "attack" | "heal"; effective_at: string; evidence_id?: string; status: "pending" | "approved" | "rejected"; lethal: boolean; healed: boolean };
+export type FinalVoteRound = {
+  round: 1 | 2;
+  nominees: string[];
+  resolvedAt: string;
+  outcome: "wife-revote" | "city" | "killers";
+  wifePlayerId?: string;
+};
 export type V24State = {
   durationMinutes?: number; startedAt?: string; cutoffAt?: string;
   finalAt?: string; revealEndsAt?: string; voteEndsAt?: string; serverNow: string;
@@ -240,10 +247,15 @@ export type V24State = {
   /** Active target protection, exposed only to the Host and active Killers. */
   targetProtectionUntil?: Record<string, string>;
   nomineeCount?: number; nominees?: string[]; actions?: V24Action[];
-  myBallot?: { nominees: string[]; ranking: string[]; submittedAt: string } | null;
-  ballots?: { voter_id: string; nominees: string[]; ranking: string[] }[];
+  myBallot?: { round?: number; nominees: string[]; ranking: string[]; submittedAt: string } | null;
+  ballots?: { round?: number; voter_id: string; nominees: string[]; ranking: string[] }[];
   /** Present only for games started after the final-vote rule change. */
   finalVoteRules?: boolean;
+  /** Present only for games that can reopen Final after selecting the Wife. */
+  wifeRevoteRules?: boolean;
+  voteRound?: 1 | 2;
+  excludedVoterIds?: string[];
+  voteRounds?: FinalVoteRound[];
 };
 
 export function healthState(hearts: number, maxHearts: number): HealthState {

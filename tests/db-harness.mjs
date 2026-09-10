@@ -21,6 +21,7 @@ export const migration = (
       "20260907_server_notification_queue.sql",
       "20260910_remove_recovery_tokens.sql",
       "20260910_killer_target_protection.sql",
+      "20260911_wife_revote.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),

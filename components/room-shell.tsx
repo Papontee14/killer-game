@@ -826,6 +826,9 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
       <span className="section-kicker">เหตุผลที่เกมจบ</span>
       <strong>{winningTeam} เพราะ {labels[result.reason] ?? "เกมจบแล้ว"}</strong>
       {detail && <span>{detail}</span>}
+      {room.v24?.voteRounds?.find((round) => round.outcome === "wife-revote") && (
+        <span>รอบ 1: {room.players.find((player) => player.id === room.v24?.voteRounds?.find((round) => round.outcome === "wife-revote")?.wifePlayerId)?.name ?? "Killer's Wife"} คือ Killer&apos;s Wife · เปิดโหวตรอบสองแล้ว</span>
+      )}
       {room.v24?.nominees && <span>Final nominees: {room.v24.nominees.map(id => room.players.find(p => p.id === id)?.name ?? "—").join(", ")}</span>}
       <time dateTime={result.occurredAt}>
         {new Date(result.occurredAt).toLocaleString("th-TH", {
@@ -2870,7 +2873,7 @@ export function PlayerRoom({
           </div>
         </aside>
       </div>
-      {showRules && <Rules rulesVersion={room.rulesVersion} phase={room.phase} finalVoteRules={room.v24?.finalVoteRules} onClose={() => setShowRules(false)} />}
+      {showRules && <Rules rulesVersion={room.rulesVersion} phase={room.phase} finalVoteRules={room.v24?.finalVoteRules} wifeRevoteRules={room.v24?.wifeRevoteRules} onClose={() => setShowRules(false)} />}
       {roleOpen && room.phase !== "ended" && (
         <RoleReveal
           rulesVersion={room.rulesVersion}

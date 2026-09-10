@@ -7,6 +7,7 @@ import {
   revealPolice,
   resolveV24Action,
   submitFinalBallot,
+  submitFinalBallotRound,
   resolveFinal,
   recordV24Warning,
 } from "@/src/room-store";
@@ -116,7 +117,10 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
   const host = room.viewerRole === "host";
   const me = room.playerId ? room.privateStates[room.playerId] : undefined;
   const living = room.players.filter((p) => p.health !== "dead");
-  const choices = living.filter((p) => p.id !== room.playerId);
+  const excludedVoterIds = v?.excludedVoterIds ?? [];
+  const wifeRevoteRules = Boolean(v?.wifeRevoteRules || v?.voteRound);
+  const eligibleVoters = living.filter((p) => !excludedVoterIds.includes(p.id));
+  const choices = eligibleVoters.filter((p) => p.id !== room.playerId);
   const voterKey = choices.map((p) => p.id).join(",");
   const alive = living.some((p) => p.id === room.playerId);
   const names = (ids: string[]) =>
@@ -128,7 +132,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
       setRanking(voterKey ? voterKey.split(",") : []);
     setSelected([]);
     setConfirmVote(false);
-  }, [room.phase, room.code, voterKey]);
+  }, [room.phase, room.code, voterKey, v?.voteRound]);
   if (room.rulesVersion !== "2.4" || !v) return null;
   if (room.phase === "lobby")
     return host ? (
@@ -220,12 +224,12 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
       </h2>
       <div className="v24-metrics">
         <MetricCard
-          label="หยุดรับคำสั่ง"
+          label="หยุดการ Action"
           value={stamp(v.cutoffAt)}
-          selected={metricInfo?.label === "หยุดรับคำสั่ง"}
+          selected={metricInfo?.label === "หยุดการ Action"}
           onOpen={() =>
             setMetricInfo({
-              label: "หยุดรับคำสั่ง",
+              label: "หยุดการ Action",
               description:
                 "หลังเวลานี้จะไม่รับการโจมตี การรักษา หรือการใช้ความสามารถใหม่ แต่ Host ยังเคลียร์รายการที่ส่งไว้ก่อนหน้าได้",
             })
@@ -386,14 +390,22 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
       )}
       {room.phase === "secret-vote" && (
         <div className="v24-action">
+          {wifeRevoteRules && (
+            <h3>โหวตลับรอบ {v.voteRound ?? 1}{v.voteRound === 2 ? " · รอบสุดท้าย" : ""}</h3>
+          )}
+          {v.voteRound === 2 && v.voteRounds?.some((round) => round.outcome === "wife-revote") && (
+            <p role="status">จับเมีย Killer ได้ — โหวตหา Killer ตั้งต้นอีกครั้ง</p>
+          )}
           <p>
             ห้ามพูดคุยหรือส่งข้อมูลเกมเพิ่มเติม · เลือก {v.nomineeCount} คน
             {v.finalVoteRules ? " (Killer ตั้งต้นเท่านั้นจึงชนะ)" : ""} ·
             ส่งแล้วแก้ไม่ได้
           </p>
           {!host && !alive && <p>ผู้เสียชีวิตไม่มีสิทธิ์โหวต</p>}
+          {!host && alive && excludedVoterIds.includes(room.playerId ?? "") && <p role="status">คุณถูกนำออกจากการโหวตแล้ว · รอผลรอบสุดท้าย</p>}
           {!host &&
             alive &&
+            !excludedVoterIds.includes(room.playerId ?? "") &&
             (v.myBallot ? (
               <p role="status">
                 ส่ง ballot แล้ว: {names(v.myBallot.nominees)} · รอประกาศผล
@@ -471,11 +483,9 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
                       disabled={busy || now >= Date.parse(v.voteEndsAt ?? "")}
                       onClick={() =>
                         act(() =>
-                          submitFinalBallot(
-                            room.code,
-                            selected,
-                            me?.currentRole === "police" ? ranking : [],
-                          ),
+                          wifeRevoteRules
+                            ? submitFinalBallotRound(room.code, v.voteRound ?? 1, selected, me?.currentRole === "police" ? ranking : [])
+                            : submitFinalBallot(room.code, selected, me?.currentRole === "police" ? ranking : []),
                         )
                       }
                     >
@@ -507,7 +517,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
           {host && (
             <>
               <p>
-                ส่งแล้ว {v.ballots?.length ?? 0}/{living.length} ใบ ·
+                ส่งแล้ว {(v.ballots ?? []).filter((ballot) => !wifeRevoteRules || ballot.round === (v.voteRound ?? 1)).length}/{eligibleVoters.length} ใบ ·
                 ไม่แสดงคะแนนต่อผู้เล่น
               </p>
               <button

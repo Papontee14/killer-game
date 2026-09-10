@@ -6,7 +6,7 @@ const source=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
 function worker(indexedDB) {
  const handlers={},cached=[],deleted=[],notifications=[];
  const self={location:{origin:'https://game.test'},addEventListener:(type,fn)=>handlers[type]=fn,skipWaiting:()=>{},clients:{claim:async()=>{}},registration:{showNotification:async(...args)=>notifications.push(args)}};
- const caches={open:async()=>({addAll:async()=>{},put:async(request)=>cached.push(request.url)}),keys:async()=>['killer-shell-v2','killer-shell-v4','killer-shell-v5','unrelated-app'],delete:async(key)=>deleted.push(key),match:async()=>undefined};
+ const caches={open:async()=>({addAll:async()=>{},put:async(request)=>cached.push(request.url)}),keys:async()=>['killer-shell-v2','killer-shell-v4','killer-shell-v5','killer-shell-v6','unrelated-app'],delete:async(key)=>deleted.push(key),match:async()=>undefined};
  vm.runInNewContext(source,{self,caches,URL,Response,fetch:async()=>new Response('ok'),indexedDB,setTimeout});
  return {handlers,cached,deleted,notifications};
 }
@@ -41,7 +41,7 @@ test('service worker ignores APIs, room pages, Storage URLs and signed images; o
 test('activation removes old evidence-containing shell cache; push notification stays generic',async()=>{
  const {handlers,deleted,notifications}=worker();
  let done;handlers.activate({waitUntil:promise=>done=promise});await done;
- assert.deepEqual(deleted,['killer-shell-v2','killer-shell-v4']);
+ assert.deepEqual(deleted,['killer-shell-v2','killer-shell-v4','killer-shell-v5']);
  handlers.push({data:{text:()=> 'secret target and hearts'},waitUntil:promise=>done=promise});await done;
  assert.equal(notifications[0][1].body,'มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด');
 });

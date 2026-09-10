@@ -232,6 +232,38 @@ test("new final vote accepts exactly one name and only the original Killer wins"
   assert.equal(result.winner, "killers");
   assert.deepEqual(result.v24.nominees, [f.players["killer-wife"]]);
 });
+
+test("new Wife revote excludes the Wife without killing her, then resolves only round two", async () => {
+  await voting(1);
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true,'wifeRevoteRules',true,'voteRound',1,'excludedVoterIds','[]'::jsonb,'voteRounds','[]'::jsonb)");
+  await f.as("villager", "submit_final_ballot_round", ["ABCDEF", 1, [f.players["killer-wife"]], []]);
+  await assert.rejects(
+    f.as("villager", "submit_final_ballot", ["ABCDEF", [f.players.killer], []]),
+    /refresh required/,
+  );
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('voteEndsAt',clock_timestamp()-interval '1 second')");
+  const secondRound = await view("host");
+  assert.equal(secondRound.phase, "secret-vote");
+  assert.equal(secondRound.v24.voteRound, 2);
+  assert.deepEqual(secondRound.v24.excludedVoterIds, [f.players["killer-wife"]]);
+  assert.equal(secondRound.v24.voteRounds[0].outcome, "wife-revote");
+  assert.equal((await f.state("killer-wife")).health, "alive");
+  await assert.rejects(
+    f.as("killer-wife", "submit_final_ballot_round", ["ABCDEF", 2, [f.players.killer], []]),
+    /vote unavailable/,
+  );
+  await assert.rejects(
+    f.as("villager", "submit_final_ballot_round", ["ABCDEF", 1, [f.players.killer], []]),
+    /vote unavailable/,
+  );
+  await f.as("villager", "submit_final_ballot_round", ["ABCDEF", 2, [f.players.killer], []]);
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('voteEndsAt',clock_timestamp()-interval '1 second')");
+  const final = await view("host");
+  assert.equal(final.winner, "city");
+  assert.equal(final.v24.voteRounds.length, 2);
+  const ballots = await db.query("select round,count(*)::int count from public.v24_ballots group by round order by round");
+  assert.deepEqual(ballots.rows.map((row) => Number(row.round)), [1, 2]);
+});
 test("new rules end for City when a bomb eliminates the original Killer", async () => {
   await db.exec(
     "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true,'bombAt',clock_timestamp())",

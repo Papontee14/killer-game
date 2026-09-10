@@ -8,8 +8,8 @@ experiments in that document are not enabled rules. Existing rooms remain
 ## Current rules and compatible 2.4 rooms
 
 Rules below describe the current 2.4 profile used by rooms started after the
-final-vote revision (`v24.finalVoteRules = true`). Rooms that started before
-that revision keep their existing 2.4 behavior (`finalVoteRules` absent/false):
+Wife-revote revision (`v24.finalVoteRules = true`, `v24.wifeRevoteRules = true`).
+Rooms that started before either revision keep their existing 2.4 behavior:
 they do not end when the original Killer dies, the Wife changes her current role
 to Killer when awakened, and Final voting selects the number of living active
 Killers (one or two). The relevant compatibility behavior is called out below.
@@ -110,12 +110,16 @@ Killers (one or two). The relevant compatibility behavior is called out below.
 
 - Current-rule rooms freeze living voter IDs and require every living player,
   including Killer Side, to submit one ballot choosing exactly one other living
-  player. Host/dead players cannot vote. City wins only when that nominee is the
-  living original Killer, with no extra name.
+  player. Host/dead players cannot vote. City wins when that nominee is the
+  living original Killer. If round one selects the Wife, publicly reveal her as
+  Wife, remove her from voters and candidates without killing her, then open a
+  final round-two ballot for three minutes. Round two may only win for City by
+  selecting the original Killer; there is no third round.
 - Earlier 2.4 rooms freeze both living voter IDs and active Killer count K (one
   or two). Each ballot chooses exactly K distinct other living players, and City
   wins only when the nominees equal the complete living active-Killer set.
-- Submission is immutable; retries cannot replace it. Missing ballots abstain.
+- Submission is immutable within its round; retries cannot replace it. Missing
+  ballots abstain. Each round has its own Police ranking and private fallback.
   Players cannot see other ballots, live scores or fallback ranking.
 - Each selected name earns one point. The top required number of names become
   nominees: one in current-rule rooms, or K in earlier 2.4 rooms.

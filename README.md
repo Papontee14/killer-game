@@ -3,7 +3,7 @@
 เว็บเกม Killer แบบหลายเครื่องสำหรับ Host และผู้เล่นบนมือถือคนละเครื่อง
 
 รุ่นปัจจุบันใช้กติกา **v2.4 Hunt Clock** สำหรับห้องใหม่: ค่าเริ่มต้น 12 คน,
-Doctor, protection 45 นาที, rolling quotas และ Final Vote แบบลับ ห้องที่เล่นอยู่
+Doctor, protection 45 นาที, rolling quotas และ Final Vote แบบลับที่เปิดรอบสุดท้ายอีกครั้งเมื่อจับ Killer's Wife ได้ ห้องที่เล่นอยู่
 ก่อนอัปเกรดยังใช้กฎ legacy จนจบ ดู [กติกาปัจจุบัน](GAME_RULES.md) และ
 [ลำดับ migration, scheduler และ rollout](docs/V24_ROLLOUT.md) ก่อนเผยแพร่
 ข้อความด้านล่างที่กล่าวถึง Police ชี้ตัวและ quota แบบต้นชั่วโมงใช้กับห้อง legacy เท่านั้น

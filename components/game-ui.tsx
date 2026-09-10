@@ -136,11 +136,13 @@ export function Rules({
   rulesVersion = "2.4",
   phase = "lobby",
   finalVoteRules,
+  wifeRevoteRules,
 }: {
   onClose: () => void;
   rulesVersion?: "legacy" | "2.4";
   phase?: RoomPhase;
   finalVoteRules?: boolean;
+  wifeRevoteRules?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<"phases" | "roles">("phases");
   const tabId = useId();
@@ -194,7 +196,7 @@ export function Rules({
       </div>
       <section id={`${tabId}-phases-panel`} role="tabpanel" aria-labelledby={`${tabId}-phases-tab`} hidden={activeTab !== "phases"}>
         <ol className="guide-timeline">
-          {phases.map((guidePhase) => <GuidePhaseCard key={guidePhase.number} phase={guidePhase} latestFinalVoteRules={latestFinalVoteRules} />)}
+          {phases.map((guidePhase) => <GuidePhaseCard key={guidePhase.number} phase={guidePhase} latestFinalVoteRules={latestFinalVoteRules} wifeRevoteRules={wifeRevoteRules ?? phase === "lobby"} />)}
         </ol>
         {rulesVersion === "2.4" && (
           <details className="guide-interruption">
@@ -219,11 +221,13 @@ export function Rules({
   );
 }
 
-function GuidePhaseCard({ phase, latestFinalVoteRules }: { phase: GuidePhase; latestFinalVoteRules: boolean }) {
+function GuidePhaseCard({ phase, latestFinalVoteRules, wifeRevoteRules }: { phase: GuidePhase; latestFinalVoteRules: boolean; wifeRevoteRules: boolean }) {
   const isVote = phase.number === "05";
   const player = isVote && !latestFinalVoteRules
     ? "ถ้ามีการกำจัดที่ยืนยันแล้วเพียง 0–1 ครั้ง City ชนะทันที ถ้ามี 2 ครั้งขึ้นไป ผู้เล่นที่ยังมีชีวิตทุกฝ่ายหยุดสื่อสารและโหวตลับ เลือกผู้เล่นอื่นให้ครบตามจำนวน Killer ที่ทำงานอยู่ ส่งแล้วแก้ไม่ได้; ไม่ส่งถือว่างดออกเสียง. City ต้องเลือก Killer ที่ทำงานอยู่ให้ครบทุกคน."
-    : phase.player;
+    : isVote && wifeRevoteRules
+      ? "ถ้ามีการกำจัดที่ยืนยันแล้วเพียง 0–1 ครั้ง City ชนะทันที ถ้ามี 2 ครั้งขึ้นไป ผู้เล่นที่ยังมีชีวิตทุกฝ่ายหยุดสื่อสารและส่งบัตรโหวตลับ เลือกคนอื่นเท่านั้น ส่งแล้วแก้ไม่ได้; ไม่ส่งถือว่างดออกเสียง. เลือก Killer ตั้งต้นแล้ว City ชนะ; หากเลือก Killer’s Wife ระบบจะเปิดเผยเธอ ตัดออกจากการโหวต และเปิดโหวตรอบสุดท้ายอีก 3 นาทีทันที."
+      : phase.player;
   return <li className="guide-phase">
     <span className="guide-phase-number">{phase.number}</span>
     <div className="guide-phase-heading"><h3>{phase.title}</h3><p>{phase.timing}</p></div>

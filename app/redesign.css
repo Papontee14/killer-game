@@ -577,8 +577,7 @@ svg {
 .player-home > .killer-evidence-panel {
   order: 5;
 }
-.player-home > .error-banner,
-.player-home > .latest-news-panel {
+.player-home > .error-banner {
   order: 6;
 }
 .player-greeting {
@@ -823,6 +822,31 @@ svg {
 }
 .target-confirm strong {
   font-size: 16px;
+}
+.target-protection {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.target-protection svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.target-protection.inactive {
+  color: var(--muted);
+}
+.target-protection-notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--amber);
+  background: rgb(255 184 74 / 10%);
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .player-nav {
   position: fixed;

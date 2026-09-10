@@ -501,6 +501,31 @@ test("Killer opens the device camera, converts its photo, and sends it to Host",
   await expect(page.getByText("รอ Host ตรวจ", { exact: true })).toBeVisible();
 });
 
+test("Killer sees target protection and cannot take evidence until it expires", async ({
+  page,
+}) => {
+  await enableV24();
+  await db.query(
+    "update public.player_secrets set protection_until=clock_timestamp()+interval '1 minute' where player_id=$1",
+    [f.players.sumo],
+  );
+  await page.setViewportSize({ width: 360, height: 800 });
+  await openPlayer(page, "killer");
+  await page.getByLabel("เลือกเป้าหมาย", { exact: true }).selectOption(f.players.sumo);
+  await expect(page.locator(".target-protection")).toContainText("คุ้มครองอีก 0:");
+  await expect(page.getByText("ยังถ่ายภาพและส่งหลักฐานไม่ได้")).toBeVisible();
+  await expect(page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ส่งหลักฐานให้ Host" })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await page.evaluate(() => {
+    const originalNow = Date.now;
+    Date.now = () => originalNow() + 120000;
+  });
+  await expect(page.getByRole("button", { name: "เปิดกล้องมือถือ", exact: true })).toBeEnabled({ timeout: 5000 });
+  await expect(page.locator(".target-protection.inactive")).toContainText("ไม่มี protection");
+});
+
 test("legacy full kill quota still allows nonlethal evidence", async ({
   page,
 }) => {

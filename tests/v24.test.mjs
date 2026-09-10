@@ -406,6 +406,60 @@ test("protection expires exactly at 45 minutes", async () => {
   await apply(id);
   assert.equal((await f.state("villager")).hearts, 1);
 });
+test("only Host and active Killers see live protection; submissions reserve no slot", async () => {
+  const isolated = await database();
+  try {
+    const room = await fixture(isolated);
+    await isolated.exec(
+      "update public.rooms set rules_version='2.4',v24=jsonb_build_object('stage','active','startedAt',clock_timestamp()-interval '30 minutes','finalAt',clock_timestamp()+interval '570 minutes','cutoffAt',clock_timestamp()+interval '540 minutes','revealEndsAt',clock_timestamp()+interval '450 minutes','huntDeadline',clock_timestamp()+interval '90 minutes')",
+    );
+    await isolated.query(
+      "update public.player_secrets set protection_until=clock_timestamp()+interval '20 minutes' where player_id=$1",
+      [room.players.villager],
+    );
+    const killerView = await room.as("killer", "get_room_view", ["ABCDEF"]);
+    assert.ok(killerView.v24.targetProtectionUntil[room.players.villager]);
+    assert.ok((await room.as("host", "get_room_view", ["ABCDEF"])).v24.targetProtectionUntil[room.players.villager]);
+    assert.equal((await room.as("villager", "get_room_view", ["ABCDEF"])).v24.targetProtectionUntil, undefined);
+
+    const storagePath = `${room.users.killer}/protected-target.jpg`;
+    await isolated.query(
+      "insert into storage.objects(bucket_id,name,metadata) values('evidence',$1,'{\"mimetype\":\"image/jpeg\",\"size\":100}')",
+      [storagePath],
+    );
+    await assert.rejects(
+      room.as("killer", "submit_evidence", [
+        "ABCDEF",
+        room.players.villager,
+        storagePath,
+        new Date().toISOString(),
+      ]),
+      /target protected/,
+    );
+    assert.equal((await isolated.query("select count(*)::int as count from public.evidence")).rows[0].count, 0);
+    assert.equal((await isolated.query("select count(*)::int as count from public.v24_actions")).rows[0].count, 0);
+  } finally {
+    await isolated.close();
+  }
+});
+test("evidence is accepted after protection ends when its capture is newer", async () => {
+  await db.query(
+    "update public.player_secrets set protection_until=clock_timestamp()-interval '1 minute' where player_id=$1",
+    [f.players.villager],
+  );
+  const storagePath = `${f.users.killer}/unprotected-target.jpg`;
+  await db.query(
+    "insert into storage.objects(bucket_id,name,metadata) values('evidence',$1,'{\"mimetype\":\"image/jpeg\",\"size\":100}')",
+    [storagePath],
+  );
+  await f.as("killer", "submit_evidence", [
+    "ABCDEF",
+    f.players.villager,
+    storagePath,
+    new Date().toISOString(),
+  ]);
+  assert.equal((await db.query("select count(*)::int as count from public.evidence")).rows[0].count, 1);
+});
 test("rolling attacks at exactly 60 minutes release quota", async () => {
   const id = await action("villager");
   for (const role of ["reporter", "athlete", "detective"])

@@ -62,6 +62,32 @@ export type EndGamePlayerSummary = {
   team: Team | null;
 };
 
+/** A post-game-only audit entry. Player ids keep personal filtering reliable. */
+export type EndGameStoryEntry = {
+  id: string;
+  kind: "game-start" | "attack" | "heal" | "ability" | "bomb" | "winner" | "system" | "event" | "milestone" | "vote-summary" | "game-ended";
+  occurredAt: string;
+  actorPlayerId: string | null;
+  targetPlayerId: string | null;
+  affectedPlayerIds: string[];
+  result: {
+    message?: string;
+    storagePath?: string;
+    capturedAt?: string;
+    decisionAt?: string;
+    result?: string | null;
+    healed?: boolean;
+    counts?: Record<string, number>;
+    reason?: EndGameReason;
+    [key: string]: unknown;
+  };
+};
+
+export type EndGameStory = {
+  entries: EndGameStoryEntry[];
+  incomplete: boolean;
+};
+
 export type PrivatePlayerState = {
   protectionUntil?: string;
   doctorUses?: number;
@@ -211,6 +237,8 @@ export type V24State = {
   durationMinutes?: number; startedAt?: string; cutoffAt?: string;
   finalAt?: string; revealEndsAt?: string; voteEndsAt?: string; serverNow: string;
   huntDeadline?: string; huntPending?: boolean; attacksUsed?: number; killsUsed?: number; pendingAttacks?: number;
+  /** Active target protection, exposed only to the Host and active Killers. */
+  targetProtectionUntil?: Record<string, string>;
   nomineeCount?: number; nominees?: string[]; actions?: V24Action[];
   myBallot?: { nominees: string[]; ranking: string[]; submittedAt: string } | null;
   ballots?: { voter_id: string; nominees: string[]; ranking: string[] }[];

@@ -3,6 +3,8 @@ import type {
   AttackActivity,
   Evidence,
   EndGameResult,
+  EndGameStory,
+  EndGameStoryEntry,
   EndGameTimelineEntry,
   KillerEvidenceProgress,
   PrivatePlayerState,
@@ -99,7 +101,7 @@ function asRoom(value: unknown): RoomState {
     viewerRole:
       (data.viewerRole ?? data.viewer_role) === "host" ? "host" : "player",
     rulesVersion: data.rulesVersion === "2.4" ? "2.4" : "legacy",
-    v24: data.v24 as RoomState["v24"],
+    v24: asV24State(data.v24),
     playerId: data.playerId ? String(data.playerId) : undefined,
     code: String(data.code),
     hostName: String(data.hostName ?? data.host_name ?? "Host"),
@@ -366,6 +368,64 @@ export async function joinOrCreateDemo(
   }
 }
 
+/** The complete audit is intentionally fetched only after the player opens it. */
+export async function loadEndGameStory(code: string): Promise<EndGameStory> {
+  const normalizedCode = roomCodeValue(code);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
+  await ensureAnonymousSession();
+  const { data, error } = await client().rpc("get_end_game_story", { p_code: normalizedCode });
+  if (error) throw error;
+  const payload = (data && typeof data === "object" && !Array.isArray(data) ? data : {}) as Json;
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  return {
+    incomplete: Boolean(payload.incomplete),
+    entries: entries.map((value): EndGameStoryEntry => {
+      const entry = value as Json;
+      const result = entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
+        ? entry.result as EndGameStoryEntry["result"]
+        : {};
+      const rawAffected = entry.affectedPlayerIds ?? entry.affected_player_ids;
+      return {
+        id: String(entry.id),
+        kind: String(entry.kind) as EndGameStoryEntry["kind"],
+        occurredAt: String(entry.occurredAt ?? entry.occurred_at),
+        actorPlayerId: entry.actorPlayerId ?? entry.actor_player_id ? String(entry.actorPlayerId ?? entry.actor_player_id) : null,
+        targetPlayerId: entry.targetPlayerId ?? entry.target_player_id ? String(entry.targetPlayerId ?? entry.target_player_id) : null,
+        affectedPlayerIds: Array.isArray(rawAffected)
+          ? rawAffected.map(String)
+          : [],
+        result,
+      };
+    }),
+  };
+}
+
+function asV24State(value: unknown): RoomState["v24"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const data = value as Json;
+  const rawProtection = data.targetProtectionUntil ?? data.target_protection_until;
+  const targetProtectionUntil = rawProtection &&
+    typeof rawProtection === "object" && !Array.isArray(rawProtection)
+    ? Object.fromEntries(
+        Object.entries(rawProtection as Json)
+          .filter(([, until]) => typeof until === "string" && !Number.isNaN(Date.parse(until)))
+          .map(([playerId, until]) => [playerId, String(until)]),
+      )
+    : undefined;
+  const {
+    targetProtectionUntil: _targetProtectionUntil,
+    target_protection_until: _targetProtectionUntilSnake,
+    ...rest
+  } = data;
+  return {
+    ...(rest as Omit<NonNullable<RoomState["v24"]>, "serverNow">),
+    serverNow: typeof data.serverNow === "string"
+      ? data.serverNow
+      : new Date().toISOString(),
+    ...(targetProtectionUntil ? { targetProtectionUntil } : {}),
+  };
+}
+
 async function mutate(code: string, fn: string, args: Json = {}) {
   const normalizedCode = roomCodeValue(code);
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
@@ -463,6 +523,12 @@ export async function submitEvidence(
   if (!userId) throw new Error("เซสชันหมดอายุ กรุณาเข้าใหม่");
   const current = await rpcView(code);
   if (!current) throw new Error("ไม่พบห้องนี้");
+  const protectionUntil = current.v24?.targetProtectionUntil?.[targetId];
+  if (
+    protectionUntil &&
+    Date.parse(protectionUntil) > Date.parse(current.v24?.serverNow ?? "")
+  )
+    throw new Error("target protected; reject evidence");
   const storagePath = `${userId}/${crypto.randomUUID()}.${imageExtension(image)}`;
   const uploaded = await supabase.storage
     .from("evidence")

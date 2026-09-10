@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RoomState } from "@/src/types";
 import {
   configureV24,
@@ -38,8 +38,58 @@ function formatDuration(totalMinutes: number) {
   const minutes = totalMinutes % 60;
   return `${hours} ชั่วโมง${minutes ? ` ${minutes} นาที` : ""}`;
 }
+
+type MetricCardProps = {
+  label: string;
+  value: ReactNode;
+  selected: boolean;
+  onOpen: () => void;
+};
+
+function MetricCard({ label, value, selected, onOpen }: MetricCardProps) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPressTimer = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  useEffect(() => clearPressTimer, []);
+
+  const startPressTimer = () => {
+    clearPressTimer();
+    pressTimer.current = setTimeout(onOpen, 500);
+  };
+
+  return (
+    <button
+      type="button"
+      className="v24-metric"
+      aria-expanded={selected}
+      aria-label={`${label} กดเพื่อดูรายละเอียด`}
+      onPointerDown={startPressTimer}
+      onPointerUp={clearPressTimer}
+      onPointerCancel={clearPressTimer}
+      onPointerLeave={clearPressTimer}
+      onClick={onOpen}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>กดค้างเพื่อดูรายละเอียด</small>
+    </button>
+  );
+}
+
+type MetricInfo = {
+  label: string;
+  description: string;
+};
+
 export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange }: Props) {
   const v = room.v24;
+  const [metricInfo, setMetricInfo] = useState<MetricInfo | null>(null);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const start = Date.now();
@@ -169,37 +219,105 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
               : "กำหนดการเกม"}
       </h2>
       <div className="v24-metrics">
-        <div>
-          หยุดรับ action<strong>{stamp(v.cutoffAt)}</strong>
-        </div>
-        <div>
-          Final<strong>{stamp(v.finalAt)}</strong>
-        </div>
-        <div>
-          เวลาที่เหลือ
-          <strong>
-            {countdown(
-              room.phase === "secret-vote" ? v.voteEndsAt : v.finalAt,
-              now,
-            )}
-          </strong>
-        </div>
+        <MetricCard
+          label="หยุดรับคำสั่ง"
+          value={stamp(v.cutoffAt)}
+          selected={metricInfo?.label === "หยุดรับคำสั่ง"}
+          onOpen={() =>
+            setMetricInfo({
+              label: "หยุดรับคำสั่ง",
+              description:
+                "หลังเวลานี้จะไม่รับการโจมตี การรักษา หรือการใช้ความสามารถใหม่ แต่ Host ยังเคลียร์รายการที่ส่งไว้ก่อนหน้าได้",
+            })
+          }
+        />
+        <MetricCard
+          label="เข้าสู่รอบ Final"
+          value={stamp(v.finalAt)}
+          selected={metricInfo?.label === "เข้าสู่รอบ Final"}
+          onOpen={() =>
+            setMetricInfo({
+              label: "เข้าสู่รอบ Final",
+              description:
+                "เวลาที่ช่วงเล่นหลักจบลง หลังจากเคลียร์เหตุการณ์ค้างแล้ว ระบบจะเข้าสู่ช่วงตัดสิน Final",
+            })
+          }
+        />
+        <MetricCard
+          label="เวลาที่เหลือ"
+          value={countdown(
+            room.phase === "secret-vote" ? v.voteEndsAt : v.finalAt,
+            now,
+          )}
+          selected={metricInfo?.label === "เวลาที่เหลือ"}
+          onOpen={() =>
+            setMetricInfo({
+              label: "เวลาที่เหลือ",
+              description:
+                room.phase === "secret-vote"
+                  ? "เวลาที่เหลือก่อนหมดช่วงโหวตลับ"
+                  : "เวลาที่เหลือก่อนเข้าสู่ช่วง Final",
+            })
+          }
+        />
       </div>
       {v.huntDeadline && (
         <>
           <div className="v24-metrics">
-            <div>
-              Hunt Clock<strong>{countdown(v.huntDeadline, now)}</strong>
-            </div>
-            <div>
-              Attack / 60m<strong>{v.attacksUsed ?? 0} / 3</strong>
-            </div>
-            <div>
-              Kill / 60m<strong>{v.killsUsed ?? 0} / 1</strong>
-            </div>
+            <MetricCard
+              label="เวลาตามล่า"
+              value={countdown(v.huntDeadline, now)}
+              selected={metricInfo?.label === "เวลาตามล่า"}
+              onOpen={() =>
+                setMetricInfo({
+                  label: "เวลาตามล่า",
+                  description:
+                    "เวลาที่เหลือให้ทีม Killer ฆ่าให้สำเร็จ ถ้าหมดเวลานี้โดยไม่มีการฆ่าที่ทันเวลา ฝั่งเมืองจะชนะ การฆ่าสำเร็จจะต่อเวลาอีก 120 นาที",
+                })
+              }
+            />
+            <MetricCard
+              label="การโจมตีใน 60 นาทีล่าสุด"
+              value={`${v.attacksUsed ?? 0} / 3`}
+              selected={metricInfo?.label === "การโจมตีใน 60 นาทีล่าสุด"}
+              onOpen={() =>
+                setMetricInfo({
+                  label: "การโจมตีใน 60 นาทีล่าสุด",
+                  description:
+                    "จำนวนการโจมตีที่ทีม Killer ใช้ไปจากสูงสุด 3 ครั้ง โดยนับย้อนหลัง 60 นาที และใช้โควตร่วมกันทั้งทีม เมื่อรายการเก่าเกิน 60 นาที โควตาจะกลับมา",
+                })
+              }
+            />
+            <MetricCard
+              label="การฆ่าสำเร็จใน 60 นาทีล่าสุด"
+              value={`${v.killsUsed ?? 0} / 1`}
+              selected={metricInfo?.label === "การฆ่าสำเร็จใน 60 นาทีล่าสุด"}
+              onOpen={() =>
+                setMetricInfo({
+                  label: "การฆ่าสำเร็จใน 60 นาทีล่าสุด",
+                  description:
+                    "จำนวนครั้งที่ทีม Killer ทำให้ผู้เล่นตายสำเร็จจากสูงสุด 1 ครั้ง โดยนับย้อนหลัง 60 นาทีและใช้ร่วมกันทั้งทีม การโจมตีที่ไม่ทำให้ตายจะไม่นับเป็นการฆ่า",
+                })
+              }
+            />
           </div>
+          {metricInfo && (
+            <div className="v24-metric-info" role="status">
+              <div>
+                <strong>{metricInfo.label}</strong>
+                <p>{metricInfo.description}</p>
+              </div>
+              <button
+                type="button"
+                aria-label="ปิดรายละเอียด"
+                onClick={() => setMetricInfo(null)}
+              >
+                ปิด
+              </button>
+            </div>
+          )}
           <p>
-            pending {v.pendingAttacks ?? 0} · rolling window ใช้ร่วมกันทั้งทีม
+            หลักฐานรอตรวจ {v.pendingAttacks ?? 0} · โควตานับย้อนหลัง 60 นาที ใช้ร่วมกันทั้งทีม
             {v.huntPending ? " · รอ Host ตรวจหลักฐานก่อนตัดสิน Hunt Clock" : ""}
           </p>
         </>

@@ -51,6 +51,7 @@ import {
   heartbeat,
   joinOrCreateDemo,
   loadAttackActivityImage,
+  loadEndGameStory,
   loadRoom,
   rejectEvidence,
   reporterAbility,
@@ -75,6 +76,7 @@ import {
   ROLE_HEARTS,
   ROLE_LABELS,
   type PrivatePlayerState,
+  type EndGameStoryEntry,
   type Role,
   type RoomState,
 } from "@/src/types";
@@ -367,7 +369,7 @@ function errorMessage(error: unknown, fallback: string) {
     "resolve earlier event first": "ต้อง resolve เหตุการณ์ก่อนหน้าในคิวก่อน",
     "waiting for capture upload window": "กรุณารอให้ครบ 2 นาทีจากเวลาที่ถ่ายภาพก่อนอนุมัติ",
     "resolve bomb first": "กรุณาตัดสินผล Bomber ก่อน",
-    "target protected; reject evidence": "ภาพอยู่ในช่วง protection ของเป้าหมาย กรุณาปฏิเสธหลักฐาน",
+    "target protected; reject evidence": "เป้าหมายอยู่ในช่วง protection จึงยังส่งหลักฐานไม่ได้",
     "rolling attack quota reached; reject evidence": "เกินโควตา 3 attacks ต่อ rolling 60 นาที กรุณาปฏิเสธหลักฐาน",
     "rolling kill quota reached; reject evidence": "เกินโควตา 1 kill ต่อ rolling 60 นาที กรุณาปฏิเสธหลักฐาน",
     "rolling attack reservations full": "โควตาโจมตีถูกใช้หรือจองเต็มแล้ว รอคิวเดิมหรือ rolling window คืนโควตา",
@@ -894,6 +896,83 @@ function EndGameTimeline({ room }: { room: RoomState }) {
   </section>;
 }
 
+function StoryName({ id, names, mine }: { id: string | null; names: Map<string, string>; mine?: string | null }) {
+  if (!id) return <>ไม่ระบุผู้เล่น</>;
+  const name = names.get(id) ?? "ผู้เล่นที่ออกจากห้อง";
+  return <strong className={id === mine ? "story-me" : undefined}>{name}{id === mine ? " (คุณ)" : ""}</strong>;
+}
+
+function EndGameStory({ room, playerId, host = false, onBack }: { room: RoomState; playerId?: string | null; host?: boolean; onBack: () => void }) {
+  const [story, setStory] = useState<EndGameStoryEntry[] | null>(null);
+  const [incomplete, setIncomplete] = useState(false);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState<"all" | "mine">("all");
+  const [visibleCount, setVisibleCount] = useState(30);
+  const [images, setImages] = useState<Record<string, string>>({});
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const load = useCallback(() => {
+    setError("");
+    setStory(null);
+    void loadEndGameStory(room.code).then((payload) => {
+      setStory(payload.entries);
+      setIncomplete(payload.incomplete);
+    }).catch((cause) => setError(errorMessage(cause, "โหลดเรื่องราวทั้งเกมไม่สำเร็จ")));
+  }, [room.code]);
+  useEffect(() => { load(); }, [load]);
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const filtered = (story ?? []).filter((entry) => filter === "all" || Boolean(playerId && (
+    entry.actorPlayerId === playerId || entry.targetPlayerId === playerId || entry.affectedPlayerIds.includes(playerId)
+  )));
+  const showImage = (entry: EndGameStoryEntry) => {
+    const storagePath = entry.result.storagePath;
+    if (!storagePath || images[entry.id]) return;
+    setImageErrors((current) => ({ ...current, [entry.id]: false }));
+    void loadAttackActivityImage(storagePath).then((url) => setImages((current) => ({ ...current, [entry.id]: url })))
+      .catch(() => setImageErrors((current) => ({ ...current, [entry.id]: true })));
+  };
+  const message = (entry: EndGameStoryEntry) => {
+    if (entry.kind === "game-start") return <>เกมเริ่มแล้ว</>;
+    if (entry.kind === "attack") return <><StoryName id={entry.actorPlayerId} names={names} mine={playerId} /> โจมตี <StoryName id={entry.targetPlayerId} names={names} mine={playerId} /> · {entry.result.result === "elimination confirmed" ? "กำจัดสำเร็จ" : "เป้าหมายยังมีชีวิต"}</>;
+    if (entry.kind === "heal") return <><StoryName id={entry.actorPlayerId} names={names} mine={playerId} /> รักษา <StoryName id={entry.targetPlayerId} names={names} mine={playerId} />{entry.result.healed === false ? " · สุขภาพเต็มแล้ว" : ""}</>;
+    if (entry.kind === "vote-summary") {
+      const counts = Object.entries(entry.result.counts ?? {}).map(([id, count]) => `${names.get(id) ?? "ผู้เล่น"} ${count} เสียง`);
+      return <>ผลโหวต: {counts.length ? counts.join(", ") : "ไม่มีผลโหวตที่บันทึกไว้"}</>;
+    }
+    if (entry.kind === "game-ended") return <>เกมจบ: {String(entry.result.reason ?? "ไม่ระบุเหตุผล")}</>;
+    if (entry.result.message) return <>{entry.result.message}</>;
+    if (entry.kind === "milestone") return <>เหตุการณ์สำคัญ: {String(entry.result.kind ?? "เกิดการเปลี่ยนแปลง")}</>;
+    return <>มีเหตุการณ์ในเกม</>;
+  };
+  return <main className="app-shell end-game-story-page">
+    <Header code={room.code} label="เรื่องราวทั้งเกม" />
+    <div className="end-game-story-shell">
+      <div className="page-intro">
+        <div><span className="section-kicker">POST-GAME TIMELINE</span><h1>เรื่องราวทั้งเกม</h1><p className="muted">เรียงตามเวลาที่เหตุการณ์เกิดขึ้น</p></div>
+        <button className="topbar-btn" onClick={onBack}><ChevronLeft size={16} /> กลับสรุป</button>
+      </div>
+      {!host && <div className="story-filters" role="group" aria-label="กรองเรื่องราว">
+        <button className={filter === "all" ? "selected" : ""} onClick={() => { setFilter("all"); setVisibleCount(30); }}>ทั้งหมด</button>
+        <button className={filter === "mine" ? "selected" : ""} onClick={() => { setFilter("mine"); setVisibleCount(30); }}>เกี่ยวกับฉัน</button>
+      </div>}
+      {story === null && !error && <div className="empty-state"><Hourglass size={24} /><p>กำลังโหลดเรื่องราว...</p></div>}
+      {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={load}>ลองใหม่</button></div>}
+      {incomplete && <p className="story-incomplete">ประวัติบางช่วงอาจไม่ครบ เพราะเกมเริ่มก่อนระบบบันทึกเรื่องราว</p>}
+      {story !== null && !error && (filtered.length ? <ol className="story-list">
+        {filtered.slice(0, visibleCount).map((entry) => <li key={entry.id} className={`story-entry story-${entry.kind}`}>
+          <div><span>{message(entry)}</span><time dateTime={entry.occurredAt}>{new Date(entry.occurredAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })}</time>
+            {entry.kind === "attack" && entry.result.decisionAt && <small>อนุมัติเมื่อ {new Date(entry.result.decisionAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}</small>}
+          </div>
+          {entry.kind === "attack" && entry.result.storagePath && <div className="story-evidence">
+            {images[entry.id] ? <img src={images[entry.id]} alt="รูปหลักฐานการโจมตี" /> : <button className="secondary-action" onClick={() => showImage(entry)}>ดูรูปหลักฐาน</button>}
+            {imageErrors[entry.id] && <small>รูปไม่พร้อมใช้งาน <button className="text-button" onClick={() => showImage(entry)}>ลองใหม่</button></small>}
+          </div>}
+        </li>)}
+      </ol> : <div className="empty-state"><Radio size={24} /><p>{filter === "mine" ? "ไม่มีเหตุการณ์ที่เกี่ยวกับคุณ" : "ยังไม่มีเรื่องราวที่บันทึกไว้"}</p></div>)}
+      {filtered.length > visibleCount && <button className="secondary-action story-more" onClick={() => setVisibleCount((count) => count + 30)}>โหลดเพิ่มเติม</button>}
+    </div>
+  </main>;
+}
+
 function Ended({
   room,
   host = false,
@@ -941,10 +1020,12 @@ function PlayerEndGameSummary({
   playerId: string | null;
   onLeave: () => void;
 }) {
+  const [storyOpen, setStoryOpen] = useState(false);
   const summaries = new Map(
     room.endGameSummary.map((entry) => [entry.playerId, entry]),
   );
   const myTeam = playerId ? summaries.get(playerId)?.team : null;
+  if (storyOpen) return <EndGameStory room={room} playerId={playerId} onBack={() => setStoryOpen(false)} />;
   return (
     <main className="app-shell player-app">
       <Header code={room.code} label="สรุปผลเกม" onLeave={onLeave} />
@@ -955,6 +1036,7 @@ function PlayerEndGameSummary({
         />
         <EndGameReasonPanel room={room} />
         <EndGameTimeline room={room} />
+        <button className="secondary-action end-game-story-button" onClick={() => setStoryOpen(true)}>ดูเรื่องราวทั้งเกม</button>
         <section className="panel" aria-labelledby="end-game-roster-title">
           <div className="panel-heading">
             <div>
@@ -1120,6 +1202,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const [leaving, setLeaving] = useState(false);
   const creationAttemptForCode = useRef<string | null>(null);
   const [tab, setTab] = useState("home");
+  const [storyOpen, setStoryOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const busyRef = useRef(false);
@@ -1255,6 +1338,8 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
     pending.sort((a, b) =>
       effectiveTime(a) - effectiveTime(b) || a.id.localeCompare(b.id),
     );
+  if (room.phase === "ended" && storyOpen)
+    return <EndGameStory room={room} host onBack={() => setStoryOpen(false)} />;
   }
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const savedDuration = room.v24?.durationMinutes;
@@ -1418,6 +1503,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           <Ended room={room} host />
           <EndGameReasonPanel room={room} />
           <EndGameTimeline room={room} />
+          {room.phase === "ended" && <button className="secondary-action end-game-story-button" onClick={() => setStoryOpen(true)}>ดูเรื่องราวทั้งเกม</button>}
           {room.phase === "lobby" && tab === "players" && (
             <LobbyPlayers room={room} onRemove={(player) => setConfirmation({
               title: "นำผู้เล่นออกจากห้อง",
@@ -1923,6 +2009,7 @@ export function PlayerRoom({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [now, setNow] = useState(Date.now());
+  const [serverClock, setServerClock] = useState({ serverNow: 0, receivedAt: 0 });
   const reporterAliveCount = room?.players.filter(
     (player) => player.health !== "dead",
   ).length;
@@ -1952,6 +2039,34 @@ export function PlayerRoom({
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [removedFromLobby, setRemovedFromLobby] = useState(false);
   const wasMemberRef = useRef(false);
+  useEffect(() => {
+    const serverNow = Date.parse(room?.v24?.serverNow ?? "");
+    if (Number.isFinite(serverNow)) setServerClock({ serverNow, receivedAt: Date.now() });
+  }, [room?.v24?.serverNow]);
+  const roomServerNow = Date.parse(room?.v24?.serverNow ?? "");
+  const protectionNow = Number.isFinite(roomServerNow) && roomServerNow !== serverClock.serverNow
+    ? roomServerNow
+    : serverClock.serverNow
+      ? serverClock.serverNow + Math.max(0, now - serverClock.receivedAt)
+      : now;
+  const selectedProtectionUntil = targetId
+    ? room?.v24?.targetProtectionUntil?.[targetId]
+    : undefined;
+  const selectedProtectionEndsAt = selectedProtectionUntil
+    ? Date.parse(selectedProtectionUntil)
+    : Number.NaN;
+  const selectedTargetProtected = room?.rulesVersion === "2.4" &&
+    Number.isFinite(selectedProtectionEndsAt) &&
+    selectedProtectionEndsAt > protectionNow;
+  useEffect(() => {
+    if (!selectedTargetProtected || !photoPreview) return;
+    cameraTargetRef.current = null;
+    URL.revokeObjectURL(photoPreview);
+    setPhoto(null);
+    setPhotoPreview("");
+    setCapturedAt("");
+    setError("เป้าหมายยังอยู่ในช่วง protection กรุณารอหมดเวลาแล้วถ่ายรูปใหม่");
+  }, [selectedTargetProtected, photoPreview]);
   useEffect(() => {
     if (room?.viewerRole === "player") wasMemberRef.current = true;
     if (initialLoadComplete && !room && wasMemberRef.current) {
@@ -2204,6 +2319,9 @@ export function PlayerRoom({
       player.health !== "dead" &&
       !room.privateStates[player.id]?.isActiveKiller,
   );
+  const targetProtectionSeconds = target && selectedTargetProtected
+    ? Math.ceil((selectedProtectionEndsAt - protectionNow) / 1000)
+    : 0;
   const validReportTarget = room.players.some(
     (player) =>
       player.id === reportTarget &&
@@ -2264,6 +2382,11 @@ export function PlayerRoom({
           player.health !== "dead" &&
           !current.privateStates[player.id]?.isActiveKiller,
       );
+      const currentProtectionUntil = current?.v24?.targetProtectionUntil?.[requestedTargetId];
+      const currentTargetProtected = Boolean(
+        currentProtectionUntil &&
+        Date.parse(currentProtectionUntil) > Date.parse(current?.v24?.serverNow ?? ""),
+      );
       if (
         !current ||
         current.closedAt ||
@@ -2271,11 +2394,16 @@ export function PlayerRoom({
         !currentMe?.isActiveKiller ||
         !currentPlayer ||
         currentPlayer?.health === "dead" ||
-        !currentTarget
+        !currentTarget ||
+        currentTargetProtected
       ) {
         if (current) setRoom(current);
         clearPhoto();
-        setError("สถานะเกมหรือเป้าหมายเปลี่ยนแล้ว กรุณาถ่ายรูปใหม่");
+        setError(
+          currentTargetProtected
+            ? "เป้าหมายยังอยู่ในช่วง protection กรุณารอหมดเวลาแล้วถ่ายรูปใหม่"
+            : "สถานะเกมหรือเป้าหมายเปลี่ยนแล้ว กรุณาถ่ายรูปใหม่",
+        );
         return;
       }
       setRoom(current);
@@ -2290,6 +2418,11 @@ export function PlayerRoom({
   };
   const sendEvidence = async () => {
     if (!photo || !target || !capturedAt || submittingEvidence) return;
+    if (selectedTargetProtected) {
+      clearPhoto();
+      setError("เป้าหมายยังอยู่ในช่วง protection กรุณารอหมดเวลาแล้วถ่ายรูปใหม่");
+      return;
+    }
     if (Date.now() - new Date(capturedAt).getTime() >= 120000) {
       setError("รูปเกิน 2 นาทีแล้ว กรุณาถ่ายใหม่");
       return;
@@ -2562,6 +2695,16 @@ export function PlayerRoom({
                   <div>
                     <strong>{target.name}</strong>
                     <small>ผลลัพธ์จะแสดงหลัง Host อนุมัติ</small>
+                    {selectedTargetProtected ? (
+                      <span className="target-protection" role="status">
+                        <Shield size={13} />
+                        คุ้มครองอีก {Math.floor(targetProtectionSeconds / 60)}:{String(targetProtectionSeconds % 60).padStart(2, "0")} นาที · ยังถ่ายภาพและส่งหลักฐานไม่ได้
+                      </span>
+                    ) : (
+                      <span className="target-protection inactive">
+                        <Shield size={13} /> ไม่มี protection
+                      </span>
+                    )}
                   </div>
                   <Eye size={17} />
                 </div>
@@ -2574,9 +2717,10 @@ export function PlayerRoom({
                 </span>
               </div>
               {!target && <p className="muted">เลือกเป้าหมายก่อนเปิดกล้อง</p>}
+              {selectedTargetProtected && <p className="target-protection-notice" role="status">เป้าหมายนี้ยังได้รับการคุ้มครอง กรุณารอเวลาหมดก่อนถ่ายภาพ</p>}
               {v24SubmissionBlocked && <p role="status">ช่องส่งหลักฐานเต็ม · รอ Host ตรวจหลักฐานเดิม หรือรอ rolling quota คืนช่องว่าง</p>}
               <NativeCamera
-                disabled={submittingEvidence || v24SubmissionBlocked || !target || tab !== "home"}
+                disabled={submittingEvidence || v24SubmissionBlocked || selectedTargetProtected || !target || tab !== "home"}
                 onOpen={() => {
                   cameraTargetRef.current = target?.id ?? null;
                   setError("");
@@ -2611,6 +2755,7 @@ export function PlayerRoom({
                   !capturedAt ||
                   photoSeconds <= 0 ||
                   v24SubmissionBlocked ||
+                  selectedTargetProtected ||
                   submittingEvidence
                 }
                 onClick={sendEvidence}
@@ -2716,12 +2861,6 @@ export function PlayerRoom({
             </div>
           )}
           <ErrorBanner error={error} />
-          <div className="panel latest-news-panel">
-            <div className="panel-heading">
-              <h2>ข่าวล่าสุด</h2>
-            </div>
-            <Events room playerId={playerId} />
-          </div>
         </section>
         <aside className="side-column" hidden={tab !== "home"}>
           <div className="panel privacy-note">

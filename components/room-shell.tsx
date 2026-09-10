@@ -365,7 +365,7 @@ function errorMessage(error: unknown, fallback: string) {
     "evidence is no longer pending":
       "หลักฐานนี้ถูกจัดการแล้ว หรือเกมเปลี่ยนช่วง กรุณาตรวจสอบคิวอีกครั้ง",
     "resolve earlier event first": "ต้อง resolve เหตุการณ์ก่อนหน้าในคิวก่อน",
-    "waiting for capture upload window": "รอครบ 2 นาทีจาก effective time เพื่อให้เรียงภาพที่ยังส่งไม่ครบได้ถูกต้อง",
+    "waiting for capture upload window": "กรุณารอให้ครบ 2 นาทีจากเวลาที่ถ่ายภาพก่อนอนุมัติ",
     "resolve bomb first": "กรุณาตัดสินผล Bomber ก่อน",
     "target protected; reject evidence": "ภาพอยู่ในช่วง protection ของเป้าหมาย กรุณาปฏิเสธหลักฐาน",
     "rolling attack quota reached; reject evidence": "เกินโควตา 3 attacks ต่อ rolling 60 นาที กรุณาปฏิเสธหลักฐาน",
@@ -1131,6 +1131,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   } | null>(null);
   const [largeImage, setLargeImage] = useState("");
   const [archiveReady, setArchiveReady] = useState(false);
+  const [queueNow, setQueueNow] = useState(() => Date.now());
   const [counts, setCounts] = useState(DEFAULT_ROLE_COUNTS);
   const [durationDraft, setDurationDraft] = useState(600);
   const initializedDurationRoom = useRef<string | null>(null);
@@ -1140,6 +1141,11 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
     initializedDurationRoom.current = room.code;
     setDurationDraft(room.v24?.durationMinutes ?? 600);
   }, [room?.code, room?.phase, room?.v24?.durationMinutes]);
+  useEffect(() => {
+    if (room?.rulesVersion !== "2.4") return;
+    const timer = window.setInterval(() => setQueueNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [room?.rulesVersion]);
   const [bombSelection, setBombSelection] = useState<string[]>([]);
   const [accusationAt, setAccusationAtInput] = useState("");
   const hostCredentials = readRoomCredentials(`host:${code}`);
@@ -1232,10 +1238,24 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         void refresh();
       });
   };
+  const actionByEvidence = new Map(
+    (room.v24?.actions ?? [])
+      .filter((action) => action.evidence_id)
+      .map((action) => [action.evidence_id, action]),
+  );
+  const effectiveTime = (evidence: RoomState["evidences"][number]) => {
+    const action = actionByEvidence.get(evidence.id);
+    const value = Date.parse(action?.effective_at ?? evidence.capturedAt);
+    return Number.isFinite(value) ? value : Date.parse(evidence.createdAt);
+  };
   const pending = room.evidences.filter(
     (evidence) => evidence.status === "pending",
   );
-  if (room.rulesVersion === "2.4") pending.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt));
+  if (room.rulesVersion === "2.4") {
+    pending.sort((a, b) =>
+      effectiveTime(a) - effectiveTime(b) || a.id.localeCompare(b.id),
+    );
+  }
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const savedDuration = room.v24?.durationMinutes;
   const durationNeedsSaving = room.rulesVersion === "2.4" && durationDraft !== savedDuration;
@@ -1735,13 +1755,37 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                               หากอนุมัติการโจมตีตำรวจ City Side จะชนะทันที
                             </p>
                           )}
+                          {room.rulesVersion === "2.4" && (() => {
+                            const firstPendingAction = room.v24?.actions?.find((action) => action.status === "pending");
+                            const action = actionByEvidence.get(item.id);
+                            const waitingForEarlier = firstPendingAction?.evidence_id !== item.id;
+                            const waitSeconds = action
+                              ? Math.max(0, Math.ceil((Date.parse(action.effective_at) + 120000 - queueNow) / 1000))
+                              : 0;
+                            const beforeCutoff = queueNow < Date.parse(room.v24?.cutoffAt ?? "");
+                            const waitingForUploadWindow = !waitingForEarlier && beforeCutoff && waitSeconds > 0;
+                            return (waitingForEarlier || waitingForUploadWindow) ? (
+                            <p className="evidence-queue-note muted">
+                              {waitingForEarlier
+                                ? "กรุณาจัดการรายการก่อนหน้านี้ในคิวก่อน"
+                                : `กรุณารอ ${waitSeconds} วินาที เพื่ออนุมัติ`}
+                            </p>
+                            ) : null;
+                          })()}
                           <div className="evidence-actions">
-                            {room.rulesVersion === "2.4" && room.v24?.actions?.find(a => a.status === "pending")?.evidence_id !== item.id && <p className="muted">รอ resolve เหตุการณ์ก่อนหน้าในคิว</p>}
                             <button
                               className="approve-action"
                               disabled={
                                 busy ||
-                                (room.rulesVersion === "2.4" && room.v24?.actions?.find(a => a.status === "pending")?.evidence_id !== item.id) ||
+                                (room.rulesVersion === "2.4" && (() => {
+                                  const firstPendingAction = room.v24?.actions?.find((action) => action.status === "pending");
+                                  const action = actionByEvidence.get(item.id);
+                                  const waitSeconds = action
+                                    ? Math.max(0, Math.ceil((Date.parse(action.effective_at) + 120000 - queueNow) / 1000))
+                                    : 0;
+                                  return firstPendingAction?.evidence_id !== item.id ||
+                                    (queueNow < Date.parse(room.v24?.cutoffAt ?? "") && waitSeconds > 0);
+                                })()) ||
                                 !["active", "resolution"].includes(room.phase) ||
                                 !item.imageData
                               }

@@ -405,35 +405,44 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
       )}
       {host && (
         <div className="v24-action">
-          <h3>คิวตาม effective time</h3>
+          <h3>คิวตามเวลาที่เกิดเหตุ</h3>
           <p>
-            รอครบหน้าต่างส่งภาพ 2 นาที แล้ว resolve จากบนลงล่าง; attack
-            เปิดภาพตรวจในส่วนหลักฐาน
+            ระบบจะรอ 2 นาทีจากเวลาที่เกิดเหตุ เพื่อให้ภาพที่ส่งช้ากว่าเข้าคิวครบ
+            แล้วให้จัดการจากรายการบนลงล่าง
           </p>
           {v.actions
             ?.filter((a) => a.status === "pending")
             .map((a, i) => (
               <div className="v24-queue" key={a.id}>
                 <strong>
-                  {a.kind === "heal" ? "Heal" : "Attack"} ·{" "}
+                  {a.kind === "heal" ? "การรักษา" : "การโจมตี"} ·{" "}
                   {names([a.target_id])}
                 </strong>
                 <small>
                   {stamp(a.effective_at)} · {names([a.actor_id])}
                 </small>
                 {a.kind === "heal" && (
-                  <button
-                    className="secondary-action"
-                    disabled={
-                      busy ||
-                      i !== 0 ||
-                      room.phase === "bomb-resolution" ||
-                      now < Date.parse(a.effective_at) + 120000
-                    }
-                    onClick={() => act(() => resolveV24Action(room.code, a.id))}
-                  >
-                    Resolve การรักษา
-                  </button>
+                  <>
+                    {(() => {
+                      const waitSeconds = Math.max(
+                        0,
+                        Math.ceil((Date.parse(a.effective_at) + 120000 - now) / 1000),
+                      );
+                      return i !== 0 ? (
+                        <small className="muted">กรุณาจัดการรายการก่อนหน้านี้ในคิวก่อน</small>
+                      ) : waitSeconds > 0 ? (
+                        <small className="muted">กรุณารอ {waitSeconds} วินาที เพื่ออนุมัติ</small>
+                      ) : (
+                        <button
+                          className="secondary-action"
+                          disabled={busy || i !== 0 || room.phase === "bomb-resolution"}
+                          onClick={() => act(() => resolveV24Action(room.code, a.id))}
+                        >
+                          อนุมัติการรักษา
+                        </button>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             ))}

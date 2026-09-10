@@ -1412,8 +1412,6 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
           {room.rulesVersion === "2.4" && (room.phase !== "lobby" || tab === "home") && <>
             {room.phase === "lobby" && <V24SetupGuide
               joinedPlayers={room.players.length}
-              counts={counts}
-              durationMinutes={durationDraft}
               busy={busy}
               onApply={applyPreset}
             />}

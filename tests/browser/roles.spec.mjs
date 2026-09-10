@@ -803,29 +803,58 @@ test("v24 Host guide applies a draft only, then requires its duration to be save
   await openPlayer(page, "host");
   const guide = page.locator(".v24-setup-guide");
   await expect(guide).toBeVisible();
+  const settings = page.locator('.v24-panel').filter({ has: page.locator('.host-setup-disclosure') });
+  await expect(guide.locator('details')).not.toHaveAttribute('open', '');
+  await expect(settings.locator('details')).not.toHaveAttribute('open', '');
+  await expect(guide.locator('summary')).toContainText('ชุดที่เลือก: 9 คน / 6 ชั่วโมง');
+  await guide.locator('summary').click();
+  await expect(guide.getByRole('radiogroup')).toHaveCount(1);
+  await expect(guide.getByRole('radio')).toHaveCount(8);
+  await expect(guide.getByText('ข้อควรทราบก่อนใช้ชุดนี้')).toHaveCount(0);
   await expect(guide.getByText("Office · 9 คน / 6 ชั่วโมง")).toBeVisible();
   await guide.getByRole("button", { name: "ใช้ชุดแนะนำ" }).click();
   expect((await db.query("select v24->>'durationMinutes' duration from public.rooms where code='ABCDEF'")).rows[0].duration).toBe("600");
-  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /เริ่มแจกบทบาท/ })).toBeDisabled();
   await expect(page.getByText("บันทึกเวลาใหม่ก่อนเริ่มเกม")).toBeVisible();
+  await expect(settings.locator('summary')).toContainText('เวลาที่ตั้งไว้: 6 ชั่วโมง');
+  await expect(settings.locator('summary')).toContainText('ยังไม่ได้บันทึก');
+  await expect(settings.locator('details')).not.toHaveAttribute('open', '');
   await page.getByLabel("เพิ่ม Villager").click();
-  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toBeVisible();
   await page.getByLabel("ลด Villager").click();
-  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toHaveCount(0);
+  await settings.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await settings.getByLabel('นาที', { exact: true }).fill('30');
+  await settings.locator('summary').click();
+  await expect(settings.locator('summary')).toContainText('6 ชั่วโมง 30 นาที');
+  await settings.locator('summary').focus();
+  await page.keyboard.press('Space');
+  await expect(settings.getByLabel('นาที', { exact: true })).toHaveValue('30');
+  await settings.getByLabel('นาที', { exact: true }).fill('0');
+  await expect(settings.locator('.setup-schedule dl > div')).toHaveText([
+    'สิ้นสุด Reveal4 ชั่วโมง', 'หยุดรับแอ็กชัน5 ชั่วโมง 30 นาที',
+    'เริ่มอภิปราย5 ชั่วโมง 50 นาที', 'ระยะเวลาโหวต3 นาที',
+  ]);
   await page.getByRole("button", { name: "บันทึกกติกาก่อนเริ่ม" }).click();
   await expect(page.getByText("ค่าที่บันทึก: 6 ชั่วโมง")).toBeVisible();
   await expect(page.getByRole("button", { name: /เริ่มแจกบทบาท/ })).toBeEnabled();
   expect((await db.query("select v24->>'durationMinutes' duration from public.rooms where code='ABCDEF'")).rows[0].duration).toBe("360");
+  await expect(settings.locator('details')).toHaveAttribute('open', '');
+  await expect(settings.getByText('ยังไม่ได้บันทึก')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.reload();
+  await expect(guide.locator('details')).not.toHaveAttribute('open', '');
+  await expect(settings.locator('details')).not.toHaveAttribute('open', '');
 });
 
 test("v24 setup guide keeps readable summaries across mobile, tablet and desktop", async ({ page }) => {
   await db.exec("update public.rooms set phase='lobby',rules_version='2.4',police_check_at=null,v24=jsonb_build_object('durationMinutes',600)");
   await openPlayer(page, "host");
   const guide = page.locator(".v24-setup-guide");
+  await guide.locator('summary').click();
+  const settings = page.locator('.v24-panel').filter({ has: page.locator('.host-setup-disclosure') });
+  await settings.locator('summary').click();
   for (const width of [360, 390, 520, 768, 900, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const value of ["10", "standard-12"]) {
@@ -850,14 +879,20 @@ test("v24 setup guide keeps readable summaries across mobile, tablet and desktop
       expect(metrics.touchTargets).toBe(true);
       if ([360, 900, 1440].includes(width)) {
         await guide.screenshot({ path: `artifacts/host-guide-${width}-${value}.png` });
+        if (value === 'standard-12') {
+          await settings.screenshot({ path: `artifacts/host-settings-${width}.png` });
+        }
       }
     }
   }
   const summary = guide.locator("summary");
   await summary.focus();
   await page.keyboard.press("Enter");
-  await expect(guide.locator("details")).toHaveAttribute("open", "");
-  await expect(guide.getByText(/เริ่ม 12 คน ต้องเหลืออย่างน้อย 7 คน/)).toBeVisible();
+  await expect(guide.locator("details")).not.toHaveAttribute("open", "");
+  await expect(summary).toContainText('ชุดที่เลือก: 12 คน / 10 ชั่วโมง');
+  await expect(settings.locator('details')).toHaveAttribute('open', '');
+  await page.keyboard.press('Space');
+  await expect(guide.locator('input[value="standard-12"]')).toBeChecked();
   const office = guide.locator('input[value="10"]');
   await office.focus();
   await page.keyboard.press("Space");

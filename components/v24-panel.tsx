@@ -83,7 +83,13 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
   if (room.phase === "lobby")
     return host ? (
       <section className="panel v24-panel" data-host-section="home">
-        <h2>ตั้งค่าก่อนเริ่ม</h2>
+        <details className="host-setup-disclosure">
+        <summary className="host-setup-summary">
+          <h2>ตั้งค่าก่อนเริ่มเกม</h2>
+          <span className="host-setup-overview">เวลาที่ตั้งไว้: {formatDuration(duration)}</span>
+          {duration !== v.durationMinutes && <span className="guide-changed" role="status">ยังไม่ได้บันทึก</span>}
+        </summary>
+        <div className="host-setup-content">
         <fieldset className="duration-fields">
           <legend>ระยะเวลาเกม</legend>
           <label>
@@ -115,10 +121,16 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
             />
           </label>
         </fieldset>
-        <p>
-          cutoff {formatDuration(duration - 30)} · discussion {formatDuration(duration - 10)} · Reveal
-          ถึง {formatDuration(duration - 120)} · โหวตอีก 3 นาที
-        </p>
+        <div className="setup-schedule">
+          <h3>กำหนดการ</h3>
+          <p className="muted">เวลานับจากเริ่มเกม ยกเว้นระยะเวลาโหวต</p>
+          <dl>
+            <div><dt>สิ้นสุด Reveal</dt><dd>{formatDuration(duration - 120)}</dd></div>
+            <div><dt>หยุดรับแอ็กชัน</dt><dd>{formatDuration(duration - 30)}</dd></div>
+            <div><dt>เริ่มอภิปราย</dt><dd>{formatDuration(duration - 10)}</dd></div>
+            <div><dt>ระยะเวลาโหวต</dt><dd>3 นาที</dd></div>
+          </dl>
+        </div>
         <button
           className="primary-action"
           disabled={
@@ -135,6 +147,8 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
             ? `ค่าที่บันทึก: ${formatDuration(v.durationMinutes)}`
             : "ต้องบันทึกระยะเวลาเกมก่อนแจกบทบาท"}
         </p>
+        </div>
+        </details>
       </section>
     ) : (
       <section className="panel v24-panel">

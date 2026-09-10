@@ -286,12 +286,18 @@ test("upgrade applies to existing schema and is repeatable without resetting roo
     new URL("../supabase/migrations/20260910_reporter_majority_limit.sql", import.meta.url),
     "utf8",
   );
+  const privateStates = await readFile(
+    new URL("../supabase/migrations/20260910_room_view_private_states.sql", import.meta.url),
+    "utf8",
+  );
   await db.exec(sql);
   await db.exec(finalVote);
   await db.exec(reporterLimit);
+  await db.exec(privateStates);
   await db.exec(sql);
   await db.exec(finalVote);
   await db.exec(reporterLimit);
+  await db.exec(privateStates);
   const room = await view("host");
   assert.equal(room.rulesVersion, "2.4");
   assert.equal(room.v24.finalVoteRules, undefined);
@@ -328,11 +334,16 @@ test("migration upgrades a genuine pre-v24 active database without changing its 
       new URL("../supabase/migrations/20260910_reporter_majority_limit.sql", import.meta.url),
       "utf8",
     );
+    const privateStates = await readFile(
+      new URL("../supabase/migrations/20260910_room_view_private_states.sql", import.meta.url),
+      "utf8",
+    );
     await oldDb.exec(migration);
     await oldDb.exec(attackActivity);
     await oldDb.exec(hostBomberJudgment);
     await oldDb.exec(finalVote);
     await oldDb.exec(reporterLimit);
+    await oldDb.exec(privateStates);
     const room = await old.as("host", "get_room_view", ["ABCDEF"]);
     assert.equal(room.rulesVersion, "legacy");
     assert.equal(room.phase, "active");

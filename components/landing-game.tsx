@@ -8,6 +8,7 @@ import {
 import { useState, useRef, useEffect } from "react";
 import { PixelButton, PixelIcon } from "./pixel-ui";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { makeRoomCode } from "@/src/game";
 import { rememberRoomCredentials } from "@/src/room-session";
 import { Brand, Rules } from "./game-ui";
@@ -67,9 +68,9 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   return (
     <main className={`entry-page entry-${view}`}>
       <header className="entry-header">
-        <a href="/" aria-label="KILLER หน้าหลัก">
+        <Link href="/" aria-label="KILLER หน้าหลัก">
           <Brand small />
-        </a>
+        </Link>
         <button className="text-button" onClick={() => setRules(true)}>
           <BookOpen size={17} /> วิธีเล่น <ChevronRight size={15} />
         </button>

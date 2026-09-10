@@ -97,6 +97,12 @@ test("ending an unstarted lobby includes every player with unassigned roles", as
     assert.deepEqual(entry, { playerId: entry.playerId, initialRole: null, currentRole: null, team: null });
 });
 
+test("lobby room views always expose privateStates as an object", async () => {
+  await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby', rules_version='2.4', v24='{}'::jsonb");
+  for (const role of ["host", "villager"])
+    assert.deepEqual((await view(role)).privateStates, {});
+});
+
 test("all nine roles have correct hearts; role pool rejects invalid setup and Host cannot play", async () => {
   for (const [role, hearts] of Object.entries({
     killer: 0,

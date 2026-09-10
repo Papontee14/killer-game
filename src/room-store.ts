@@ -14,6 +14,14 @@ import type {
 /** Supabase is the authority. This adapter intentionally has no localStorage fallback. */
 type Json = Record<string, unknown>;
 
+export class RoomPayloadError extends Error {
+  code = "room_payload_invalid";
+
+  constructor() {
+    super("room_payload_invalid");
+  }
+}
+
 function textValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -53,8 +61,14 @@ function asPrivateState(value: Json): PrivatePlayerState {
 }
 
 function asRoom(value: unknown): RoomState {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new RoomPayloadError();
   const data = value as Json;
-  const players = (data.players as Array<Json> | undefined) ?? [];
+  if (
+    typeof data.code !== "string" || !data.code.trim() ||
+    typeof data.phase !== "string" || !Array.isArray(data.players)
+  ) throw new RoomPayloadError();
+  const players = data.players as Array<Json>;
   // Some deployed SQL projections concatenate JSON null with {}, producing
   // [null, {}] before roles are assigned. Lobby views have no private roles.
   const rawSecrets = data.privateStates ?? data.private_states;
@@ -321,14 +335,24 @@ export async function joinOrCreateDemo(
   if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
   if (!normalizedName) throw new Error("กรุณาระบุชื่อผู้เล่น");
   await ensureAnonymousSession();
-  let data: unknown;
   try {
     const result = await client().rpc("join_room", {
       p_code: normalizedCode,
       p_name: normalizedName,
     });
     if (result.error) throw result.error;
-    data = result.data;
+    const data = result.data;
+    const room = asRoom(data);
+    const requested = String(
+      (data as Json).playerId ?? (data as Json).player_id ?? "",
+    );
+    const player =
+      room.players.find((item) => item.id === requested) ??
+      room.players.find(
+        (item) => item.name.toLowerCase() === normalizedName.toLowerCase(),
+      );
+    if (!player) throw new RoomPayloadError();
+    return { room, playerId: player.id };
   } catch (error) {
     // The write may have committed before the connection lost its response.
     // Recover only the authenticated viewer, never another player's name.
@@ -340,20 +364,6 @@ export async function joinOrCreateDemo(
     }
     throw error;
   }
-  const room = asRoom(data);
-  const requested = String(
-    (data as Json).playerId ?? (data as Json).player_id ?? "",
-  );
-  const player =
-    room.players.find((item) => item.id === requested) ??
-    room.players.find(
-      (item) => item.name.toLowerCase() === normalizedName.toLowerCase(),
-    );
-  if (!player) throw new Error("เข้าห้องไม่สำเร็จ");
-  return {
-    room,
-    playerId: player.id,
-  };
 }
 
 async function mutate(code: string, fn: string, args: Json = {}) {

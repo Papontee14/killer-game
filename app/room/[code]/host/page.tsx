@@ -1,2 +1,5 @@
 import { HostRoom } from "@/components/room-shell";
-export default function HostPage({ params }: { params: { code: string } }) { return <HostRoom code={params.code.toUpperCase()} />; }
+export default async function HostPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  return <HostRoom code={code.toUpperCase()} />;
+}

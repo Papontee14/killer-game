@@ -1,2 +1,5 @@
 import { PlayerRoom } from "@/components/room-shell";
-export default function RoomPage({ params }: { params: { code: string } }) { return <PlayerRoom code={params.code.toUpperCase()} />; }
+export default async function RoomPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  return <PlayerRoom code={code.toUpperCase()} />;
+}

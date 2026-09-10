@@ -13,6 +13,7 @@ import {
 } from "react";
 import { PlayerAvatar, PixelIcon } from "./pixel-ui";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Bomb,
   CircleX,
@@ -312,9 +313,9 @@ function Header({
         </button>
       ) : (
         back ? (
-          <a className="back-link" href="/" aria-label="กลับหน้าหลัก">
+          <Link className="back-link" href="/" aria-label="กลับหน้าหลัก">
             <ChevronLeft size={17} />
-          </a>
+          </Link>
         ) : null
       )}
       <Brand small />
@@ -397,6 +398,8 @@ function errorMessage(error: unknown, fallback: string) {
     "room not found or closed": "ไม่พบห้องหรือห้องถูกปิดแล้ว",
     "room cannot close yet": "กรุณาจบเกมก่อนปิดห้อง",
     "Failed to fetch": "เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่",
+    room_payload_invalid:
+      "ข้อมูลห้องจากเซิร์ฟเวอร์ไม่สมบูรณ์ กำลังตรวจสมาชิกเดิมอีกครั้ง",
   };
   return (
     labels[raw] ||
@@ -1190,9 +1193,9 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
       <main className="loading-screen">
         <Hourglass /> {error || "กำลังเชื่อมต่อห้อง..."}
         {error && (
-          <a className="secondary-action" href="/">
+          <Link className="secondary-action" href="/">
             กลับหน้าแรก
-          </a>
+          </Link>
         )}
       </main>
     );
@@ -1202,18 +1205,18 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
         <DoorOpen size={32} />
         <h1>ห้องถูกปิดแล้ว</h1>
         <p>ห้องนี้ไม่สามารถเข้าร่วมได้อีก</p>
-        <a className="secondary-action" href="/">
+        <Link className="secondary-action" href="/">
           กลับหน้าแรก
-        </a>
+        </Link>
       </main>
     );
   if (room.viewerRole !== "host")
     return (
       <main className="loading-screen">
         <Shield size={24} /> เฉพาะผู้สร้างห้องเท่านั้นที่เข้าถึงหน้าควบคุมได้
-        <a className="secondary-action" href="/">
+        <Link className="secondary-action" href="/">
           กลับหน้าแรก
-        </a>
+        </Link>
       </main>
     );
   const act = (operation: () => Promise<RoomState>) => {
@@ -2038,7 +2041,7 @@ export function PlayerRoom({
       </main>
     );
   if (removedFromLobby)
-    return <main className="loading-screen"><UserMinus size={32} /><h1>คุณถูกนำออกจากห้องรอ</h1><p>หากต้องการเข้าร่วมอีกครั้ง ให้กลับไปเข้าห้องใหม่และเลือกรูปโปรไฟล์ใหม่</p><a className="secondary-action" href="/">กลับหน้าแรก</a></main>;
+    return <main className="loading-screen"><UserMinus size={32} /><h1>คุณถูกนำออกจากห้องรอ</h1><p>หากต้องการเข้าร่วมอีกครั้ง ให้กลับไปเข้าห้องใหม่และเลือกรูปโปรไฟล์ใหม่</p><Link className="secondary-action" href="/">กลับหน้าแรก</Link></main>;
   if (privacyPlayerId && screenHidden === null)
     return (
       <main className="loading-screen">
@@ -2091,9 +2094,9 @@ export function PlayerRoom({
       <main className="loading-screen">
         <Hourglass /> {error || "กำลังเชื่อมต่อห้อง..."}
         {error && (
-          <a className="secondary-action" href="/">
+          <Link className="secondary-action" href="/">
             กลับหน้าแรก
-          </a>
+          </Link>
         )}
       </main>
     );
@@ -2103,9 +2106,9 @@ export function PlayerRoom({
         <DoorOpen size={32} />
         <h1>ห้องถูกปิดแล้ว</h1>
         <p>Host ปิดห้องนี้แล้ว</p>
-        <a className="secondary-action" href="/">
+        <Link className="secondary-action" href="/">
           กลับหน้าแรก
-        </a>
+        </Link>
       </main>
     );
   const act = (operation: () => Promise<RoomState>) => {

@@ -49,7 +49,7 @@ for (const width of [360,390,768,1440]) {
       }))));
       expect(backgrounds.every(Boolean)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await page.screenshot({ path:`artifacts/pixel-review/${screen}-${width}.png`, fullPage:true });
+      await page.screenshot({ path:test.info().outputPath(`pixel-entry-${screen}-${width}.png`), fullPage:true });
     }
   });
 }

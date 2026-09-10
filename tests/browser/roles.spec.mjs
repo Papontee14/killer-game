@@ -38,14 +38,14 @@ test('v24 Doctor mobile controls consume one charge and survive reload', async (
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.getByRole('button',{name:'เข้าใจแล้ว'}).click();
   await expect(page.locator('.v24-panel')).toBeVisible();
-  await page.screenshot({path:'artifacts/v24-doctor-360.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('v24-doctor-360.png'),fullPage:true});
 });
 test('v24 Police reveals without an accusation button',async({page})=>{
   await enableV24(); await page.setViewportSize({width:390,height:900}); await openPlayer(page,'police');
   await expect(page.getByRole('button',{name:/ยืนยันการชี้ตัว/})).toHaveCount(0);
   await page.getByRole('button',{name:'เปิดเผยตัวว่าเป็น Police'}).click();
   await expect(page.getByRole('button',{name:'เปิดเผยตัวแล้ว'})).toBeDisabled();
-  await page.screenshot({path:'artifacts/v24-police-390.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('v24-police-390.png'),fullPage:true});
 });
 test('v24 secret vote submits a private immutable ballot',async({page})=>{
   await enableV24(); const ids=Object.values(f.players);
@@ -56,13 +56,13 @@ test('v24 secret vote submits a private immutable ballot',async({page})=>{
   await page.getByRole('button',{name:'ส่ง ballot ลับ · แก้ไม่ได้'}).click();
   await expect(page.getByText(/ส่ง ballot แล้ว: killer/)).toBeVisible();
   const reporter=await f.as('reporter','get_room_view',['ABCDEF']); expect(reporter.v24.myBallot).toBeNull(); expect(reporter.v24.ballots).toBeUndefined();
-  await page.screenshot({path:'artifacts/v24-vote-390.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('v24-vote-390.png'),fullPage:true});
 });
 test('v24 Host shows ordered queue and settings without legacy schedule',async({page})=>{
   await enableV24(); await page.setViewportSize({width:1440,height:1000}); await openPlayer(page,'host');
   await expect(page.getByRole('heading',{name:'คิวตาม effective time'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'ตั้งเวลาตำรวจชี้ตัว'})).not.toBeVisible();
-  await page.screenshot({path:'artifacts/v24-host-1440.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('v24-host-1440.png'),fullPage:true});
 });
 
 async function openPlayer(
@@ -75,6 +75,7 @@ async function openPlayer(
   legacySummary = false,
   loseJoinResponse = false,
   lobbyPrivateStates = undefined,
+  malformedJoinResponse = false,
 ) {
   await page.emulateMedia({
     reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -148,6 +149,7 @@ async function openPlayer(
             await route.abort("connectionreset");
             return;
           }
+          if (fn === "join_room" && malformedJoinResponse) data.players = null;
           if (legacySummary && data) delete data.endGameSummary;
           if (data?.phase === 'lobby' && lobbyPrivateStates !== undefined) {
             data.privateStates = lobbyPrivateStates;
@@ -219,6 +221,14 @@ test("mobile join recovers a committed membership after losing the response", as
   expect(host.players.filter(player => player.name === 'outsider')).toHaveLength(1);
 });
 
+test("mobile join recovers when the committed RPC response is malformed", async ({ page }) => {
+  await db.exec("update public.rooms set phase='lobby'");
+  await openPlayer(page, 'outsider', 'outsider', true, true, true, false, false, undefined, true);
+  await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  const host = await f.as('host', 'get_room_view', ['ABCDEF']);
+  expect(host.players.filter(player => player.name === 'outsider')).toHaveLength(1);
+});
+
 test("mobile lobby accepts production null private states and survives reload", async ({ page }) => {
   await db.exec("update public.rooms set phase='lobby'");
   await openPlayer(page, 'outsider', 'outsider', true, true, true, false, false, [null, {}]);
@@ -254,7 +264,7 @@ test("compact mobile header and legacy server role reveal", async ({ page }) => 
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       if (width <= 390) expect(bounds.x).toBeGreaterThanOrEqual(room.x + room.width);
     }
-    if (width === 360) await header.screenshot({ path: 'artifacts/mobile-header-active-360.png' });
+    if (width === 360) await header.screenshot({ path: test.info().outputPath('mobile-header-active-360.png') });
   }
   await f.as('host', 'end_game', ['ABCDEF']);
   await page.reload();
@@ -262,7 +272,7 @@ test("compact mobile header and legacy server role reveal", async ({ page }) => 
   expect(summaryRequests).toBeGreaterThan(0);
   await page.setViewportSize({ width: 360, height: 800 });
   expect((await page.locator('.topbar').boundingBox()).height).toBeLessThan(130);
-  await page.screenshot({ path: 'artifacts/mobile-summary-360.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('mobile-summary-360.png'), fullPage: true });
 });
 
 test("pixel entry creates a room, accepts an invitation, starts and ends a game", async ({ page, browser }) => {
@@ -313,7 +323,7 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
     for (const width of [360,390,768,1440]) {
       await playerPage.setViewportSize({width,height:900});
       expect(await playerPage.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await playerPage.screenshot({path:`artifacts/pixel-review/summary-${width}.png`,fullPage:true});
+      await playerPage.screenshot({path:test.info().outputPath(`pixel-summary-${width}.png`),fullPage:true});
     }
   } finally { await playerContext.close(); }
 });
@@ -908,9 +918,9 @@ test("v24 setup guide keeps readable summaries across mobile, tablet and desktop
       expect(metrics.buttonInside).toBe(true);
       expect(metrics.touchTargets).toBe(true);
       if ([360, 900, 1440].includes(width)) {
-        await guide.screenshot({ path: `artifacts/host-guide-${width}-${value}.png` });
+        await guide.screenshot({ path: test.info().outputPath(`host-guide-${width}-${value}.png`) });
         if (value === 'standard-12') {
-          await settings.screenshot({ path: `artifacts/host-settings-${width}.png` });
+          await settings.screenshot({ path: test.info().outputPath(`host-settings-${width}.png`) });
         }
       }
     }
@@ -1270,12 +1280,12 @@ test("case-file Host workflow fits mobile and desktop with actions before statis
     const stats = await page.locator('.metric-grid').boundingBox();
     expect(queue.y + queue.height).toBeLessThanOrEqual(stats.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: `artifacts/ux-review/host-${width}.png`, fullPage: true });
+    await page.screenshot({ path: test.info().outputPath(`ux-host-${width}.png`), fullPage: true });
   }
   await page.locator('.host-review-summary button').click();
   await expect(page.getByAltText('หลักฐานการโจมตี')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'artifacts/ux-review/evidence-390.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('ux-evidence-390.png'), fullPage: true });
   await page.locator('.host-nav button').first().click();
   await expect(page.getByLabel('วันและเวลาตำรวจชี้ตัว')).toBeVisible();
   const playerContext = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
@@ -1283,11 +1293,11 @@ test("case-file Host workflow fits mobile and desktop with actions before statis
     const playerPage = await playerContext.newPage();
     await openPlayer(playerPage, 'killer');
     await expect(playerPage.locator('.player-hero p')).toHaveCSS('font-size', '16px');
-    await playerPage.screenshot({ path: 'artifacts/ux-review/player-390.png', fullPage: true });
+  await playerPage.screenshot({ path: test.info().outputPath('ux-player-390.png'), fullPage: true });
     await db.exec("delete from public.player_secrets; update public.rooms set phase='lobby'");
     await playerPage.reload();
     await expect(playerPage.locator('.waiting-copy')).toBeVisible();
-    await playerPage.screenshot({ path: 'artifacts/ux-review/player-lobby-390.png', fullPage: true });
+  await playerPage.screenshot({ path: test.info().outputPath('ux-player-lobby-390.png'), fullPage: true });
   } finally {
     await playerContext.close();
   }
@@ -1300,7 +1310,7 @@ test("case-file Host workflow fits mobile and desktop with actions before statis
     const room = await page.locator('.host-room-banner').boundingBox();
     const setup = await page.locator('.setup-panel').boundingBox();
     expect(room.y + room.height).toBeLessThanOrEqual(setup.y);
-    await page.screenshot({ path: `artifacts/ux-review/host-lobby-${width}.png`, fullPage: true });
+    await page.screenshot({ path: test.info().outputPath(`ux-host-lobby-${width}.png`), fullPage: true });
   }
 });
 
@@ -1320,7 +1330,7 @@ test("room invitation QR decodes to a prefilled join link and bypasses old-room 
     return { data: Array.from(ctx.getImageData(0, 0, canvas.width, canvas.height).data), width: canvas.width, height: canvas.height };
   });
   expect(jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height)?.data).toBe(link);
-  await page.screenshot({ path: 'artifacts/ux-review/invite-qr.png' });
+  await page.screenshot({ path: test.info().outputPath('ux-invite-qr.png') });
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw Error('denied'); } } }));
   await page.getByRole('button', { name: 'คัดลอกลิงก์', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('status')).toContainText('แตะช่องลิงก์');
@@ -1358,7 +1368,7 @@ test("mission steps and privacy preserve captured photo, target, scroll and focu
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
   await expect(preview).toHaveAttribute('src', src);
   await expect(page.getByLabel('เลือกเป้าหมาย', { exact: true })).toHaveValue(f.players.sumo);
-  await page.screenshot({ path: 'artifacts/ux-review/mission-preview.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('ux-mission-preview.png'), fullPage: true });
   await page.getByRole('button', { name: 'ส่งหลักฐานให้ Host' }).click();
   await expect(page.getByText('รอ Host ตรวจ', { exact: true })).toBeVisible();
 });

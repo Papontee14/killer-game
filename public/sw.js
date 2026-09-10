@@ -1,4 +1,4 @@
-const CACHE = "killer-shell-v4";
+const CACHE = "killer-shell-v5";
 const SHELL = ["/", "/manifest.webmanifest"];
 const POLICE_CHECK_REMINDER = "\u0e15\u0e33\u0e23\u0e27\u0e08\u0e08\u0e30\u0e17\u0e33\u0e01\u0e32\u0e23\u0e0a\u0e35\u0e49\u0e15\u0e31\u0e27\u0e43\u0e19 3 \u0e19\u0e32\u0e17\u0e35";
 const GENERIC_NOTIFICATION_BODY = "มีเหตุการณ์ใหม่ในห้อง เปิดเว็บเพื่อดูรายละเอียด";

@@ -74,6 +74,7 @@ async function openPlayer(
   navigate = true,
   legacySummary = false,
   loseJoinResponse = false,
+  lobbyPrivateStates = undefined,
 ) {
   await page.emulateMedia({
     reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -148,6 +149,9 @@ async function openPlayer(
             return;
           }
           if (legacySummary && data) delete data.endGameSummary;
+          if (data?.phase === 'lobby' && lobbyPrivateStates !== undefined) {
+            data.privateStates = lobbyPrivateStates;
+          }
         } else if (url.pathname.startsWith("/storage/v1/object/sign/")) {
           data = { signedURL: "/object/public/test-fixture.png" };
         } else if (
@@ -211,6 +215,17 @@ test("mobile join recovers a committed membership after losing the response", as
   await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
   await page.reload();
   await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  const host = await f.as('host', 'get_room_view', ['ABCDEF']);
+  expect(host.players.filter(player => player.name === 'outsider')).toHaveLength(1);
+});
+
+test("mobile lobby accepts production null private states and survives reload", async ({ page }) => {
+  await db.exec("update public.rooms set phase='lobby'");
+  await openPlayer(page, 'outsider', 'outsider', true, true, true, false, false, [null, {}]);
+  await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.lobby-waiting-screen')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'แตะเพื่อเปิดบทบาท' })).toHaveCount(0);
   const host = await f.as('host', 'get_room_view', ['ABCDEF']);
   expect(host.players.filter(player => player.name === 'outsider')).toHaveLength(1);
 });

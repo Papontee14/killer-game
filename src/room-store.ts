@@ -55,10 +55,13 @@ function asPrivateState(value: Json): PrivatePlayerState {
 function asRoom(value: unknown): RoomState {
   const data = value as Json;
   const players = (data.players as Array<Json> | undefined) ?? [];
-  const secrets = (data.privateStates ?? data.private_states ?? {}) as Record<
-    string,
-    Json
-  >;
+  // Some deployed SQL projections concatenate JSON null with {}, producing
+  // [null, {}] before roles are assigned. Lobby views have no private roles.
+  const rawSecrets = data.privateStates ?? data.private_states;
+  const secrets = data.phase !== "lobby" && rawSecrets &&
+    typeof rawSecrets === "object" && !Array.isArray(rawSecrets)
+    ? rawSecrets as Record<string, Json>
+    : {};
   const evidences = (
     (data.evidences ?? data.evidence ?? []) as Array<Json>
   ).map((item) => ({
@@ -127,7 +130,9 @@ function asRoom(value: unknown): RoomState {
       maxHearts: Number(player.maxHearts ?? player.max_hearts ?? 0),
     })),
     privateStates: Object.fromEntries(
-      Object.entries(secrets).map(([id, secret]) => [
+      Object.entries(secrets).filter(([, secret]) =>
+        secret && typeof secret === "object" && !Array.isArray(secret),
+      ).map(([id, secret]) => [
         id,
         asPrivateState(secret),
       ]),

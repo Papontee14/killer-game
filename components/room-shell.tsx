@@ -79,6 +79,8 @@ import {
 } from "@/src/types";
 import { AVATARS, type AvatarGender, avatarById } from "@/src/avatar-catalog";
 import { V24Panel } from "./v24-panel";
+import { V24SetupGuide } from "./v24-setup-guide";
+import type { V24GamePreset } from "@/src/v24-presets";
 import { V24_ROLE_DETAILS } from "@/src/v24-rules";
 import { ROLE_ART, roleArtAlt, roleArtForPlayer } from "@/src/role-art";
 import { downloadEvidenceArchive } from "@/src/evidence-download";
@@ -1127,7 +1129,14 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   const [largeImage, setLargeImage] = useState("");
   const [archiveReady, setArchiveReady] = useState(false);
   const [counts, setCounts] = useState(DEFAULT_ROLE_COUNTS);
+  const [durationDraft, setDurationDraft] = useState(600);
+  const initializedDurationRoom = useRef<string | null>(null);
   useEffect(() => { if(room?.rulesVersion === "legacy" && room.phase === "lobby") setCounts({...DEFAULT_ROLE_COUNTS,doctor:0,sumo:1,villager:4}); }, [room?.code,room?.rulesVersion]);
+  useEffect(() => {
+    if (!room || room.phase !== "lobby" || initializedDurationRoom.current === room.code) return;
+    initializedDurationRoom.current = room.code;
+    setDurationDraft(room.v24?.durationMinutes ?? 600);
+  }, [room?.code, room?.phase, room?.v24?.durationMinutes]);
   const [bombSelection, setBombSelection] = useState<string[]>([]);
   const [accusationAt, setAccusationAtInput] = useState("");
   const hostCredentials = readRoomCredentials(`host:${code}`);
@@ -1225,6 +1234,12 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
   );
   if (room.rulesVersion === "2.4") pending.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt));
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const savedDuration = room.v24?.durationMinutes;
+  const durationNeedsSaving = room.rulesVersion === "2.4" && durationDraft !== savedDuration;
+  const applyPreset = (preset: V24GamePreset) => {
+    setCounts({ ...preset.roleCounts });
+    setDurationDraft(preset.durationMinutes);
+  };
   const adjust = (role: Role, delta: number) =>
     setCounts((current) => ({
       ...current,
@@ -1394,7 +1409,22 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               <p>คิวหลักฐานจะเริ่มเมื่อ Host แจกบทบาทแล้ว</p>
             </div>
           )}
-          {room.rulesVersion === "2.4" && <V24Panel room={room} act={act} busy={busy} />}
+          {room.rulesVersion === "2.4" && (room.phase !== "lobby" || tab === "home") && <>
+            {room.phase === "lobby" && <V24SetupGuide
+              joinedPlayers={room.players.length}
+              counts={counts}
+              durationMinutes={durationDraft}
+              busy={busy}
+              onApply={applyPreset}
+            />}
+            <V24Panel
+              room={room}
+              act={act}
+              busy={busy}
+              durationDraft={room.phase === "lobby" ? durationDraft : undefined}
+              onDurationDraftChange={room.phase === "lobby" ? setDurationDraft : undefined}
+            />
+          </>}
           {room.phase === "lobby" ? (
             <div className="panel setup-panel" data-host-section="home">
               <div className="panel-heading">
@@ -1446,7 +1476,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
               </div>
               <button
                 className="primary-action start-btn"
-                disabled={busy || room.players.length !== total || room.players.some((player) => !player.avatarId)}
+                disabled={busy || durationNeedsSaving || room.players.length !== total || room.players.some((player) => !player.avatarId)}
                 onClick={() => act(() => startGame(room.code, Object.fromEntries(Object.entries(counts).filter(([role]) => room.rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor"))))}
               >
                 เริ่มแจกบทบาท ({room.players.length}/{total}){" "}
@@ -1457,7 +1487,7 @@ export function HostRoom({ code, name }: { code: string; name?: string }) {
                   จำนวนผู้เล่น {room.players.length} คน ต้องตรงกับบทบาท {total}{" "}
                   คน จึงจะเริ่มได้
                 </p>
-              ) : room.players.some((player) => !player.avatarId) ? <p className="muted">รอเลือกรูปโปรไฟล์: {room.players.filter((player) => !player.avatarId).map((player) => player.name).join(", ")}</p> : null}
+              ) : durationNeedsSaving ? <p className="muted">บันทึกเวลาใหม่ก่อนเริ่มเกม</p> : room.players.some((player) => !player.avatarId) ? <p className="muted">รอเลือกรูปโปรไฟล์: {room.players.filter((player) => !player.avatarId).map((player) => player.name).join(", ")}</p> : null}
             </div>
           ) : (
             <>

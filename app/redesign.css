@@ -2193,6 +2193,43 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .game-end-timeline li { display:flex; justify-content:space-between; gap:12px; color:var(--text); font-size:12px; }
 .game-end-timeline time { flex:0 0 auto; color:var(--muted); font-size:10px; }
 
+.v24-setup-guide { display:grid; gap:16px; min-width:0; container-type:inline-size; }
+.setup-guide-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:8px 16px; }
+.setup-guide-heading .section-kicker { font-size:11px; color:var(--muted); }
+.setup-guide-heading .count-total { font-size:11px; white-space:nowrap; }
+.guide-lead { margin:0; color:var(--muted); font-size:13px; line-height:1.7; }
+.preset-picker { margin:0; padding:0; border:0; min-width:0; }
+.preset-picker legend { margin-bottom:7px; color:var(--muted); font-size:12px; font-weight:800; }
+.preset-picker [role="radiogroup"] { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+.preset-picker label { position:relative; display:flex; align-items:center; justify-content:center; min-width:0; min-height:44px; padding:7px 8px; border:1px solid var(--line); color:var(--muted); font-size:13px; cursor:pointer; white-space:nowrap; }
+.preset-picker label:has(input:checked) { border-color:var(--acid); background:#a3ff7212; color:var(--acid); }
+.preset-picker label:has(input:focus-visible) { outline:2px solid var(--acid); outline-offset:3px; }
+.preset-picker input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; }
+.standard-picker label { width:fit-content; max-width:100%; padding-inline:14px; }
+/* Keep the summary full-width. The shared action style has width:100%, which
+   previously squeezed its flex sibling into a single-word column. */
+.preset-card { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; min-width:0; padding:16px; background:var(--panel-2); border:1px solid var(--line); }
+.preset-summary { min-width:0; }
+.preset-card .preset-title { display:block; margin:0; font-size:15px; line-height:1.7; color:var(--acid); }
+.preset-roles { display:flex; flex-wrap:wrap; gap:6px 14px; margin:12px 0; padding:0; list-style:none; }
+.preset-roles li { display:inline-flex; gap:6px; align-items:baseline; font-size:12px; white-space:nowrap; }
+.preset-roles b { color:var(--acid); font-weight:normal; }
+.preset-card p { margin:0; font-size:12px; line-height:1.7; color:var(--muted); }
+.preset-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; padding-top:12px; border-top:1px solid var(--line); min-width:0; }
+.preset-footer p { flex:1 1 160px; }
+.preset-card .secondary-action { width:auto; max-width:100%; flex:0 0 auto; min-height:44px; margin:0; padding:10px 16px; font-size:14px; }
+.guide-changed { margin:0; color:var(--amber); font-size:13px; font-weight:800; }
+.guide-details { border-top:1px solid var(--line); padding-top:10px; color:var(--muted); font-size:12px; }
+.guide-details summary { color:var(--text); cursor:pointer; font-weight:800; }
+.guide-details ul { display:grid; gap:6px; margin:10px 0 0; padding-left:20px; }
+.guide-details p { margin:10px 0 0; }
+
+@container (max-width: 520px) {
+  .preset-picker [role="radiogroup"] { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .preset-card { padding:12px; }
+  .preset-card .secondary-action { width:100%; }
+}
+
 /* Desktop waiting room: give the lobby breathing room and keep the profile
    action from squeezing the player's status copy into a single character
    column. The compact, stacked mobile layout remains unchanged below 760px. */

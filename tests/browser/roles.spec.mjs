@@ -797,6 +797,82 @@ test("Host role setup shows artwork without adding private data to the room", as
   await expect(page.locator(".role-control .role-thumb-control")).toHaveCount(9);
 });
 
+test("v24 Host guide applies a draft only, then requires its duration to be saved", async ({ page }) => {
+  await db.exec("update public.rooms set phase='lobby',rules_version='2.4',police_check_at=null,v24=jsonb_build_object('stage','active','durationMinutes',600)");
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openPlayer(page, "host");
+  const guide = page.locator(".v24-setup-guide");
+  await expect(guide).toBeVisible();
+  await expect(guide.getByText("Office · 9 คน / 6 ชั่วโมง")).toBeVisible();
+  await guide.getByRole("button", { name: "ใช้ชุดแนะนำ" }).click();
+  expect((await db.query("select v24->>'durationMinutes' duration from public.rooms where code='ABCDEF'")).rows[0].duration).toBe("600");
+  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /เริ่มแจกบทบาท/ })).toBeDisabled();
+  await expect(page.getByText("บันทึกเวลาใหม่ก่อนเริ่มเกม")).toBeVisible();
+  await page.getByLabel("เพิ่ม Villager").click();
+  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toBeVisible();
+  await page.getByLabel("ลด Villager").click();
+  await expect(page.getByText("ปรับจากชุดแนะนำแล้ว")).toHaveCount(0);
+  await page.getByRole("button", { name: "บันทึกกติกาก่อนเริ่ม" }).click();
+  await expect(page.getByText("ค่าที่บันทึก: 6 ชั่วโมง")).toBeVisible();
+  await expect(page.getByRole("button", { name: /เริ่มแจกบทบาท/ })).toBeEnabled();
+  expect((await db.query("select v24->>'durationMinutes' duration from public.rooms where code='ABCDEF'")).rows[0].duration).toBe("360");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("v24 setup guide keeps readable summaries across mobile, tablet and desktop", async ({ page }) => {
+  await db.exec("update public.rooms set phase='lobby',rules_version='2.4',police_check_at=null,v24=jsonb_build_object('durationMinutes',600)");
+  await openPlayer(page, "host");
+  const guide = page.locator(".v24-setup-guide");
+  for (const width of [360, 390, 520, 768, 900, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const value of ["10", "standard-12"]) {
+      const choice = guide.locator(`input[value="${value}"]`);
+      await choice.check();
+      await expect(choice).toBeChecked();
+      const metrics = await guide.evaluate((el) => {
+        const card = el.querySelector('.preset-card').getBoundingClientRect();
+        const summary = el.querySelector('.preset-summary').getBoundingClientRect();
+        const title = el.querySelector('.preset-title').getBoundingClientRect();
+        const button = el.querySelector('.preset-card button').getBoundingClientRect();
+        return { cardWidth: card.width, summaryWidth: summary.width, titleHeight: title.height,
+          cardHeight: card.height, buttonInside: button.right <= card.right && button.left >= card.left,
+          pageFits: document.documentElement.scrollWidth <= innerWidth,
+          touchTargets: [...el.querySelectorAll('.preset-picker label')].every(label => label.getBoundingClientRect().height >= 44) };
+      });
+      expect(metrics.pageFits, `${width}/${value}`).toBe(true);
+      expect(metrics.summaryWidth).toBeGreaterThan(metrics.cardWidth * 0.8);
+      expect(metrics.titleHeight).toBeLessThan(90);
+      expect(metrics.cardHeight).toBeLessThan(410);
+      expect(metrics.buttonInside).toBe(true);
+      expect(metrics.touchTargets).toBe(true);
+      if ([360, 900, 1440].includes(width)) {
+        await guide.screenshot({ path: `artifacts/host-guide-${width}-${value}.png` });
+      }
+    }
+  }
+  const summary = guide.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(guide.locator("details")).toHaveAttribute("open", "");
+  await expect(guide.getByText(/เริ่ม 12 คน ต้องเหลืออย่างน้อย 7 คน/)).toBeVisible();
+  const office = guide.locator('input[value="10"]');
+  await office.focus();
+  await page.keyboard.press("Space");
+  await expect(office).toBeChecked();
+});
+
+test("v24 setup guide is unavailable outside the Host lobby", async ({ page }) => {
+  await enableV24();
+  await openPlayer(page, "host");
+  await expect(page.locator(".v24-setup-guide")).toHaveCount(0);
+  await db.exec("update public.rooms set phase='lobby',rules_version='legacy'");
+  await page.reload();
+  await expect(page.locator(".v24-setup-guide")).toHaveCount(0);
+});
+
 test("active Killer with a legacy wife role displays Killer", async ({ page }) => {
   await f.hit("killer-wife");
   await f.hit("killer-wife");

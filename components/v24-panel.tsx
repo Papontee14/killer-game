@@ -15,6 +15,9 @@ type Props = {
   room: RoomState;
   act: (task: () => Promise<RoomState>) => unknown;
   busy: boolean;
+  /** Lobby drafts belong to HostRoom so a recommendation can set roles and time together. */
+  durationDraft?: number;
+  onDurationDraftChange?: (minutes: number) => void;
 };
 const stamp = (value?: string) =>
   value
@@ -35,7 +38,7 @@ function formatDuration(totalMinutes: number) {
   const minutes = totalMinutes % 60;
   return `${hours} ชั่วโมง${minutes ? ` ${minutes} นาที` : ""}`;
 }
-export function V24Panel({ room, act, busy }: Props) {
+export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange }: Props) {
   const v = room.v24;
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -48,7 +51,8 @@ export function V24Panel({ room, act, busy }: Props) {
   const savedDuration = v?.durationMinutes ?? 600;
   const [durationHours, setDurationHours] = useState(Math.floor(savedDuration / 60));
   const [durationMinutes, setDurationMinutes] = useState(savedDuration % 60);
-  const duration = durationHours * 60 + durationMinutes;
+  const localDuration = durationHours * 60 + durationMinutes;
+  const duration = durationDraft ?? localDuration;
   useEffect(() => {
     if (v?.durationMinutes == null) return;
     setDurationHours(Math.floor(v.durationMinutes / 60));
@@ -88,8 +92,12 @@ export function V24Panel({ room, act, busy }: Props) {
               type="number"
               min={0}
               max={48}
-              value={durationHours}
-              onChange={(e) => setDurationHours(Math.max(0, Number(e.target.value) || 0))}
+              value={Math.floor(duration / 60)}
+              onChange={(e) => {
+                const next = Math.max(0, Number(e.target.value) || 0) * 60 + duration % 60;
+                if (onDurationDraftChange) onDurationDraftChange(next);
+                else setDurationHours(Math.floor(next / 60));
+              }}
             />
           </label>
           <label>
@@ -98,8 +106,12 @@ export function V24Panel({ room, act, busy }: Props) {
               type="number"
               min={0}
               max={59}
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Math.min(59, Math.max(0, Number(e.target.value) || 0)))}
+              value={duration % 60}
+              onChange={(e) => {
+                const next = Math.floor(duration / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0));
+                if (onDurationDraftChange) onDurationDraftChange(next);
+                else setDurationMinutes(next % 60);
+              }}
             />
           </label>
         </fieldset>

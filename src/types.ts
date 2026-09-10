@@ -26,6 +26,7 @@ export type Team = "city" | "killers";
 export type EndGameReason =
   | "hunt-clock-expired"
   | "all-killers-eliminated"
+  | "original-killer-eliminated"
   | "police-lineage-eliminated"
   | "final-low-kills"
   | "final-vote"
@@ -152,6 +153,8 @@ export type RoomState = {
   privateStates: Record<string, PrivatePlayerState>;
   evidences: Evidence[];
   canViewAttackActivity: boolean;
+  /** Attack-related history is temporarily unavailable to a living player. */
+  attackActivityHidden: boolean;
   attackActivity: AttackActivity[];
   killerEvidenceProgress: KillerEvidenceProgress[];
   events: RoomEvent[];
@@ -211,6 +214,8 @@ export type V24State = {
   nomineeCount?: number; nominees?: string[]; actions?: V24Action[];
   myBallot?: { nominees: string[]; ranking: string[]; submittedAt: string } | null;
   ballots?: { voter_id: string; nominees: string[]; ranking: string[] }[];
+  /** Present only for games started after the final-vote rule change. */
+  finalVoteRules?: boolean;
 };
 
 export function healthState(hearts: number, maxHearts: number): HealthState {

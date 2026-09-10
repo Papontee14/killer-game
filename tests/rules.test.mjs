@@ -16,6 +16,13 @@ const endGameRepairMigration = await readFile(
   ),
   "utf8",
 );
+const recoveryRemovalMigration = await readFile(
+  new URL(
+    "../supabase/migrations/20260910_remove_recovery_tokens.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 before(async () => {
   db = await database();
 });
@@ -349,6 +356,54 @@ test("reporter refuses self/dead/NULL targets without consuming ability and read
   );
 });
 
+test("reporter needs a strict majority of the original roster alive", async () => {
+  const eliminated = ["killer", "killer-wife", "police", "bomber"];
+  await db.query(
+    "update public.players set health='dead' where id=any($1::uuid[])",
+    [eliminated.map((role) => f.players[role])],
+  );
+  await db.query("update public.players set health='critical' where id=$1", [
+    f.players.detective,
+  ]);
+  await db.query("update public.players set is_online=false where id=$1", [
+    f.players.athlete,
+  ]);
+  await rpc("reporter", "use_reporter", f.players.athlete);
+  await db.query(
+    "update public.player_secrets set has_used_ability=false where player_id=$1",
+    [f.players.reporter],
+  );
+  await db.query("update public.players set health='dead' where id=$1", [
+    f.players.sumo,
+  ]);
+  await assert.rejects(
+    rpc("reporter", "use_reporter", f.players.athlete),
+    /reporter ability requires more than half of starting players alive/,
+  );
+  assert.equal((await f.state("reporter")).has_used_ability, false);
+
+  const even = await fixture(db, { extraVillagers: 1 });
+  const evenRpc = (role, name, ...args) =>
+    even.as(role, name, ["ABCDEF", ...args]);
+  await db.query(
+    "update public.players set health='dead' where id=any($1::uuid[])",
+    [eliminated.map((role) => even.players[role])],
+  );
+  await evenRpc("reporter", "use_reporter", even.players.athlete);
+  await db.query(
+    "update public.player_secrets set has_used_ability=false where player_id=$1",
+    [even.players.reporter],
+  );
+  await db.query("update public.players set health='dead' where id=$1", [
+    even.players.sumo,
+  ]);
+  await assert.rejects(
+    evenRpc("reporter", "use_reporter", even.players.athlete),
+    /reporter ability requires more than half of starting players alive/,
+  );
+  assert.equal((await even.state("reporter")).has_used_ability, false);
+});
+
 test("promoted detective still reports initial Detective; reporter is allowed during accusation and bomb phase", async () => {
   await f.bomb(["police"]);
   assert.equal((await f.state("detective")).role_current, "police");
@@ -460,6 +515,57 @@ test("latest migrations retain the rules RPCs and add an end-game timeline proje
   assert.match(latest.get("get_room_view"), /endGameTimeline/);
   assert.match(latest.get("approve_evidence"), /approve_evidence_legacy/);
   assert.match(latest.get("resolve_police_check"), /'active','police-check'/);
+});
+
+test("recovery-removal migration preserves games and restricts re-entry to the same session", async () => {
+  await db.exec("update public.rooms set phase='lobby' where code='ABCDEF'");
+  await db.exec("alter table public.players add column reclaim_token_hash text");
+  await db.exec("update public.players set reclaim_token_hash='legacy-token'");
+  const before = await db.query(
+    "select id,user_id,name,health,avatar_id from public.players order by id",
+  );
+
+  await db.exec(recoveryRemovalMigration);
+  await db.exec(recoveryRemovalMigration);
+
+  const after = await db.query(
+    "select id,user_id,name,health,avatar_id from public.players order by id",
+  );
+  assert.deepEqual(after.rows, before.rows);
+  assert.equal(
+    (await db.query("select count(*)::int count from information_schema.columns where table_schema='public' and table_name='players' and column_name='reclaim_token_hash'")).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (await db.query("select count(*)::int count from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='join_room' and p.pronargs=2")).rows[0].count,
+    1,
+  );
+  assert.equal(
+    (await db.query("select count(*)::int count from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='join_room' and p.pronargs=3")).rows[0].count,
+    0,
+  );
+
+  const joined = await f.as("outsider", "join_room", ["ABCDEF", "Returnee"]);
+  const rejoined = await f.as("outsider", "join_room", ["ABCDEF", "returnee"]);
+  assert.equal(rejoined.playerId, joined.playerId);
+  await assert.rejects(
+    f.as("villager", "join_room", ["ABCDEF", " RETURNee "]),
+    /player name is already in use/,
+  );
+  await db.exec("update public.rooms set phase='active' where code='ABCDEF'");
+  await assert.rejects(
+    f.as("outsider", "join_room", ["ABCDEF", "Another name"]),
+    /game already started/,
+  );
+  await db.exec("set role anon");
+  try {
+    await assert.rejects(
+      db.query("select public.join_room('ABCDEF','Anonymous')"),
+      /permission denied/,
+    );
+  } finally {
+    await db.exec("reset role");
+  }
 });
 
 test("deadline is persisted by direct approval without damage and by direct submission without evidence", async () => {

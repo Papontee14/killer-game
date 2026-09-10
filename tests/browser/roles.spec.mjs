@@ -69,7 +69,6 @@ async function openPlayer(
   page,
   role,
   displayName = role,
-  reclaimToken = "",
   reducedMotion = true,
   reveal = true,
   navigate = true,
@@ -119,7 +118,7 @@ async function openPlayer(
             end_game: ["p_code"],
             close_room: ["p_code"],
             set_accusation_at: ["p_code", "p_at"],
-            join_room: ["p_code", "p_name", "p_reclaim_token"],
+            join_room: ["p_code", "p_name"],
             heartbeat: ["p_code"],
             use_reporter: ["p_code", "p_target_id"],
             configure_v24: ["p_code", "p_duration_minutes", "p_proximity_rule"],
@@ -182,15 +181,9 @@ async function openPlayer(
   await page.goto("/?room=ABCDEF");
   await page.getByLabel("รหัสห้อง").fill("ABCDEF");
   await page.getByLabel("ชื่อผู้เล่น").fill(displayName);
-  if (reclaimToken) {
-    await page
-      .getByRole("button", { name: "เคยเข้าร่วมแล้ว? กู้คืนตัวละคร" })
-      .click();
-    await page.getByLabel("รหัสกู้คืน", { exact: true }).fill(reclaimToken);
-  }
   await page
     .getByRole("button", {
-      name: reclaimToken ? "กู้คืนตัวละคร" : "เข้าสู่เกม",
+      name: "เข้าสู่เกม",
       exact: true,
     })
     .click();
@@ -216,7 +209,7 @@ test("compact mobile header and legacy server role reveal", async ({ page }) => 
     const room = await f.as('villager', 'get_room_view', ['ABCDEF']);
     await route.fulfill({ json: { endGameSummary: room.endGameSummary } });
   });
-  await openPlayer(page, 'villager', 'villager', '', true, true, true, true);
+  await openPlayer(page, 'villager', 'villager', true, true, true, true);
   expect(summaryRequests).toBe(0);
   for (const width of [320, 360, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -248,7 +241,7 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
   test.setTimeout(90000);
   await f.as('host', 'end_game', ['ABCDEF']);
   await f.as('host', 'close_room', ['ABCDEF']);
-  await openPlayer(page, 'host', '', '', true, true, false);
+  await openPlayer(page, 'host', '', true, true, false);
   await page.goto('/');
   await page.getByRole('button', { name: 'สร้างห้อง', exact: true }).click();
   await page.getByLabel('ชื่อ Host').fill('นักสืบสายชิล');
@@ -258,7 +251,7 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
   const playerContext = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   try {
     const playerPage = await playerContext.newPage();
-    await openPlayer(playerPage, 'outsider', '', '', true, true, false);
+    await openPlayer(playerPage, 'outsider', '', true, true, false);
     await playerPage.goto('/?room='+code);
     await playerPage.getByLabel('ชื่อผู้เล่น').fill('มะนาว');
     await playerPage.getByRole('button', { name: 'เข้าสู่เกม', exact: true }).click();
@@ -277,8 +270,6 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
     for (let i=0;i<3;i++) await page.getByRole('button', { name: 'ลด Villager', exact: true }).click();
     await page.getByRole('button', { name: 'เริ่มแจกบทบาท (9/9)' }).click();
     await expect(page.locator('.host-review-summary')).toBeVisible();
-    await expect(playerPage.getByRole('button', { name: 'บันทึกรหัสแล้ว' })).toBeVisible({timeout:20000});
-    await playerPage.getByRole('button', { name: 'บันทึกรหัสแล้ว' }).click();
     await expect(playerPage.getByRole('button', { name: 'แตะเพื่อเปิดบทบาท' })).toBeVisible({timeout:20000});
     await playerPage.getByRole('button', { name: 'แตะเพื่อเปิดบทบาท' }).click();
     await playerPage.getByRole('button', { name: 'เข้าใจแล้ว' }).click();
@@ -300,7 +291,7 @@ test("pixel entry creates a room, accepts an invitation, starts and ends a game"
 test("first role reveal keeps the role secret until its card finishes turning", async ({
   page,
 }) => {
-  await openPlayer(page, "villager", "villager", "", false, false);
+  await openPlayer(page, "villager", "villager", false, false);
   const dialog = page.getByRole("dialog");
   const card = dialog.getByRole("button", { name: "แตะเพื่อเปิดบทบาท" });
   await expect(card).toBeVisible();
@@ -321,7 +312,7 @@ test("first role reveal keeps the role secret until its card finishes turning", 
 });
 
 test("completed role reveal stays revealed after reload before acknowledgement and resets for a new game", async ({ page }) => {
-  await openPlayer(page, "villager", "villager", "", true, false);
+  await openPlayer(page, "villager", "villager", true, false);
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "แตะเพื่อเปิดบทบาท" }).click();
   await expect(dialog.getByRole("button", { name: "เข้าใจแล้ว" })).toBeVisible();
@@ -341,7 +332,7 @@ test("completed role reveal stays revealed after reload before acknowledgement a
 for (const [width, height, key] of [[360, 640, "Enter"], [1280, 900, "Space"]]) {
   test(`ornate role card reveals with ${key} and stays stable at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
-    await openPlayer(page, "killer", "killer", "", false, false);
+    await openPlayer(page, "killer", "killer", false, false);
     const dialog = page.getByRole("dialog");
     const trigger = dialog.locator(".role-card-trigger");
     await expect(trigger).toBeEnabled();
@@ -394,7 +385,7 @@ test("role card waits for its displayed image and supports retry and reduced mot
     if (failImage) await route.abort();
     else await route.continue();
   });
-  await openPlayer(page, "villager", "villager", "", true, false);
+  await openPlayer(page, "villager", "villager", true, false);
   const dialog = page.getByRole("dialog");
   const trigger = dialog.locator(".role-card-trigger");
   await expect(dialog.getByRole("status")).toHaveText("กำลังเตรียมภาพบทบาท…");
@@ -429,7 +420,7 @@ test("player lobby keeps every player reachable on a small phone", async ({
 });
 
 test("player can hide private content, restore it, and remain hidden after reload", async ({ page }) => {
-  await openPlayer(page, "villager", "villager", "", true, true);
+  await openPlayer(page, "villager", "villager", true, true);
   await expect(page.getByRole("button", { name: "ซ่อนหน้าจอ" })).toBeVisible();
   await page.getByRole("button", { name: "ซ่อนหน้าจอ" }).click();
   await expect(page.getByRole("dialog", { name: "ซ่อนหน้าจอแล้ว" })).toBeVisible();
@@ -516,6 +507,28 @@ test("Reporter cannot select dead/self; target dies after selection: no ability 
     ),
   ).toBeVisible();
   expect((await f.state("reporter")).has_used_ability).toBe(false);
+});
+
+test("Reporter shows the strict-majority limit and disables inspection at half", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await db.query(
+    "update public.players set health='dead' where id=any($1::uuid[])",
+    [[f.players.killer, f.players["killer-wife"], f.players.police, f.players.bomber]],
+  );
+  await openPlayer(page, "reporter");
+  await expect(page.getByText("ยังมีชีวิต 5/9 คน · ต้องเหลืออย่างน้อย 5 คน")).toBeVisible();
+  await expect(page.getByLabel("เลือกผู้เล่นเพื่อตรวจบทบาท")).toBeEnabled();
+  await db.query("update public.players set health='dead' where id=$1", [
+    f.players.sumo,
+  ]);
+  await expect(
+    page.getByText("ยังมีชีวิต 4/9 คน · ต้องเหลืออย่างน้อย 5 คน"),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText("ใช้ความสามารถไม่ได้: ผู้เล่นที่ยังมีชีวิตเหลือครึ่งหนึ่งหรือน้อยกว่าจำนวนเริ่มต้น")).toBeVisible();
+  await expect(page.getByLabel("เลือกผู้เล่นเพื่อตรวจบทบาท")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ใช้ความสามารถ", exact: true })).toBeDisabled();
 });
 
 test("police accusation renders and resolves city victory", async ({
@@ -711,14 +724,64 @@ test("all nine role variants keep public roster private at 360px", async ({
         .getByRole("button", { name: "เพิ่มเติม", exact: true })
         .click();
       await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
-      await expect(page.getByRole("dialog").locator(".role-carousel-slide")).toHaveCount(9);
-      await expect(page.getByRole("dialog").locator(".role-carousel-art")).toHaveCount(9);
-      await expect(page.getByRole("dialog").locator(".role-carousel-position")).toHaveText("1 / 9");
-      await page.getByRole("dialog").getByRole("button", { name: "บทบาทถัดไป" }).click();
-      await expect(page.getByRole("dialog").locator(".role-carousel-position")).toHaveText("2 / 9");
-      await expect(page.getByRole("dialog").locator('[data-role-slide="1"] h4')).toHaveText("Killer's Wife");
-      await page.getByRole("dialog").getByRole("button", { name: "บทบาทก่อนหน้า" }).click();
-      await expect(page.getByRole("dialog").locator(".role-carousel-position")).toHaveText("1 / 9");
+      const guide = page.getByRole("dialog");
+      await expect(guide.getByRole("tab", { name: "เฟสการเล่น" })).toHaveAttribute("aria-selected", "true");
+      await expect(guide.locator(".guide-phase")).toHaveCount(4);
+      await guide.getByRole("tab", { name: "เฟสการเล่น" }).press("ArrowRight");
+      await expect(guide.getByRole("tab", { name: "ตัวละคร" })).toHaveAttribute("aria-selected", "true");
+      await expect(guide.locator(".guide-role-card")).toHaveCount(9);
+      await expect(guide.locator(".guide-role-art")).toHaveCount(9);
+      await guide.locator(".guide-role-card").first().locator("summary").click();
+      await expect(guide.locator(".guide-role-card").first().getByText("ความสามารถ")).toBeVisible();
+      await guide.getByRole("tab", { name: "ตัวละคร" }).press("ArrowLeft");
+      await expect(guide.getByRole("tab", { name: "เฟสการเล่น" })).toHaveAttribute("aria-selected", "true");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("rules guide describes current, earlier v2.4, and legacy votes", async ({ page }) => {
+  await enableV24();
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true)");
+  await openPlayer(page, "killer");
+  await page.getByRole("button", { name: "เพิ่มเติม", exact: true }).click();
+  await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
+  await expect(page.getByRole("dialog").locator(".guide-phase")).toHaveCount(6);
+  await expect(page.getByRole("dialog").getByText(/เลือกคนอื่นเท่านั้น/)).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await db.exec("update public.rooms set v24=v24-'finalVoteRules'");
+  await page.reload();
+  await page.locator("dialog.role-reveal-dialog[open]").getByRole("button", { name: "ปิด" }).click();
+  await page.getByRole("button", { name: "เพิ่มเติม", exact: true }).click();
+  await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
+  await expect(page.getByRole("dialog").getByText(/กฎโหวต 2.4 รุ่นก่อน/)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/ครบตามจำนวน Killer/)).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await db.exec("update public.rooms set rules_version='legacy'");
+  await page.reload();
+  await page.locator("dialog.role-reveal-dialog[open]").getByRole("button", { name: "ปิด" }).click();
+  await page.getByRole("button", { name: "เพิ่มเติม", exact: true }).click();
+  await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
+  await expect(page.getByRole("dialog").getByText("ชี้ตัวผู้ต้องสงสัย")).toBeVisible();
+});
+
+test("current rules guide has no horizontal overflow across target viewports", async ({ browser }) => {
+  await enableV24();
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true)");
+  for (const width of [360, 390, 768, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: "block" });
+    try {
+      const page = await context.newPage();
+      await openPlayer(page, "killer");
+      await page.getByRole("button", { name: "เพิ่มเติม", exact: true }).click();
+      await page.getByRole("button", { name: "กติกาและวิธีเล่น" }).click();
+      await page.getByRole("dialog").getByRole("tab", { name: "ตัวละคร" }).click();
+      await page.getByRole("dialog").locator(".guide-role-card").first().locator("summary").click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     } finally {
       await context.close();
     }
@@ -879,21 +942,26 @@ test("responsive Thai entry and Host navigation produce review screenshots", asy
   ).toBe(true);
 });
 
-test("new-device recovery restores the same character, not an extra player", async ({
+test("same session restores the same character and a new session cannot claim it", async ({
   page,
 }) => {
-  const token = "abcdef0123456789abcdef0123456789";
   await db.query(
     "update public.player_secrets set hearts=3 where player_id=$1",
     [f.players.sumo],
   );
-  await db.query(
-    "update public.players set reclaim_token_hash=md5($2) where id=$1",
-    [f.players.sumo, token],
-  );
-  await openPlayer(page, "outsider", "sumo", token);
+  await openPlayer(page, "sumo", "sumo");
   await expect(page.locator(".personal-health h2")).toContainText("3");
   await expect(page.locator(".player-hero h1")).toHaveText("Sumo");
+  expect(
+    (await db.query("select count(*)::int n from public.players")).rows[0].n,
+  ).toBe(9);
+
+  await openPlayer(page, "outsider", "outsider", true, true, false, false);
+  await page.goto("/?room=ABCDEF");
+  await page.getByLabel("รหัสห้อง").fill("ABCDEF");
+  await page.getByLabel("ชื่อผู้เล่น").fill("sumo");
+  await page.getByRole("button", { name: "เข้าสู่เกม", exact: true }).click();
+  await expect(page.getByText("ชื่อนี้อยู่ในห้องแล้ว กรุณาใช้ชื่ออื่น")).toBeVisible();
   expect(
     (await db.query("select count(*)::int n from public.players")).rows[0].n,
   ).toBe(9);
@@ -1155,7 +1223,7 @@ test("mission steps and privacy preserve captured photo, target, scroll and focu
 });
 
 test("privacy hides role dialogs without acknowledging or losing their position", async ({ page }) => {
-  await openPlayer(page, 'villager', 'villager', '', true, false);
+  await openPlayer(page, 'villager', 'villager', true, false);
   let dialog = page.locator('.role-reveal-dialog');
   await dialog.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
   await expect(page.locator('dialog[open]')).toHaveCount(0);
@@ -1177,19 +1245,9 @@ test("privacy hides role dialogs without acknowledging or losing their position"
   await dialog.getByRole('button', { name: 'เข้าใจแล้ว' }).click();
 });
 
-test("privacy preserves recovery and confirmation dialogs without executing their actions", async ({ page }) => {
-  const token = 'abcdef0123456789abcdef0123456789';
-  await db.query('update public.players set reclaim_token_hash=md5($2) where id=$1', [f.players.villager, token]);
-  await openPlayer(page, 'outsider', 'villager', token);
+test("privacy preserves the leave confirmation without executing its action", async ({ page }) => {
+  await openPlayer(page, 'villager', 'villager');
   await page.getByRole('button', { name: 'เพิ่มเติม', exact: true }).click();
-  await page.getByRole('button', { name: /รหัสกู้คืน/ }).click();
-  const recovery = page.getByRole('dialog');
-  await recovery.getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();
-  await expect(page.locator('dialog[open]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'กลับเข้าเกม' }).click();
-  await expect(recovery).toBeVisible();
-  await expect(recovery.locator('.recovery-code')).toHaveText(token);
-  await recovery.getByRole('button', { name: 'ปิด', exact: true }).click();
   await page.getByRole('button', { name: 'ออกจากห้อง', exact: true }).click();
   await page.getByLabel('ยืนยันชื่อในเกม').fill('villa');
   await page.getByRole('dialog').getByRole('button', { name: 'ซ่อนหน้าจอ' }).click();

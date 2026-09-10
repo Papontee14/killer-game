@@ -99,7 +99,6 @@ import {
   Dialog,
   GameNavigation,
   PHASE_LABELS,
-  RecoveryCard,
   RoleReveal,
   ROLE_SUMMARIES,
   Rules,
@@ -347,14 +346,16 @@ function errorMessage(error: unknown, fallback: string) {
   const labels: Record<string, string> = {
     "reporter ability unavailable":
       "ใช้ความสามารถไม่ได้ เป้าหมายหรือสถานะเกมอาจเปลี่ยนแล้ว กรุณาตรวจสอบและลองใหม่",
+    "reporter ability requires more than half of starting players alive":
+      "ใช้ความสามารถไม่ได้: ผู้เล่นที่ยังมีชีวิตเหลือครึ่งหนึ่งหรือน้อยกว่าจำนวนเริ่มต้น",
     "police accusation unavailable":
       "ชี้ตัวไม่ได้ เป้าหมายหรือช่วงเกมอาจเปลี่ยนแล้ว กรุณาเลือกใหม่",
-    "player name is already in use; enter reclaim token":
-      "ชื่อนี้อยู่ในห้องแล้ว กรุณาใส่รหัสกู้คืนให้ถูกต้องเพื่อกลับเป็นผู้เล่นเดิม",
+    "player name is already in use":
+      "ชื่อนี้อยู่ในห้องแล้ว กรุณาใช้ชื่ออื่น",
     "invalid room or host cannot play":
       "ไม่พบห้อง ห้องถูกปิด หรือคุณเป็น Host ซึ่งไม่สามารถร่วมเป็นผู้เล่นได้",
     "game already started":
-      "เกมเริ่มแล้ว ใช้ชื่อเดิมและรหัสกู้คืนเพื่อกลับเข้าผู้เล่นเดิม",
+      "เกมเริ่มแล้ว เข้าร่วมผู้เล่นใหม่ไม่ได้",
     "not allowed":
       "ดำเนินการไม่ได้ สิทธิ์หรือสถานะเกมอาจเปลี่ยนแล้ว กรุณาตรวจสอบและลองใหม่",
     "target is dead": "เป้าหมายถูกกำจัดแล้ว กรุณาเลือกผู้เล่นใหม่",
@@ -434,7 +435,7 @@ function LeaveConfirmModal({
       <p>
         พิมพ์ชื่อ <strong>{expectedName}</strong> เพื่อยืนยัน
         สถานะผู้เล่นของคุณยังอยู่ในเกม
-        การกลับจากอุปกรณ์ใหม่หรือหลังล้างข้อมูลต้องใช้รหัสกู้คืน
+        หากออกจากอุปกรณ์นี้หรือล้างข้อมูล จะกลับเข้าผู้เล่นเดิมไม่ได้
       </p>
       <form
         onSubmit={(e) => {
@@ -578,6 +579,62 @@ function AvatarPicker({
   );
 }
 
+function attackHistoryLockedForViewer(room: RoomState, now = Date.now()) {
+  const viewer = room.playerId
+    ? room.players.find((player) => player.id === room.playerId)
+    : undefined;
+  return Boolean(
+    room.v24?.finalVoteRules &&
+      room.viewerRole === "player" &&
+      viewer?.health !== "dead" &&
+      room.phase !== "ended" &&
+      room.v24.cutoffAt &&
+      now >= Date.parse(room.v24.cutoffAt),
+  );
+}
+
+function reporterAbilityStatus(
+  room: RoomState,
+  playerId: string | null,
+  now = Date.now(),
+) {
+  const initialCount = room.players.length;
+  const aliveCount = room.players.filter(
+    (player) => player.health !== "dead",
+  ).length;
+  const minimumAlive = Math.floor(initialCount / 2) + 1;
+  const me = playerId ? room.privateStates[playerId] : undefined;
+  const player = room.players.find((candidate) => candidate.id === playerId);
+  const phaseAllowed = room.rulesVersion === "2.4"
+    ? ["active", "bomb-resolution"].includes(room.phase)
+    : ["active", "bomb-resolution", "police-check"].includes(room.phase);
+  const beforeCutoff = room.rulesVersion !== "2.4" ||
+    !room.v24?.cutoffAt || now < Date.parse(room.v24.cutoffAt);
+  let reason = "";
+  if (me?.hasUsedAbility) reason = "คุณใช้ความสามารถนี้ไปแล้ว";
+  else if (player?.health === "dead") reason = "คุณถูกกำจัดแล้ว";
+  else if (!phaseAllowed) reason = "ยังไม่อยู่ในช่วงที่ใช้ความสามารถได้";
+  else if (!beforeCutoff) reason = "พ้นเวลาที่ใช้ความสามารถได้แล้ว";
+  else if (aliveCount < minimumAlive)
+    reason = "ผู้เล่นที่ยังมีชีวิตเหลือครึ่งหนึ่งหรือน้อยกว่าจำนวนเริ่มต้น";
+  return { aliveCount, initialCount, minimumAlive, available: !reason, reason };
+}
+
+function isAttackRelatedEvent(event: RoomState["events"][number]) {
+  return event.type === "attack" ||
+    event.type === "bomb" ||
+    (event.type === "warning" &&
+      (event.message === "คุณถูกโจมตีและเสียหัวใจ 1 ดวง" ||
+        event.message.endsWith(" ถูกกำจัด"))) ||
+    (event.type === "ability" &&
+      [
+        "Killer's Wife has awakened. There are now two active Killers.",
+        "คุณปลดพลัง Killer’s Wife แล้ว",
+        "Killer has eliminated Killer's Wife. There are now two Killers.",
+        "คุณกลายเป็น Killer แล้ว",
+      ].includes(event.message));
+}
+
 function Events({
   room,
   playerId,
@@ -586,12 +643,20 @@ function Events({
   playerId?: string;
 }) {
   const resolvedRoom = typeof room === "boolean" ? latestRoom : room;
+  const [, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!resolvedRoom?.v24?.finalVoteRules) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [resolvedRoom?.code, resolvedRoom?.v24?.finalVoteRules]);
   if (!resolvedRoom) return null;
-  const visible = playerId
+  const visible = (playerId
     ? resolvedRoom.events.filter(
         (event) => !event.playerId || event.playerId === playerId,
       )
-    : resolvedRoom.events;
+    : resolvedRoom.events).filter(
+      (event) => !attackHistoryLockedForViewer(resolvedRoom) || !isAttackRelatedEvent(event),
+    );
   return (
     <>
       {resolvedRoom.viewerRole === "host" && resolvedRoom.phase === "lobby" && (
@@ -653,7 +718,14 @@ function AttackActivityPanel({ room }: { room: RoomState }) {
   const [images, setImages] = useState<Record<string, string>>({});
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<{ url: string; label: string } | null>(null);
-  const visible = room.attackActivity.slice(0, visibleCount);
+  const [, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!room.v24?.finalVoteRules) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [room.code, room.v24?.finalVoteRules]);
+  const hidden = room.attackActivityHidden || attackHistoryLockedForViewer(room);
+  const visible = hidden ? [] : room.attackActivity.slice(0, visibleCount);
   const signature = visible.map((item) => item.id).join(",");
   useEffect(() => {
     let cancelled = false;
@@ -668,8 +740,8 @@ function AttackActivityPanel({ room }: { room: RoomState }) {
     }));
     return () => { cancelled = true; };
   }, [signature, room.code]);
-  useEffect(() => { setVisibleCount(20); setImages({}); setFailed({}); }, [room.code]);
-  if (!room.canViewAttackActivity) return null;
+  useEffect(() => { setVisibleCount(20); setImages({}); setFailed({}); setExpanded(null); }, [room.code, hidden]);
+  if (!room.canViewAttackActivity && !hidden) return null;
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const retry = (id: string) => {
     setFailed((current) => ({ ...current, [id]: false }));
@@ -677,7 +749,7 @@ function AttackActivityPanel({ room }: { room: RoomState }) {
   };
   return <section className="attack-activity" aria-label="Activity การโจมตี">
     <div className="panel-heading"><div><span className="section-kicker">เฉพาะผู้ถูกกำจัดและ Host</span><h2>Activity การโจมตี</h2></div><Clock3 size={16} className="muted" /></div>
-    {room.attackActivity.length === 0 ? <div className="empty-state"><Radio size={24} /><p>ยังไม่มีการโจมตีที่อนุมัติ</p><small>รายการที่ Host อนุมัติจะแสดงที่นี่</small></div> : <div className="attack-activity-grid">
+    {hidden ? <div className="empty-state"><EyeOff size={24} /><p>ประวัติการโดนโจมตีถูกซ่อนจนจบเกม</p><small>จะแสดงอีกครั้งเมื่อเกมสิ้นสุด</small></div> : room.attackActivity.length === 0 ? <div className="empty-state"><Radio size={24} /><p>ยังไม่มีการโจมตีที่อนุมัติ</p><small>รายการที่ Host อนุมัติจะแสดงที่นี่</small></div> : <div className="attack-activity-grid">
       {visible.map((item) => {
         const actor = names.get(item.killerId) ?? "ไม่ทราบชื่อ";
         const target = names.get(item.targetId) ?? "ไม่ทราบชื่อ";
@@ -698,8 +770,8 @@ function AttackActivityPanel({ room }: { room: RoomState }) {
         </article>;
       })}
     </div>}
-    {visibleCount < room.attackActivity.length && <button className="secondary-action activity-more" onClick={() => setVisibleCount((count) => count + 20)}>โหลดเพิ่มเติม</button>}
-    {expanded && <Dialog title={expanded.label} onClose={() => setExpanded(null)}><img className="attack-activity-expanded" src={expanded.url} alt={`หลักฐาน: ${expanded.label}`} /></Dialog>}
+    {!hidden && visibleCount < room.attackActivity.length && <button className="secondary-action activity-more" onClick={() => setVisibleCount((count) => count + 20)}>โหลดเพิ่มเติม</button>}
+    {!hidden && expanded && <Dialog title={expanded.label} onClose={() => setExpanded(null)}><img className="attack-activity-expanded" src={expanded.url} alt={`หลักฐาน: ${expanded.label}`} /></Dialog>}
   </section>;
 }
 
@@ -1766,7 +1838,6 @@ export function PlayerRoom({
   usePoliceCheckReminder(code, room?.policeCheckAt, false);
   const [tab, setTab] = useState("home");
   const [showRules, setShowRules] = useState(false);
-  const [showRecovery, setShowRecovery] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [ackRole, setAckRole] = useState<Role | undefined>();
   const [confirmation, setConfirmation] = useState<{
@@ -1777,6 +1848,14 @@ export function PlayerRoom({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [now, setNow] = useState(Date.now());
+  const reporterAliveCount = room?.players.filter(
+    (player) => player.health !== "dead",
+  ).length;
+  const reporterCutoffReached = Boolean(
+    room?.rulesVersion === "2.4" &&
+      room.v24?.cutoffAt &&
+      now >= Date.parse(room.v24.cutoffAt),
+  );
   const [toast, setToast] = useState("");
   useRoomNotifications(code, setToast, refresh);
   const [mounted, setMounted] = useState(false);
@@ -1785,9 +1864,6 @@ export function PlayerRoom({
   const privateViewSnapshot = useRef<PrivateViewSnapshot | null>(null);
   const remembered = readRoomCredentials(`player:${code}`);
   const [loginName, setLoginName] = useState(name || remembered?.name || "");
-  const [reclaimToken, setReclaimToken] = useState(
-    remembered?.reclaimToken || "",
-  );
   const [targetId, setTargetId] = useState("");
   const [reportTarget, setReportTarget] = useState("");
   const [photo, setPhoto] = useState<Blob | null>(null);
@@ -1813,20 +1889,16 @@ export function PlayerRoom({
     event?.preventDefault();
     setJoining(true);
     try {
-      const joined = await joinOrCreateDemo(code, loginName, reclaimToken);
-      const token = joined.reclaimToken || reclaimToken;
+      const joined = await joinOrCreateDemo(code, loginName);
       rememberRoomCredentials(`player:${code}`, {
         name: loginName,
-        reclaimToken: token || undefined,
       });
       rememberActiveRoom({
         role: "player",
         code,
         name: loginName,
       });
-      setReclaimToken(token);
-      if (joined.reclaimToken) setShowRecovery(true);
-      else setToast("กลับเข้าผู้เล่นเดิมสำเร็จ");
+      setToast("กลับเข้าผู้เล่นเดิมสำเร็จ");
       setPlayerId(joined.playerId);
       setRoom(joined.room);
     } catch (e) {
@@ -1901,7 +1973,9 @@ export function PlayerRoom({
     playerId ? room?.privateStates[playerId]?.hasUsedAbility : undefined,
     room?.players.find(player => player.id === playerId)?.health,
     room?.players.find(player => player.id === targetId)?.health,
-    room?.players.find(player => player.id === reportTarget)?.health]);
+    room?.players.find(player => player.id === reportTarget)?.health,
+    reporterAliveCount,
+    reporterCutoffReached]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -1963,8 +2037,7 @@ export function PlayerRoom({
             <span>รหัสเข้าร่วมห้อง</span>
             <h2>เข้าห้อง</h2>
             <p>
-              ใช้รหัสห้องและชื่อผู้เล่นเพื่อเข้าร่วม; หากเปลี่ยนอุปกรณ์
-              ให้ใส่รหัสกู้คืนของผู้เล่น
+              ใช้รหัสห้องและชื่อผู้เล่นเพื่อเข้าร่วม
             </p>
           </div>
           <form onSubmit={join}>
@@ -1974,18 +2047,6 @@ export function PlayerRoom({
                 required
                 value={loginName}
                 onChange={(e) => setLoginName(e.target.value.slice(0, 24))}
-              />
-            </label>
-            <label>
-              รหัสกู้คืน (เฉพาะอุปกรณ์ใหม่)
-              <input
-                value={reclaimToken}
-                onChange={(e) =>
-                  setReclaimToken(
-                    e.target.value.replace(/[^a-f0-9]/gi, "").slice(0, 32),
-                  )
-                }
-                autoCapitalize="off"
               />
             </label>
             <button className="primary-action" disabled={joining}>
@@ -2045,13 +2106,6 @@ export function PlayerRoom({
           act(() => selectAvatar(room.code, avatarId));
           setAvatarPickerOpen(false);
         }} />}
-        {showRecovery && (
-          <RecoveryCard
-            token={reclaimToken}
-            onClose={() => setShowRecovery(false)}
-            onHideScreen={hideScreen}
-          />
-        )}
         <LeaveConfirmModal
           expectedName={loginName}
           isOpen={isLeaveModalOpen}
@@ -2080,6 +2134,28 @@ export function PlayerRoom({
       player.id !== playerId &&
       player.health !== "dead",
   );
+  const reporterStatus = reporterAbilityStatus(room, playerId, now);
+  const reporterAbilityWithRecheck = async () => {
+    const current = await loadRoom(room.code);
+    if (!current) throw new Error("reporter ability unavailable");
+    setRoom(current);
+    const status = reporterAbilityStatus(current, playerId);
+    if (!status.available) {
+      throw new Error(
+        status.reason.includes("ครึ่งหนึ่ง")
+          ? "reporter ability requires more than half of starting players alive"
+          : "reporter ability unavailable",
+      );
+    }
+    const target = current.players.find(
+      (player) =>
+        player.id === reportTarget &&
+        player.id !== playerId &&
+        player.health !== "dead",
+    );
+    if (!target) throw new Error("reporter ability unavailable");
+    return reporterAbility(current.code, reportTarget);
+  };
   const photoSeconds = capturedAt
     ? Math.max(
         0,
@@ -2213,11 +2289,6 @@ export function PlayerRoom({
               <button onClick={() => setShowRules(true)}>
                 <Eye size={20} /> กติกาและวิธีเล่น <ArrowFallback />
               </button>
-              {reclaimToken && (
-                <button onClick={() => setShowRecovery(true)}>
-                  <Shield size={20} /> รหัสกู้คืนของฉัน <ArrowFallback />
-                </button>
-              )}
               <NotificationToggle code={code} />
               <button
                 className="danger-text"
@@ -2514,19 +2585,21 @@ export function PlayerRoom({
                 </button>
               </div>
             )}
-          {me.currentRole === "reporter" &&
-            !me.hasUsedAbility &&
-            mine?.health !== "dead" &&
-            ["active", "bomb-resolution", "police-check"].includes(
-              room.phase,
-            ) && (
+          {me.currentRole === "reporter" && !me.hasUsedAbility && (
               <div className="panel action-panel">
                 <Eye size={19} />
                 <h2>ตรวจบทบาทเริ่มต้น</h2>
+                <p className="muted">
+                  ยังมีชีวิต {reporterStatus.aliveCount}/{reporterStatus.initialCount} คน · ต้องเหลืออย่างน้อย {reporterStatus.minimumAlive} คน
+                </p>
+                {!reporterStatus.available && (
+                  <p>ใช้ความสามารถไม่ได้: {reporterStatus.reason}</p>
+                )}
                 <select
                   aria-label="เลือกผู้เล่นเพื่อตรวจบทบาท"
                   value={reportTarget}
                   onChange={(e) => setReportTarget(e.target.value)}
+                  disabled={!reporterStatus.available || busy}
                 >
                   <option value="">เลือกผู้เล่น...</option>
                   {room.players
@@ -2542,13 +2615,13 @@ export function PlayerRoom({
                 </select>
                 <button
                   className="secondary-action"
-                  disabled={!validReportTarget || busy}
+                  disabled={!reporterStatus.available || !validReportTarget || busy}
                   onClick={() =>
                     setConfirmation({
                       title: "ใช้ความสามารถนักข่าว",
-                      detail: `ตรวจบทบาทเริ่มต้นของ ${room.players.find((p) => p.id === reportTarget)?.name} ใช้ได้เพียง 1 ครั้งต่อเกม และผลจะปรากฏในข่าวสารส่วนตัว`,
+                      detail: `ตรวจบทบาทเริ่มต้นของ ${room.players.find((p) => p.id === reportTarget)?.name} ได้ 1 ครั้งต่อเกม ใช้ได้เมื่อผู้เล่นที่ยังมีชีวิตเหลือมากกว่าครึ่งของจำนวนเริ่มต้น (ตอนนี้ ${reporterStatus.aliveCount}/${reporterStatus.initialCount} คน) และผลจะปรากฏในข่าวสารส่วนตัว`,
                       action: () =>
-                        act(() => reporterAbility(room.code, reportTarget)),
+                        act(reporterAbilityWithRecheck),
                     })
                   }
                 >
@@ -2582,15 +2655,8 @@ export function PlayerRoom({
           </div>
         </aside>
       </div>
-      {showRules && <Rules rulesVersion={room.rulesVersion} onClose={() => setShowRules(false)} />}
-      {showRecovery && (
-          <RecoveryCard
-            token={reclaimToken}
-            onClose={() => setShowRecovery(false)}
-            onHideScreen={hideScreen}
-          />
-      )}
-      {roleOpen && !showRecovery && room.phase !== "ended" && (
+      {showRules && <Rules rulesVersion={room.rulesVersion} phase={room.phase} finalVoteRules={room.v24?.finalVoteRules} onClose={() => setShowRules(false)} />}
+      {roleOpen && room.phase !== "ended" && (
         <RoleReveal
           rulesVersion={room.rulesVersion}
           key={`${room.code}:${room.createdAt}:${playerId}`}

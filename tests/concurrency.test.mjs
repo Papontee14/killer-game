@@ -90,6 +90,20 @@ test('target dying while Reporter waits for lock refuses inspection without spen
   assert.equal((await f.state('reporter')).has_used_ability,false);
 });
 
+test('Reporter rechecks the majority limit after waiting for a room lock',async()=>{
+  await db.query("update public.players set health='dead' where id=any($1::uuid[])",[[f.players.killer,f.players['killer-wife'],f.players.bomber]]);
+  await db.exec('begin; select id from public.rooms for update;');
+  const pending=Promise.allSettled([concurrent('reporter','use_reporter',['ABCDEF',f.players.athlete])]);
+  await waitForLocks(1);
+  await db.query("update public.players set health='dead' where id=any($1::uuid[])",[[f.players.police,f.players.sumo]]);
+  await db.exec('commit');
+  const result=(await pending)[0];
+  assert.equal(result.status,'rejected');
+  assert.match(result.reason.message,/reporter ability requires more than half of starting players alive/);
+  assert.equal((await f.state('reporter')).has_used_ability,false);
+  assert.equal((await db.query("select count(*)::int n from public.room_events where message='Reporter has used an ability.'")).rows[0].n,0);
+});
+
 test('approval begun before deadline but blocked on a lock uses time after lock acquisition',async()=>{
   const id=await f.evidence('sumo');
   await db.exec("begin; update public.rooms set police_check_at=clock_timestamp()+interval '1 second'");

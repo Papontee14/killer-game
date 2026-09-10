@@ -55,6 +55,18 @@ test("Wife transforms on first hit, consumes damage only, hides identity", async
   );
   assert.equal((await apply(id)).v24.attacksUsed, 1);
 });
+test("new rules keep Killer's Wife role while awakening the attack ability", async () => {
+  await db.exec(
+    "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true)",
+  );
+  await apply(await action("killer-wife"));
+  const wife = await f.state("killer-wife");
+  assert.equal(wife.initial_role, "killer-wife");
+  assert.equal(wife.role_current, "killer-wife");
+  assert.equal(wife.is_active_killer, true);
+  const city = await view("villager");
+  assert.ok(city.events.some((e) => e.message === "Killer's Wife has awakened. There are now two active Killers."));
+});
 test("Police takes damage normally, protection prevents repeated hit", async () => {
   await apply(await action("police", { minutes: 4 }));
   assert.equal((await f.state("police")).hearts, 1);
@@ -197,6 +209,56 @@ test("K=2 requires both killers for City victory", async () => {
   assert.equal(result.winner, "city");
   assert.equal(result.v24.nominees.length, 2);
 });
+test("new final vote accepts exactly one name and only the original Killer wins", async () => {
+  await voting(2);
+  await db.exec(
+    "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true)",
+  );
+  await assert.rejects(
+    f.as("villager", "submit_final_ballot", [
+      "ABCDEF",
+      [f.players.killer, f.players["killer-wife"]],
+      [],
+    ]),
+    /invalid ballot/,
+  );
+  await f.as("villager", "submit_final_ballot", [
+    "ABCDEF",
+    [f.players["killer-wife"]],
+    [],
+  ]);
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('voteEndsAt',clock_timestamp()-interval '1 second')");
+  const result = await view("host");
+  assert.equal(result.winner, "killers");
+  assert.deepEqual(result.v24.nominees, [f.players["killer-wife"]]);
+});
+test("new rules end for City when a bomb eliminates the original Killer", async () => {
+  await db.exec(
+    "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true,'bombAt',clock_timestamp())",
+  );
+  await apply(await action("killer-wife"));
+  await db.query("update public.rooms set phase='bomb-resolution',pending_bomber_id=$1", [f.players.bomber]);
+  const result = await f.as("host", "resolve_bomb", ["ABCDEF", [f.players.killer]]);
+  assert.equal(result.winner, "city");
+  assert.equal(result.endGameResult.reason, "original-killer-eliminated");
+  assert.equal((await f.state("killer-wife")).is_active_killer, true);
+});
+test("history lock removes earlier attack events from living players until the game ends", async () => {
+  await db.exec(
+    "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true)",
+  );
+  await apply(await action("villager"));
+  assert.ok((await view("reporter")).events.some((event) => event.type === "attack"));
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('cutoffAt',clock_timestamp()-interval '1 second')");
+  const living = await view("reporter");
+  assert.equal(living.attackActivityHidden, true);
+  assert.ok(!living.events.some((event) => event.type === "attack"));
+  const host = await view("host");
+  assert.equal(host.attackActivityHidden, false);
+  assert.ok(host.events.some((event) => event.type === "attack"));
+  await db.exec("update public.rooms set phase='ended'");
+  assert.equal((await view("reporter")).attackActivityHidden, false);
+});
 test("private tables and internal engine cannot be invoked by a player", async () => {
   await assert.rejects(
     f.as("villager", "v24_tick", [f.roomId]),
@@ -216,9 +278,23 @@ test("upgrade applies to existing schema and is repeatable without resetting roo
     new URL("../supabase/migrations/20260909_v24.sql", import.meta.url),
     "utf8",
   );
+  const finalVote = await readFile(
+    new URL("../supabase/migrations/20260910_final_vote_and_history_lock.sql", import.meta.url),
+    "utf8",
+  );
+  const reporterLimit = await readFile(
+    new URL("../supabase/migrations/20260910_reporter_majority_limit.sql", import.meta.url),
+    "utf8",
+  );
   await db.exec(sql);
+  await db.exec(finalVote);
+  await db.exec(reporterLimit);
   await db.exec(sql);
-  assert.equal((await view("host")).rulesVersion, "2.4");
+  await db.exec(finalVote);
+  await db.exec(reporterLimit);
+  const room = await view("host");
+  assert.equal(room.rulesVersion, "2.4");
+  assert.equal(room.v24.finalVoteRules, undefined);
 });
 test("migration upgrades a genuine pre-v24 active database without changing its game", async () => {
   const oldDb = new PGlite();
@@ -226,7 +302,7 @@ test("migration upgrades a genuine pre-v24 active database without changing its 
     await initializeDatabase(
       oldDb,
       false,
-      schema.split("\n-- BEGIN GENERATED V24 UPGRADE\n")[0],
+      schema.split(/\r?\n-- BEGIN GENERATED V24 UPGRADE\r?\n/)[0],
     );
     const old = await fixture(oldDb, { legacySchema: true });
     await old.hit("athlete");
@@ -236,7 +312,27 @@ test("migration upgrades a genuine pre-v24 active database without changing its 
       new URL("../supabase/migrations/20260909_v24.sql", import.meta.url),
       "utf8",
     );
+    const attackActivity = await readFile(
+      new URL("../supabase/migrations/20260909_attack_activity.sql", import.meta.url),
+      "utf8",
+    );
+    const hostBomberJudgment = await readFile(
+      new URL("../supabase/migrations/20260909_v24_host_bomber_judgment.sql", import.meta.url),
+      "utf8",
+    );
+    const finalVote = await readFile(
+      new URL("../supabase/migrations/20260910_final_vote_and_history_lock.sql", import.meta.url),
+      "utf8",
+    );
+    const reporterLimit = await readFile(
+      new URL("../supabase/migrations/20260910_reporter_majority_limit.sql", import.meta.url),
+      "utf8",
+    );
     await oldDb.exec(migration);
+    await oldDb.exec(attackActivity);
+    await oldDb.exec(hostBomberJudgment);
+    await oldDb.exec(finalVote);
+    await oldDb.exec(reporterLimit);
     const room = await old.as("host", "get_room_view", ["ABCDEF"]);
     assert.equal(room.rulesVersion, "legacy");
     assert.equal(room.phase, "active");
@@ -403,6 +499,30 @@ test("cutoff rejects new abilities and pending resolution delays Final safely", 
     /reporter ability unavailable/,
   );
   assert.equal((await view("host")).phase, "resolution");
+});
+test("v24 Reporter requires a strict living majority after its time tick", async () => {
+  await db.query(
+    "update public.players set health='dead' where id=any($1::uuid[])",
+    [[
+      f.players["killer-wife"],
+      f.players.bomber,
+      f.players.athlete,
+      f.players.sumo,
+    ]],
+  );
+  await f.as("reporter", "use_reporter", ["ABCDEF", f.players.villager]);
+  await db.query(
+    "update public.player_secrets set has_used_ability=false where player_id=$1",
+    [f.players.reporter],
+  );
+  await db.query("update public.players set health='dead' where id=$1", [
+    f.players.detective,
+  ]);
+  await assert.rejects(
+    f.as("reporter", "use_reporter", ["ABCDEF", f.players.villager]),
+    /reporter ability requires more than half of starting players alive/,
+  );
+  assert.equal((await f.state("reporter")).has_used_ability, false);
 });
 test("Police ranking controls tied nominees and fallback covers missing Police ballot", async () => {
   await voting();

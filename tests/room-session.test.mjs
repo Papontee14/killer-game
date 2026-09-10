@@ -34,24 +34,19 @@ const {
   clearActiveRoom,
 } = await import('../src/room-session.ts');
 
-test('room-session persists credentials without sensitive reclaimToken in localStorage', () => {
+test('room-session persists only the player name in localStorage', () => {
   mockStorage.clear();
   rememberRoomCredentials('player:ABC123', {
     name: 'Alice',
-    reclaimToken: 'secret-token-12345',
   });
 
-  // In-memory returns reclaimToken
   const inMem = readRoomCredentials('player:ABC123');
   assert.equal(inMem?.name, 'Alice');
-  assert.equal(inMem?.reclaimToken, 'secret-token-12345');
 
-  // LocalStorage has name, but NOT reclaimToken
   const raw = mockStorage.getItem('killer_room_cred:player:ABC123');
   assert.ok(raw);
   const parsed = JSON.parse(raw);
   assert.equal(parsed.name, 'Alice');
-  assert.equal(parsed.reclaimToken, undefined);
 });
 
 test('room-session remembers and reads active room', () => {

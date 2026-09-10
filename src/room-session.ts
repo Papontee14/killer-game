@@ -1,6 +1,5 @@
 /**
  * Room session metadata and active-room persistence.
- * Note: Reclaim tokens are sensitive credentials and are kept in-memory only.
  * Same-device cold restarts resume via durable browser room hints + Supabase anonymous auth.
  */
 
@@ -8,7 +7,6 @@ export type RoomRole = 'player' | 'host';
 
 export type RoomCredentials = {
   name: string;
-  reclaimToken?: string;
 };
 
 export type ActiveRoomRecord = {
@@ -60,22 +58,13 @@ export function rememberRoomCredentials(
 ) {
   const sanitizedName =
     sanitizeName(credentials.name) ?? credentials.name.trim();
-  const token =
-    typeof credentials.reclaimToken === 'string' &&
-    credentials.reclaimToken.trim().length > 0
-      ? credentials.reclaimToken.trim()
-      : undefined;
-
-  // Keep in-memory cache (includes reclaimToken if provided)
   inMemoryCredentials.set(key, {
     name: sanitizedName,
-    reclaimToken: token,
   });
 
   const storage = safeGetStorage();
   if (storage) {
     try {
-      // Intentionally do NOT persist reclaimToken to persistent browser storage
       storage.setItem(
         `${CREDENTIAL_STORAGE_PREFIX}${key}`,
         JSON.stringify({ name: sanitizedName }),

@@ -1,15 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('entry menus, browser history and recovery preserve form values', async ({ page }) => {
+test('entry menus and browser history preserve form values', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.entry-menu')).toBeVisible();
   await expect(page.getByLabel('รหัสห้อง', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'เข้าร่วมเกม', exact: true }).click();
   await page.getByLabel('รหัสห้อง', { exact: true }).fill('K9P2MX');
   await page.getByLabel('ชื่อผู้เล่น', { exact: true }).fill('มะนาว');
-  await page.getByRole('button', { name: 'เคยเข้าร่วมแล้ว? กู้คืนตัวละคร' }).click();
-  await page.getByLabel('รหัสกู้คืน', { exact: true }).fill('private-recovery-token');
-  await expect(page.getByRole('button', { name: 'กู้คืนตัวละคร', exact: true })).toBeVisible();
+  await expect(page.locator('.recovery-link, .recovery-code')).toHaveCount(0);
   await page.goBack();
   await expect(page.locator('.entry-menu')).toBeVisible();
   await page.goForward();

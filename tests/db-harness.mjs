@@ -19,6 +19,7 @@ export const migration = (
       "20260907_end_game_timeline.sql",
       "20260907_killer_wife_side.sql",
       "20260907_server_notification_queue.sql",
+      "20260910_remove_recovery_tokens.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),
@@ -61,7 +62,7 @@ export async function initializeDatabase(db, native = false, schemaSql = schema)
   );
 }
 
-export async function fixture(db, { legacySchema = false } = {}) {
+export async function fixture(db, { legacySchema = false, extraVillagers = 0 } = {}) {
   await db.exec(
     "reset role; truncate public.rooms,auth.users,storage.objects cascade;",
   );
@@ -76,8 +77,13 @@ export async function fixture(db, { legacySchema = false } = {}) {
     "sumo",
     "villager",
   ];
+  const extraRoles = Array.from(
+    { length: extraVillagers },
+    (_, index) => `villager-extra-${index + 1}`,
+  );
+  const playerRoles = [...roles, ...extraRoles];
   const users = Object.fromEntries(
-    ["host", "outsider", ...roles].map((role) => [role, randomUUID()]),
+    ["host", "outsider", ...playerRoles].map((role) => [role, randomUUID()]),
   );
   for (const id of Object.values(users))
     await db.query("insert into auth.users(id) values($1)", [id]);
@@ -101,14 +107,14 @@ export async function fixture(db, { legacySchema = false } = {}) {
   // Existing suites intentionally exercise the preserved legacy rule engine.
   if (!legacySchema) await db.exec("update public.rooms set rules_version='legacy' where code='ABCDEF'");
   const players = {};
-  for (const role of roles)
+  for (const role of playerRoles)
     players[role] = (await as(role, "join_room", ["ABCDEF", role])).playerId;
-  const avatars = ["m-sea-01","f-sea-01","m-sea-02","f-sea-02","m-sea-03","f-sea-03","m-sea-04","f-sea-04","m-sea-05"];
-  for (const [index, role] of roles.entries())
+  const avatars = ["m-sea-01","f-sea-01","m-sea-02","f-sea-02","m-sea-03","f-sea-03","m-sea-04","f-sea-04","m-sea-05","f-sea-05"];
+  for (const [index, role] of playerRoles.entries())
     await as(role, "select_avatar", ["ABCDEF", avatars[index]]);
   await as("host", "start_game", [
     "ABCDEF",
-    Object.fromEntries(roles.map((role) => [role, 1])),
+    Object.fromEntries(roles.map((role) => [role, role === "villager" ? 1 + extraVillagers : 1])),
   ]);
   // Deterministic fixtures exercise each role; production start_game remains random.
   for (const role of roles) {

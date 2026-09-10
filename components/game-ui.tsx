@@ -1,9 +1,18 @@
 "use client";
 import Image from "next/image";
-import { V24_ROLE_DETAILS, V24_RULES } from "@/src/v24-rules";
+import {
+  LEGACY_GUIDE_PHASES,
+  LEGACY_ROLE_GUIDE,
+  V24_GUIDE_PHASES,
+  V24_PREVIOUS_ROLE_GUIDE,
+  V24_ROLE_DETAILS,
+  V24_ROLE_GUIDE,
+  type GuidePhase,
+  type GuideRole,
+} from "@/src/v24-rules";
 import { Brand } from "./brand";
 import { PixelIcon } from "./pixel-ui";
-import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { usePrivacyHidden } from "./privacy-boundary";
 import {
   Check,
@@ -11,7 +20,6 @@ import {
   ChevronRight,
   EyeOff,
   LockKeyhole,
-  Shield,
   X,
 } from "lucide-react";
 import {
@@ -36,11 +44,11 @@ export const ROLE_DETAILS: Record<Role, string> = {
   killer:
     "เลือกเป้าหมาย ถ่ายภาพด้วยกล้องสด และส่งให้ Host ภายใน 2 นาที ทุกภาพที่อนุมัติลด 1 หัวใจ คุณไม่มีแถบหัวใจ แต่ตายได้จากระเบิด Bomber",
   "killer-wife":
-    "เริ่มต้นอยู่ Killer Side มี 2 หัวใจ เมื่อถูกโจมตีที่อนุมัติครั้งที่สอง คุณจะเปลี่ยนเป็น Killer ภาพนั้นนับเป็น 1 คิล และทีมใช้โควต้าร่วมกัน 3 คิลต่อชั่วโมง การตายจากระเบิดไม่ทำให้เปลี่ยนบทบาท",
+    "เริ่มต้นอยู่ Killer Side มี 1 หัวใจ เมื่อถูกโจมตีที่อนุมัติ คุณจะปลดพลังโจมตีได้ แต่ยังคงชื่อ Killer’s Wife ภาพนั้นไม่นับเป็นคิล การตายจากระเบิดไม่ทำให้ปลดพลัง",
   police:
-    "ชี้ตัวผู้ต้องสงสัยที่ยังมีชีวิตได้ระหว่างเล่นหรือเมื่อถึงเวลานัดหมาย ชี้ถูก Killer คนใดก็ได้ City Side ชนะ ชี้ผิด Killer Side ชนะ หาก Killer โจมตีคุณและ Host อนุมัติ City Side ชนะทันที",
+    "ชี้ตัวผู้ต้องสงสัยที่ยังมีชีวิตได้ระหว่างเล่นหรือเมื่อถึงเวลานัดหมาย ชี้ถูก Killer ตั้งต้น City Side ชนะ ชี้ผิด Killer Side ชนะ หาก Killer โจมตีคุณและ Host อนุมัติ City Side ชนะทันที",
   reporter:
-    "ตรวจบทบาทเริ่มต้นของผู้เล่นอื่นที่ยังมีชีวิตได้ 1 ครั้งต่อเกม ผลเป็นความลับและไม่เปลี่ยนตามบทบาทปัจจุบันของเป้าหมาย",
+    "ตรวจบทบาทเริ่มต้นของผู้เล่นอื่นที่ยังมีชีวิตได้ 1 ครั้งต่อเกม ขณะผู้เล่นที่ยังมีชีวิตเหลือมากกว่าครึ่งของจำนวนเริ่มต้น ผลเป็นความลับและไม่เปลี่ยนตามบทบาทปัจจุบันของเป้าหมาย",
   bomber:
     "เมื่อตาย Host จะเลือกผู้เล่นที่อยู่ใกล้คุณ 0–2 คน ผู้ถูกระเบิดตายทันทีโดยไม่ขึ้นกับหัวใจ ไม่มีระเบิดต่อเนื่อง",
   detective:
@@ -54,9 +62,9 @@ export const ROLE_DETAILS: Record<Role, string> = {
 export const ROLE_SUMMARIES: Record<Role, string> = {
   doctor: V24_ROLE_DETAILS.doctor,
   killer: "เลือกเป้าหมาย ถ่ายภาพด้วยกล้องสด และส่งให้ Host ตรวจภายใน 2 นาที",
-  "killer-wife": "อยู่ Killer Side ตลอดทั้งเกม และเมื่อถูกโจมตีครบสองครั้งจะเปลี่ยนเป็น Killer",
+  "killer-wife": "อยู่ Killer Side ตลอดทั้งเกม และเมื่อถูกโจมตีจะปลดพลังโจมตีโดยคงบทบาทเดิม",
   police: "ชี้ตัวผู้ต้องสงสัยที่ยังมีชีวิตได้ตลอดช่วงเล่น",
-  reporter: "ตรวจบทบาทเริ่มต้นของผู้เล่นที่ยังมีชีวิตได้หนึ่งครั้งต่อเกม",
+  reporter: "ตรวจบทบาทเริ่มต้นได้หนึ่งครั้ง ขณะผู้เล่นที่ยังมีชีวิตเหลือมากกว่าครึ่ง",
   bomber: "เมื่อคุณตาย Host จะเลือกผู้เล่นใกล้ตัวได้สูงสุดสองคน",
   detective: "หากตำรวจตาย คุณจะรับตำแหน่งตำรวจเป็นการส่วนตัว",
   athlete: "อยู่ City Side มีสามหัวใจ และช่วยสังเกตหา Killer",
@@ -123,206 +131,122 @@ export function Dialog({
     </dialog>
   );
 }
-export function Rules({ onClose, rulesVersion = "2.4" }: { onClose: () => void; rulesVersion?: "legacy" | "2.4" }) {
-  if(rulesVersion === "2.4") return <Dialog title="กติกาเกม" onClose={onClose}><div className="rules-steps">{V24_RULES.map(rule => <p key={rule}>{rule}</p>)}</div><h3>9 บทบาท · ทุกคนมีความลับ</h3><RoleCarousel rulesVersion="2.4" /></Dialog>;
+export function Rules({
+  onClose,
+  rulesVersion = "2.4",
+  phase = "lobby",
+  finalVoteRules,
+}: {
+  onClose: () => void;
+  rulesVersion?: "legacy" | "2.4";
+  phase?: RoomPhase;
+  finalVoteRules?: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState<"phases" | "roles">("phases");
+  const tabId = useId();
+  const phasesTabRef = useRef<HTMLButtonElement>(null);
+  const rolesTabRef = useRef<HTMLButtonElement>(null);
+  const latestFinalVoteRules = rulesVersion === "2.4" && (phase === "lobby" || finalVoteRules === true);
+  const phases = rulesVersion === "2.4" ? V24_GUIDE_PHASES : LEGACY_GUIDE_PHASES;
+  const roles = rulesVersion === "legacy"
+    ? LEGACY_ROLE_GUIDE
+    : latestFinalVoteRules
+      ? V24_ROLE_GUIDE
+      : V24_PREVIOUS_ROLE_GUIDE;
+  const roleOrder = (Object.keys(ROLE_LABELS) as Role[]).filter((role) =>
+    rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor",
+  );
+  const selectTab = (tab: "phases" | "roles", moveFocus = false) => {
+    setActiveTab(tab);
+    if (moveFocus) requestAnimationFrame(() => (tab === "phases" ? phasesTabRef : rolesTabRef).current?.focus());
+  };
+  const onTabsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      selectTab(activeTab === "phases" ? "roles" : "phases", true);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      selectTab("phases", true);
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      selectTab("roles", true);
+    }
+  };
+
   return (
-    <Dialog title="วิธีเล่น KILLER" onClose={onClose}>
-      <p className="muted">
-        บทบาทของคุณเป็นความลับ เกมเกิดขึ้นรอบตัวคุณในชีวิตจริง
+    <Dialog title="กติกาและวิธีเล่น" onClose={onClose} className="guide-dialog">
+      <p className="guide-intro">
+        {rulesVersion === "2.4"
+          ? "Killer Side ต้องทำการกำจัดให้ทันเวลา ส่วน City Side ต้องเอาตัวรอด เก็บข้อมูล และตัดสินให้ถูกคน. บทบาทของคุณเป็นความลับ."
+          : "บทบาทของคุณเป็นความลับ เกมเกิดขึ้นรอบตัวคุณในชีวิตจริง. ใช้คู่มือนี้ตามกฎของห้องนี้."}
       </p>
-      <div className="rules-steps">
-        <p>
-          <b>01 · เข้าห้อง</b>ใช้รหัส 6 ตัวจาก Host
-          และบันทึกรหัสกู้คืนเพื่อกลับเป็นตัวละครเดิม
-        </p>
-        <p>
-          <b>02 · รับบทบาท</b>Host แจกบทบาทเมื่อทุกคนพร้อม
-          อ่านภารกิจส่วนตัวก่อนเริ่มเล่น
-        </p>
-        <p>
-          <b>03 · เล่นตามหน้าที่</b>สังเกตคนรอบตัว ทำภารกิจของบทบาท และเอาตัวรอด
-        </p>
-        <p>
-          <b>04 · ชี้ตัวผู้ต้องสงสัย</b>ตำรวจชี้ตัวได้ระหว่างเล่นหรือเมื่อถึงเวลานัดหมาย แล้วระบบจะแสดงผลของเกม
-        </p>
+      {rulesVersion === "2.4" && !latestFinalVoteRules && (
+        <p className="guide-compatibility">ห้องนี้เริ่มด้วยกฎโหวต 2.4 รุ่นก่อน จึงใช้กติกาโหวตตามจำนวน Killer ที่ทำงานอยู่.</p>
+      )}
+      <div className="guide-tabs" role="tablist" aria-label="คู่มือเกม" onKeyDown={onTabsKeyDown}>
+        <button ref={phasesTabRef} id={`${tabId}-phases-tab`} type="button" role="tab" aria-selected={activeTab === "phases"}
+          aria-controls={`${tabId}-phases-panel`} tabIndex={activeTab === "phases" ? 0 : -1} onClick={() => selectTab("phases")}>เฟสการเล่น</button>
+        <button ref={rolesTabRef} id={`${tabId}-roles-tab`} type="button" role="tab" aria-selected={activeTab === "roles"}
+          aria-controls={`${tabId}-roles-panel`} tabIndex={activeTab === "roles" ? 0 : -1} onClick={() => selectTab("roles")}>ตัวละคร</button>
       </div>
-      <details className="rules-details">
-        <summary>กติกาละเอียด</summary>
-        <div>
-          <p>Killer ส่งภาพจากกล้องสดให้ Host ตรวจ โควต้าเริ่มต้น 2 คิลต่อชั่วโมง รีเซ็ตตรงต้นชั่วโมงเวลาไทย ภาพที่ไม่ทำให้เป้าหมายตายไม่ใช้โควตา และไม่มีเวลารอต่อเป้าหมาย</p>
-          <p>ตำรวจชี้ถูก City Side ชนะ ชี้ผิด Killer Side ชนะ หาก Host อนุมัติภาพโจมตีตำรวจ City Side ชนะทันที หาก Killer ทุกคนตายจากระเบิด City Side ชนะ แม้ตำรวจตายพร้อมกัน</p>
-        </div>
-      </details>
-      <h3>9 บทบาท · ทุกคนมีความลับ</h3>
-      <RoleCarousel />
-      <p className="privacy-caption">
-        <LockKeyhole size={16} />{" "}
-        การปิดเว็บหรือหลุดจากเครือข่ายไม่ทำให้ตัวละครตาย
-      </p>
+      <section id={`${tabId}-phases-panel`} role="tabpanel" aria-labelledby={`${tabId}-phases-tab`} hidden={activeTab !== "phases"}>
+        <ol className="guide-timeline">
+          {phases.map((guidePhase) => <GuidePhaseCard key={guidePhase.number} phase={guidePhase} latestFinalVoteRules={latestFinalVoteRules} />)}
+        </ol>
+        {rulesVersion === "2.4" && (
+          <details className="guide-interruption">
+            <summary>เหตุการณ์แทรก: Bomber ระเบิด</summary>
+            <p>เมื่อ Bomber ถูก Killer กำจัด เกมจะหยุดรอ Host ตรวจภาพหลักฐานและเลือกผู้เล่นที่ยังมีชีวิตใกล้ที่สุด 0–1 คน ระเบิดไม่สนหัวใจ ไม่เกิดเป็นลูกโซ่ และไม่ปลดพลัง Killer’s Wife.</p>
+          </details>
+        )}
+        <details className="guide-interruption">
+          <summary>เงื่อนไขจบเกมก่อนเวลา</summary>
+          {rulesVersion === "2.4" ? <p>{latestFinalVoteRules
+            ? "City ชนะเมื่อ Killer ตั้งต้นตายหรือไม่มี Killer ที่ทำงานอยู่ และชนะทันทีหาก Hunt Clock หมด. Killer Side ชนะเมื่อไม่มี Police ที่ยังมีชีวิตหลังการสืบทอดตำแหน่ง."
+            : "City ชนะเมื่อไม่มี Killer ที่ทำงานอยู่ และชนะทันทีหาก Hunt Clock หมด. Killer Side ชนะเมื่อไม่มี Police ที่ยังมีชีวิตหลังการสืบทอดตำแหน่ง."}</p>
+            : <p>City ชนะเมื่อ Police ชี้ถูก Killer ที่ทำงานอยู่ หรือ Killer ทุกคนตายจากระเบิด. Killer Side ชนะเมื่อ Police ชี้ผิด หรือ Police ตายโดยไม่มี Detective สืบทอด.</p>}
+        </details>
+      </section>
+      <section id={`${tabId}-roles-panel`} role="tabpanel" aria-labelledby={`${tabId}-roles-tab`} hidden={activeTab !== "roles"}>
+        <RoleGuide title="Killer Side" roles={roleOrder.filter((role) => roles[role].side === "Killer Side")} guide={roles} />
+        <RoleGuide title="City Side" roles={roleOrder.filter((role) => roles[role].side === "City Side")} guide={roles} />
+      </section>
+      <p className="privacy-caption"><LockKeyhole size={16} /> การปิดเว็บหรือหลุดจากเครือข่ายไม่ทำให้ตัวละครตาย</p>
     </Dialog>
   );
 }
 
-function RoleCarousel({ rulesVersion = "legacy" }: { rulesVersion?: "legacy" | "2.4" }) {
-  const RULE_ROLES = (Object.keys(ROLE_LABELS) as Role[]).filter(role => rulesVersion === "2.4" ? role !== "sumo" : role !== "doctor");
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+function GuidePhaseCard({ phase, latestFinalVoteRules }: { phase: GuidePhase; latestFinalVoteRules: boolean }) {
+  const isVote = phase.number === "05";
+  const player = isVote && !latestFinalVoteRules
+    ? "ถ้ามีการกำจัดที่ยืนยันแล้วเพียง 0–1 ครั้ง City ชนะทันที ถ้ามี 2 ครั้งขึ้นไป ผู้เล่นที่ยังมีชีวิตทุกฝ่ายหยุดสื่อสารและโหวตลับ เลือกผู้เล่นอื่นให้ครบตามจำนวน Killer ที่ทำงานอยู่ ส่งแล้วแก้ไม่ได้; ไม่ส่งถือว่างดออกเสียง. City ต้องเลือก Killer ที่ทำงานอยู่ให้ครบทุกคน."
+    : phase.player;
+  return <li className="guide-phase">
+    <span className="guide-phase-number">{phase.number}</span>
+    <div className="guide-phase-heading"><h3>{phase.title}</h3><p>{phase.timing}</p></div>
+    <div className="guide-phase-content"><h4>ผู้เล่นต้องทำอะไร</h4><p>{player}</p></div>
+    {phase.stops && <div className="guide-phase-content guide-phase-stop"><h4>หยุดทำ</h4><p>{phase.stops}</p></div>}
+    {phase.points && <ul>{phase.points.map((point) => <li key={point}>{point}</li>)}</ul>}
+    <details><summary>หน้าที่ Host</summary><p>{phase.host}</p></details>
+  </li>;
+}
 
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const updateIndex = () => {
-      const slides = Array.from(
-        viewport.querySelectorAll<HTMLElement>("[data-role-slide]"),
-      );
-      if (!slides.length) return;
-      const center = viewport.scrollLeft + viewport.clientWidth / 2;
-      const nextIndex = slides.reduce(
-        (closest, slide, index) =>
-          Math.abs(slide.offsetLeft + slide.offsetWidth / 2 - center) <
-          Math.abs(
-            slides[closest].offsetLeft + slides[closest].offsetWidth / 2 - center,
-          )
-            ? index
-            : closest,
-        0,
-      );
-      setActiveIndex(nextIndex);
-    };
-    viewport.addEventListener("scroll", updateIndex, { passive: true });
-    window.addEventListener("resize", updateIndex);
-    updateIndex();
-    return () => {
-      viewport.removeEventListener("scroll", updateIndex);
-      window.removeEventListener("resize", updateIndex);
-    };
-  }, []);
-
-  const moveTo = (index: number) => {
-    const boundedIndex = Math.max(0, Math.min(index, RULE_ROLES.length - 1));
-    const viewport = viewportRef.current;
-    const slide = viewport?.querySelector<HTMLElement>(
-      `[data-role-slide="${boundedIndex}"]`,
-    );
-    if (viewport && slide) {
-      const reduceMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      viewport.scrollTo({
-        left: slide.offsetLeft,
-        behavior: reduceMotion ? "auto" : "smooth",
-      });
-    }
-    setActiveIndex(boundedIndex);
-  };
-
-  return (
-    <div className="role-carousel" aria-label="บทบาททั้งหมด">
-      <div
-        ref={viewportRef}
-        className="role-carousel-viewport"
-        role="region"
-        aria-roledescription="carousel"
-        aria-label="สไลด์บทบาท"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            moveTo(activeIndex - 1);
-          } else if (event.key === "ArrowRight") {
-            event.preventDefault();
-            moveTo(activeIndex + 1);
-          }
-        }}
-      >
-        {RULE_ROLES.map((role, index) => (
-          <article
-            key={role}
-            data-role-slide={index}
-            className="role-carousel-slide"
-            role="group"
-            aria-roledescription="สไลด์"
-            aria-label={`${index + 1} จาก ${RULE_ROLES.length}`}
-          >
-            <Image
-              className="role-thumb role-thumb-rules role-carousel-art"
-              src={ROLE_ART[role]}
-              width={2048}
-              height={2048}
-              sizes="(max-width: 520px) calc(100vw - 64px), 420px"
-              alt={roleArtAlt(role)}
-            />
-            <div className="role-carousel-heading">
-              <div>
-                <span className="role-carousel-kicker">
-                  <Shield size={16} /> บทบาทที่ {index + 1}
-                </span>
-                <h4>{ROLE_LABELS[role]}</h4>
-              </div>
-              {ROLE_HEARTS[role] ? (
-                <span
-                  className="role-carousel-hearts"
-                  aria-label={`${rulesVersion === "2.4" && role === "killer-wife" ? 1 : ROLE_HEARTS[role]} หัวใจ`}
-                >
-                  <PixelIcon name="heart"
-                    className="role-carousel-heart-icon"
-                    size={16}
-                    fill="currentColor"
-                    aria-hidden="true"
-                  />
-                  <span aria-hidden="true">× {rulesVersion === "2.4" && role === "killer-wife" ? 1 : ROLE_HEARTS[role]}</span>
-                </span>
-              ) : (
-                <span className="role-carousel-hearts role-carousel-hearts-none">
-                  ไม่มีแถบหัวใจ
-                </span>
-              )}
-            </div>
-            <p>{rulesVersion === "2.4" ? V24_ROLE_DETAILS[role] : ROLE_SUMMARIES[role]}</p>
-            <details className="role-carousel-details">
-              <summary>อ่านรายละเอียดบทบาท</summary>
-              <p>{rulesVersion === "2.4" ? V24_ROLE_DETAILS[role] : ROLE_DETAILS[role]}</p>
-            </details>
-          </article>
-        ))}
-      </div>
-      <div className="role-carousel-controls">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="บทบาทก่อนหน้า"
-          onClick={() => moveTo(activeIndex - 1)}
-          disabled={activeIndex === 0}
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <div className="role-carousel-dots" aria-label="เลือกบทบาท">
-          {RULE_ROLES.map((role, index) => (
-            <button
-              key={role}
-              type="button"
-              className={index === activeIndex ? "active" : ""}
-              aria-label={`ไปที่ ${ROLE_LABELS[role]}`}
-              aria-current={index === activeIndex ? "true" : undefined}
-              onClick={() => moveTo(index)}
-            />
-          ))}
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="บทบาทถัดไป"
-          onClick={() => moveTo(activeIndex + 1)}
-          disabled={activeIndex === RULE_ROLES.length - 1}
-        >
-          <ChevronRight size={18} />
-        </button>
-      </div>
-      <p className="role-carousel-position" aria-live="polite">
-        {activeIndex + 1} / {RULE_ROLES.length}
-      </p>
+function RoleGuide({ title, roles, guide }: { title: string; roles: Role[]; guide: Record<Role, GuideRole> }) {
+  return <section className="guide-role-group" aria-labelledby={`guide-${title.replace(" ", "-")}`}>
+    <h3 id={`guide-${title.replace(" ", "-")}`}>{title}</h3>
+    <div className="guide-role-list">
+      {roles.map((role) => <details className="guide-role-card" key={role}>
+        <summary>
+          <Image className="guide-role-art" src={ROLE_ART[role]} width={96} height={96} sizes="96px" alt={roleArtAlt(role)} />
+          <span className="guide-role-copy"><b>{ROLE_LABELS[role]}</b><small>{guide[role].side} · {guide[role].hearts}</small><span>{guide[role].summary}</span></span>
+        </summary>
+        <div className="guide-role-details">{guide[role].details.map((detail) => <section key={detail.title}><h4>{detail.title}</h4><p>{detail.body}</p></section>)}</div>
+      </details>)}
     </div>
-  );
+  </section>;
 }
 export function GameNavigation({
   host = false,
@@ -377,51 +301,6 @@ export function GameNavigation({
         </div>
       )}
     </nav>
-  );
-}
-export function RecoveryCard({
-  token,
-  onClose,
-  onHideScreen,
-}: {
-  token: string;
-  onClose: () => void;
-  onHideScreen?: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Dialog title="เก็บรหัสนี้ไว้ให้ดี" onClose={onClose} onHideScreen={onHideScreen}>
-      <div className="recovery-icon">
-        <LockKeyhole size={32} />
-      </div>
-      <p>
-        ใช้รหัสนี้พร้อมรหัสห้องและชื่อเดิม เพื่อกลับเป็นตัวละครเดิมบนอุปกรณ์ใหม่
-        เก็บไว้เป็นความลับ
-      </p>
-      <code className="recovery-code">{token}</code>
-      <button
-        className="secondary-action"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(token);
-            setCopied(true);
-          } catch {
-            setCopied(false);
-          }
-        }}
-      >
-        {copied ? (
-          <>
-            <Check size={17} /> คัดลอกแล้ว
-          </>
-        ) : (
-          "คัดลอกรหัสกู้คืน"
-        )}
-      </button>
-      <button className="primary-action" onClick={onClose}>
-        บันทึกรหัสแล้ว <ChevronRight size={18} />
-      </button>
-    </Dialog>
   );
 }
 function MysteryCardBack() {

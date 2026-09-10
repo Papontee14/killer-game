@@ -1015,34 +1015,183 @@ svg {
   font-size: 16px;
   line-height: 1.8;
 }
-.role-carousel {
-  margin: 14px 0 18px;
+.guide-dialog {
+  width: min(760px, calc(100vw - 28px));
+  overflow-y: auto;
 }
-.role-carousel-viewport {
-  display: flex;
+.guide-intro {
+  margin: 0 0 14px;
+}
+.guide-compatibility {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--amber);
+  background: #2c2917;
+  color: #f4df91 !important;
+}
+.guide-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.guide-tabs button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  background: #142018;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 750;
+}
+.guide-tabs button[aria-selected="true"] {
+  border-color: var(--acid);
+  background: #243b20;
+  color: var(--acid);
+}
+.guide-timeline {
+  display: grid;
   gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  outline: none;
-  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.role-carousel-viewport::-webkit-scrollbar {
-  display: none;
-}
-.role-carousel-viewport:focus-visible {
-  box-shadow: 0 0 0 2px var(--acid);
-}
-.role-carousel-slide {
-  flex: 0 0 100%;
+.guide-phase {
+  position: relative;
   min-width: 0;
-  scroll-snap-align: start;
+  padding: 14px;
+  padding-left: 62px;
+  border: 1px solid var(--line);
+  background: #142018;
+}
+.guide-phase-number {
+  position: absolute;
+  top: 15px;
+  left: 14px;
+  color: var(--acid);
+  font-family: var(--font-pixel), monospace;
+  font-size: 16px;
+}
+.guide-phase-heading {
+  margin-bottom: 12px;
+}
+.guide-phase-heading h3,
+.guide-role-group > h3 {
+  margin: 0;
+  font-size: 19px;
+}
+.guide-phase-heading p {
+  margin: 3px 0 0;
+  color: var(--acid) !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+.guide-phase-content {
+  margin-top: 10px;
+}
+.guide-phase-content h4,
+.guide-role-details h4 {
+  margin: 0 0 3px;
+  color: var(--acid);
+  font-size: 14px;
+}
+.guide-phase-content p,
+.guide-phase details p,
+.guide-role-details p,
+.guide-interruption p {
+  margin: 0;
+  font-size: 15px !important;
+  line-height: 1.75 !important;
+}
+.guide-phase-stop h4 {
+  color: var(--amber);
+}
+.guide-phase ul {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.guide-phase details,
+.guide-interruption {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.guide-phase summary,
+.guide-interruption summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--acid);
+  font-size: 15px;
+  font-weight: 750;
+}
+.guide-interruption {
+  margin: 14px 0 0;
+  padding: 0 12px 12px;
+  border: 1px solid var(--line);
+  background: #142018;
+}
+.guide-role-group + .guide-role-group {
+  margin-top: 22px;
+}
+.guide-role-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.guide-role-card {
   overflow: hidden;
   border: 1px solid var(--line);
-  border-top: 4px solid #b6b3a0;
-  border-radius: 0;
   background: #142018;
+}
+.guide-role-card > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 9px;
+  cursor: pointer;
+}
+.guide-role-art {
+  width: 62px;
+  height: 62px;
+  flex: 0 0 62px;
+  object-fit: contain;
+  background: #0b140e;
+  image-rendering: pixelated;
+}
+.guide-role-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.guide-role-copy b {
+  color: var(--text);
+  font-size: 17px;
+}
+.guide-role-copy small {
+  color: var(--acid);
+  font-size: 13px;
+}
+.guide-role-copy > span {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.guide-role-details {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 14px;
+  border-top: 1px solid var(--line);
+}
+.guide-role-details section {
+  padding-top: 12px;
 }
 .role-thumb {
   display: block;
@@ -1051,112 +1200,6 @@ svg {
   object-position: center top;
   border: 1px solid #40533e;
   background: #0b140e;
-}
-.role-carousel-art {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1;
-  object-fit: contain;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: #0b140e;
-}
-.role-carousel-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 14px 0;
-}
-.role-carousel-kicker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 16px;
-}
-.role-carousel-heading h4 {
-  margin: 4px 0 0;
-  font-size: 20px;
-}
-.role-carousel-hearts {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--acid);
-  font-size: 16px;
-}
-.role-carousel-hearts-none {
-  color: var(--muted);
-}
-.role-carousel-heart-icon {
-  color: var(--danger);
-}
-.role-carousel-slide > p {
-  margin: 0;
-  padding: 10px 14px 16px;
-}
-.role-carousel-details {
-  margin: 0 14px 14px;
-  border-top: 1px solid var(--line);
-}
-.role-carousel-details summary {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: var(--acid);
-  font-size: 16px;
-  font-weight: 700;
-}
-.role-carousel-details > p {
-  margin: 0;
-  padding: 0 0 4px;
-  font-size: 16px;
-  line-height: 1.8;
-}
-.role-carousel-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-}
-.role-carousel-controls .icon-button {
-  min-width: 44px;
-  min-height: 44px;
-}
-.role-carousel-controls .icon-button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.role-carousel-dots {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-}
-.role-carousel-dots button {
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: #536553;
-}
-.role-carousel-dots button.active {
-  width: 20px;
-  border-radius: 0;
-  background: var(--acid);
-}
-.role-carousel-position {
-  margin: 7px 0 0 !important;
-  text-align: center;
-  color: var(--muted) !important;
-  font-size: 16px !important;
-  line-height: 1.3 !important;
 }
 .role-thumb-control {
   position: static;
@@ -1184,29 +1227,6 @@ svg {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-.recovery-icon {
-  margin: 12px auto;
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border: 1px solid #415736;
-  border-radius: 50%;
-  color: var(--acid);
-  background: #23371b;
-}
-.recovery-code {
-  display: block;
-  overflow-wrap: anywhere;
-  background: #08120b;
-  border: 1px dashed #4c6441;
-  padding: 18px;
-  color: var(--acid);
-  font-size: 20px;
-  letter-spacing: 2px;
-  text-align: center;
-  border-radius: 0;
 }
 .role-reveal {
   display: grid;
@@ -1966,7 +1986,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .secondary-action { background: #102420; border-color: var(--line); color: var(--text); }
 .danger-action { background: #30131a; color: #ff8491; border-color: var(--danger); }
 .primary-action:not(:disabled):active, .secondary-action:not(:disabled):active { transform: translate(2px, 2px); box-shadow: none; }
-.panel, .player-hero, .evidence-card, .game-dialog, .player-card, .metric-card, .toast, .role-carousel-card {
+.panel, .player-hero, .evidence-card, .game-dialog, .player-card, .metric-card, .toast {
   border-radius: 0;
   border-color: var(--line);
   box-shadow: 3px 3px 0 #0006;
@@ -1977,8 +1997,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .game-dialog { border: 2px solid var(--line); padding: 24px; max-height: calc(100dvh - 32px); }
 .game-dialog::backdrop { background: #020a08de; backdrop-filter: blur(4px); }
 .status-pill, .phase-badge, .quota, .queue-count { border-radius: 0; border: 1px solid currentColor; padding: 4px 8px; }
-.big-code, .room-code-input, .room-chip b, .countdown, .metric-card strong, .recovery-code { font-family: var(--font-pixel), monospace; font-variant-numeric: tabular-nums; }
-.role-thumb, .role-art, .role-carousel-art, .role-card-art, .role-reveal-art, .player-hero-art, .avatar img { image-rendering: pixelated; }
+.big-code, .room-code-input, .room-chip b, .countdown, .metric-card strong { font-family: var(--font-pixel), monospace; font-variant-numeric: tabular-nums; }
+.role-thumb, .role-art, .role-card-art, .role-reveal-art, .player-hero-art, .avatar img { image-rendering: pixelated; }
 .avatar { width: 48px; height: 48px; flex: 0 0 48px; border: 1px solid var(--line); border-radius: 0; background: #061210; overflow: hidden; }
 .avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .avatar-unselected { display:grid; place-items:center; color:var(--muted); font-family:var(--font-pixel),monospace; background:linear-gradient(135deg,#102a24,#061210); }
@@ -2009,9 +2029,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .topbar, .game-nav { background-color: #081b18; }
 .game-nav button.active { box-shadow: inset 3px 0 var(--acid); }
 .icon-button, .topbar-btn, .privacy-button, .stepper button { min-width: 44px; min-height: 44px; border-radius: 0; }
-.role-carousel-dots { flex-wrap: wrap; gap: 0; }
-.role-carousel-dots button { width: 44px; height: 44px; min-height: 44px; border: 16px solid transparent; background-clip: content-box; border-radius: 0; }
-.role-carousel-dots button.active { width: 44px; }
 .lobby-waiting-screen { height: auto !important; overflow-y: auto !important; }
 .waiting-copy { max-height: none; overflow: visible; padding-block: 20px; }
 .waiting-roster { max-height: none; overflow: visible; padding: 12px; }
@@ -2068,7 +2085,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .access-panel .room-code-input { letter-spacing: .2em; font-size: 22px !important; }
 .room-code-input::placeholder { letter-spacing: .04em; font-size: 16px; }
 .input-hint { font-size: 13px; color: var(--muted); font-weight: 400; }
-.recovery-link { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 0; color: var(--muted); font-size: 14px; background: transparent; border: 0; text-align: left; }
 .access-reassurance { display: flex; gap: 12px; align-items: center; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; color: var(--muted); }
 .access-reassurance p { font-size: 13px; margin: 0; }
 .entry-form-header h1:focus, .entry-story h1:focus { outline: none; }

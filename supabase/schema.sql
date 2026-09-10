@@ -31,7 +31,7 @@ alter table public.rooms drop column if exists player_pin_hash;
 alter table public.rooms add column if not exists end_game_result jsonb;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
-  user_id uuid not null references auth.users(id), name text not null, reclaim_token_hash text, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
+  user_id uuid not null references auth.users(id), name text not null, is_online boolean not null default true, last_seen_at timestamptz not null default now(),
   health public.health_state not null default 'alive', avatar_id text, joined_at timestamptz not null default now(), unique(room_id, user_id)
 );
 create table if not exists public.avatar_catalog (
@@ -118,7 +118,6 @@ alter table public.rooms
   add column if not exists closed_at timestamptz;
 alter table public.players
   add column if not exists last_seen_at timestamptz not null default now(),
-  add column if not exists reclaim_token_hash text,
   add column if not exists avatar_id text;
 alter table public.player_secrets
   add column if not exists initial_role text not null default 'villager',
@@ -395,28 +394,22 @@ end $$;
 
 drop function if exists public.join_room(text,text);
 drop function if exists public.join_room(text,text,text);
-create or replace function public.join_room(p_code text,p_name text,p_reclaim_token text default null) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; p public.players; issued_token text;
+create or replace function public.join_room(p_code text,p_name text) returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.rooms; p public.players;
 begin
   if auth.uid() is null or nullif(trim(p_name),'') is null or char_length(trim(p_name))>24 then raise exception 'invalid credentials or player name'; end if;
   select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
   if not found or r.host_user_id=auth.uid() then raise exception 'invalid room or host cannot play'; end if;
   select * into p from public.players where room_id=r.id and lower(name)=lower(trim(p_name)) limit 1;
   if found and p.user_id=auth.uid() then
-    if p.reclaim_token_hash is null then
-      issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
-      update public.players set reclaim_token_hash=md5(issued_token),is_online=true,last_seen_at=now() where id=p.id returning * into p;
-    else update public.players set is_online=true,last_seen_at=now() where id=p.id returning * into p; end if;
-  elsif found and p.reclaim_token_hash is not null and p.reclaim_token_hash=md5(trim(coalesce(p_reclaim_token,''))) then
-    update public.players set user_id=auth.uid(),is_online=true,last_seen_at=now() where id=p.id returning * into p;
-  elsif found then raise exception 'player name is already in use; enter reclaim token';
+    update public.players set is_online=true,last_seen_at=now() where id=p.id returning * into p;
+  elsif found then raise exception 'player name is already in use';
   elsif r.phase <> 'lobby' then raise exception 'game already started';
   elsif (select count(*) from public.players where room_id=r.id) >= 28 then raise exception 'room is full';
   else
-    issued_token := md5(random()::text||clock_timestamp()::text||auth.uid()::text);
-    insert into public.players(room_id,user_id,name,reclaim_token_hash) values(r.id,auth.uid(),trim(p_name),md5(issued_token)) returning * into p;
+    insert into public.players(room_id,user_id,name) values(r.id,auth.uid(),trim(p_name)) returning * into p;
   end if;
-  return jsonb_build_object('playerId',p.id,'reclaimToken',issued_token) || public.get_room_view(r.code);
+  return jsonb_build_object('playerId',p.id) || public.get_room_view(r.code);
 end $$;
 
 create or replace function public.start_game(p_code text,p_role_counts jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
@@ -604,8 +597,8 @@ declare r public.rooms; begin select * into r from public.rooms where code=upper
 create or replace function public.close_room(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare r public.rooms; begin select * into r from public.rooms where code=upper(trim(p_code)) and host_user_id=auth.uid() and closed_at is null for update; if not found or r.phase not in ('lobby','ended') then raise exception 'room cannot close yet'; end if; delete from public.evidence where room_id=r.id; update public.rooms set closed_at=now() where id=r.id; return public.get_room_view(r.code); end $$;
 
-revoke execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) from public, anon;
-grant execute on function public.create_room(text,text),public.join_room(text,text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) to authenticated;
+revoke execute on function public.create_room(text,text),public.join_room(text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) from public, anon;
+grant execute on function public.create_room(text,text),public.join_room(text,text),public.get_room_view(text),public.start_game(text,jsonb),public.select_avatar(text,text),public.remove_lobby_player(text,uuid),public.submit_evidence(text,uuid,text,timestamptz),public.reject_evidence(text,uuid),public.approve_evidence(text,uuid),public.resolve_bomb(text,uuid[]),public.use_reporter(text,uuid),public.heartbeat(text),public.set_accusation_at(text,timestamptz),public.resolve_police_check(text,uuid),public.end_game(text),public.close_room(text) to authenticated;
 
 create or replace function public.claim_room_notifications(p_limit integer default 20)
 returns table(id uuid,room_id uuid,room_code text,recipient_user_id uuid,kind text,attempts integer)
@@ -696,7 +689,11 @@ language plpgsql security definer set search_path=public as $$ begin
 end $$;
 
 create or replace function public.v24_victory(rid uuid, at_time timestamptz) returns void
-language plpgsql security definer set search_path=public as $$ declare successor uuid; begin
+language plpgsql security definer set search_path=public as $$ declare successor uuid; r public.rooms; begin
+ select * into r from public.rooms where id=rid;
+ if coalesce((r.v24->>'finalVoteRules')::boolean,false) and not exists(select 1 from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.initial_role='killer') then
+  perform public.v24_finish(rid,'city','original-killer-eliminated',at_time); return;
+ end if;
  if not exists(select 1 from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.is_active_killer) then
   perform public.v24_finish(rid,'city','all-killers-eliminated',at_time); return;
  end if;
@@ -718,7 +715,7 @@ declare r public.rooms; k integer; police_id uuid; ranks uuid[]; fallback uuid[]
 begin
  select * into r from public.rooms where id=rid for update;
  if r.phase='ended' or r.v24->>'stage'<>'secret-vote' then return; end if;
- k:=(r.v24->>'nomineeCount')::int;
+ k:=case when coalesce((r.v24->>'finalVoteRules')::boolean,false) then 1 else (r.v24->>'nomineeCount')::int end;
  select array_agg(value::uuid order by ord) into fallback from jsonb_array_elements_text(r.v24->'fallback') with ordinality x(value,ord);
  select p.id into police_id from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.role_current='police';
  select ranking into ranks from public.v24_ballots where room_id=rid and voter_id=police_id;
@@ -735,8 +732,12 @@ begin
   select p.id,(select count(*) from public.v24_ballots b where b.room_id=rid and p.id=any(b.nominees)) score,array_position(ordered,p.id) tie
   from public.players p where p.room_id=rid and p.health<>'dead' order by score desc,tie limit k
  ) x;
- select array_agg(p.id) into killers from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.is_active_killer;
- update public.rooms set v24=v24||jsonb_build_object('nominees',nominees) where id=rid;
+ if coalesce((r.v24->>'finalVoteRules')::boolean,false) then
+  select array_agg(p.id) into killers from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.initial_role='killer';
+ else
+  select array_agg(p.id) into killers from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.is_active_killer;
+ end if;
+ update public.rooms set v24=v24||jsonb_build_object('nominees',nominees,'nomineeCount',k) where id=rid;
  perform public.v24_finish(rid,case when nominees @> killers and killers @> nominees then 'city'::winning_team else 'killers'::winning_team end,'final-vote',(r.v24->>'voteEndsAt')::timestamptz);
 end $$;
 
@@ -762,7 +763,8 @@ begin
    update public.rooms set v24=v24||jsonb_build_object('stage',case when t>=final_at-interval '10 minutes' then 'final-discussion' else 'resolution' end) where id=rid;
   elsif r.v24->>'stage'<>'secret-vote' then
    if (select count(*) from public.v24_actions where room_id=rid and lethal and status='approved')<2 then perform public.v24_finish(rid,'city','final-low-kills',final_at); return; end if;
-   select count(*) into k from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.is_active_killer;
+   if coalesce((r.v24->>'finalVoteRules')::boolean,false) then k:=1;
+   else select count(*) into k from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=rid and p.health<>'dead' and s.is_active_killer; end if;
    select jsonb_agg(id order by random()) into voters from public.players where room_id=rid and health<>'dead';
    -- A delayed Host resolution must not silently consume the secret voting window.
    update public.rooms set v24=v24||jsonb_build_object('stage','secret-vote','nomineeCount',k,'fallback',voters,'voters',voters,'voteEndsAt',greatest(t,final_at)+interval '3 minutes') where id=rid;
@@ -837,7 +839,7 @@ duration:=coalesce((r.v24->>'durationMinutes')::int,600);
   role:=roles[idx]; idx:=idx+1; hp:=case role when 'killer' then 0 when 'killer-wife' then 1 when 'athlete' then 3 else 2 end;
   insert into public.player_secrets(player_id,initial_role,role_current,team,is_active_killer,hearts,max_hearts) values(p.id,role,role,case when role in ('killer','killer-wife') then 'killers' else 'city' end,role='killer',hp,hp);
  end loop;
- update public.rooms set phase='active',police_check_at=null,v24=v24||jsonb_build_object('stage','active','startedAt',t,'finalAt',t+make_interval(mins=>duration),'cutoffAt',t+make_interval(mins=>duration-30),'revealEndsAt',t+make_interval(mins=>duration-120),'huntDeadline',t+interval '120 minutes') where id=r.id;
+ update public.rooms set phase='active',police_check_at=null,v24=v24||jsonb_build_object('finalVoteRules',true,'stage','active','startedAt',t,'finalAt',t+make_interval(mins=>duration),'cutoffAt',t+make_interval(mins=>duration-30),'revealEndsAt',t+make_interval(mins=>duration-120),'huntDeadline',t+interval '120 minutes') where id=r.id;
  perform public.add_event(r.id,'system','เกมเริ่มแล้ว'); return public.get_room_view(p_code);
 end $$;
 -- All mutations serialize on the room row. The two-minute watermark prevents
@@ -881,9 +883,15 @@ begin
   lethal_hit:=s.hearts=1 and s.initial_role<>'killer-wife';
   if lethal_hit and exists(select 1 from public.v24_actions where room_id=r.id and status='approved' and lethal and effective_at>a.effective_at-interval '60 minutes' and effective_at<=a.effective_at) then raise exception 'rolling kill quota reached; reject evidence'; end if;
   if s.initial_role='killer-wife' then
-   update public.player_secrets set role_current='killer',is_active_killer=true,team='killers',hearts=0,max_hearts=0 where player_id=target.id;
-   perform public.add_event(r.id,'ability','มี Killer คนที่สองเกิดขึ้น');
-   perform public.add_event(r.id,'ability','คุณกลายเป็น Killer แล้ว',target.id);
+   if coalesce((r.v24->>'finalVoteRules')::boolean,false) then
+    update public.player_secrets set is_active_killer=true,team='killers',hearts=0,max_hearts=0 where player_id=target.id;
+    perform public.add_event(r.id,'ability','Killer''s Wife has awakened. There are now two active Killers.');
+    perform public.add_event(r.id,'ability','คุณปลดพลัง Killer’s Wife แล้ว',target.id);
+   else
+    update public.player_secrets set role_current='killer',is_active_killer=true,team='killers',hearts=0,max_hearts=0 where player_id=target.id;
+    perform public.add_event(r.id,'ability','มี Killer คนที่สองเกิดขึ้น');
+    perform public.add_event(r.id,'ability','คุณกลายเป็น Killer แล้ว',target.id);
+   end if;
   else
    hp:=greatest(0,s.hearts-1);
    update public.player_secrets set hearts=hp,protection_until=a.effective_at+interval '45 minutes' where player_id=target.id;
@@ -997,6 +1005,9 @@ begin
    if exists(select 1 from public.rooms where id=r.id and phase='ended') then return public.get_room_view(p_code)||jsonb_build_object('actionError','game_ended'); end if;
   end if;
  end if;
+ if r.id is not null and exists(select 1 from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=r.id and p.user_id=auth.uid() and p.health<>'dead' and s.role_current='reporter' and not s.has_used_ability) and (select count(*) from public.players where room_id=r.id and health<>'dead')*2<=(select count(*) from public.players where room_id=r.id) then
+  raise exception 'reporter ability requires more than half of starting players alive';
+ end if;
  return public.use_reporter_pre24(p_code,p_target_id);
 end $$;
 create or replace function public.resolve_police_check(p_code text,p_target_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$ begin
@@ -1012,12 +1023,13 @@ create or replace function public.end_game(p_code text) returns jsonb language p
 end $$;
 
 create or replace function public.submit_final_ballot(p_code text,p_nominees uuid[],p_ranking uuid[]) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; me uuid; police boolean; eligible uuid[]; begin
+declare r public.rooms; me uuid; police boolean; eligible uuid[]; expected integer; begin
  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
  select p.id,s.role_current='police' into me,police from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=r.id and p.user_id=auth.uid() and p.health<>'dead';
  if me is null or r.rules_version is distinct from '2.4' or r.phase='ended' or r.v24->>'stage'<>'secret-vote' or clock_timestamp()>=(r.v24->>'voteEndsAt')::timestamptz then raise exception 'vote unavailable'; end if;
+ expected:=case when coalesce((r.v24->>'finalVoteRules')::boolean,false) then 1 else (r.v24->>'nomineeCount')::int end;
  select array_agg(value::uuid) into eligible from jsonb_array_elements_text(r.v24->'voters') where value<>me::text;
- if p_nominees is null or cardinality(p_nominees)<>(r.v24->>'nomineeCount')::int or cardinality(p_nominees)<>(select count(distinct x) from unnest(p_nominees) x) or not p_nominees<@eligible then raise exception 'invalid ballot'; end if;
+ if p_nominees is null or cardinality(p_nominees)<>expected or cardinality(p_nominees)<>(select count(distinct x) from unnest(p_nominees) x) or not p_nominees<@eligible then raise exception 'invalid ballot'; end if;
  if police and (p_ranking is null or cardinality(p_ranking)<>cardinality(eligible) or cardinality(p_ranking)<>(select count(distinct x) from unnest(p_ranking) x) or not p_ranking<@eligible) then raise exception 'invalid police ranking'; end if;
  if not police and coalesce(cardinality(p_ranking),0)>0 then raise exception 'ranking is police only'; end if;
  insert into public.v24_ballots(room_id,voter_id,nominees,ranking) values(r.id,me,p_nominees,coalesce(p_ranking,'{}')) on conflict do nothing;
@@ -1144,7 +1156,7 @@ create policy "host, owner, or eliminated member reads evidence" on storage.obje
 
 create or replace function public.get_room_view(p_code text) returns jsonb
 language plpgsql security definer set search_path=public as $$
-declare result jsonb; r public.rooms; me public.players; allowed boolean := false; activity jsonb := '[]'::jsonb;
+declare result jsonb; r public.rooms; me public.players; allowed boolean := false; hidden boolean := false; activity jsonb := '[]'::jsonb; filtered_events jsonb;
 begin
   result := public.get_room_view_attack_activity_base(p_code);
   if result is null then return null; end if;
@@ -1155,6 +1167,25 @@ begin
   else
     select * into me from public.players where room_id=r.id and user_id=auth.uid();
     allowed := me.id is not null and me.health='dead';
+  end if;
+  hidden := coalesce((r.v24->>'finalVoteRules')::boolean,false)
+    and r.rules_version='2.4' and r.phase<>'ended'
+    and not (r.host_user_id=auth.uid()) and me.id is not null and me.health<>'dead'
+    and clock_timestamp()>=(r.v24->>'cutoffAt')::timestamptz;
+  if hidden then
+    select coalesce(jsonb_agg(value order by ord),'[]'::jsonb) into filtered_events
+    from jsonb_array_elements(coalesce(result->'events','[]'::jsonb)) with ordinality event(value,ord)
+    where not (
+      (value->>'type') in ('attack','bomb')
+      or ((value->>'type')='warning' and ((value->>'message')='คุณถูกโจมตีและเสียหัวใจ 1 ดวง' or (value->>'message') like '% ถูกกำจัด'))
+      or ((value->>'type')='ability' and (value->>'message') in (
+        'Killer''s Wife has awakened. There are now two active Killers.',
+        'คุณปลดพลัง Killer’s Wife แล้ว',
+        'Killer has eliminated Killer''s Wife. There are now two Killers.',
+        'คุณกลายเป็น Killer แล้ว'
+      ))
+    );
+    result := result || jsonb_build_object('events',filtered_events);
   end if;
   if allowed then
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -1167,7 +1198,8 @@ begin
   end if;
   return result || jsonb_build_object(
     'canViewAttackActivity',allowed,
-    'attackActivity',activity
+    'attackActivity',activity,
+    'attackActivityHidden',hidden
   );
 end $$;
 revoke all on function public.get_room_view_attack_activity_base(text) from public,anon,authenticated;

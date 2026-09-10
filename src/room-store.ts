@@ -134,6 +134,7 @@ function asRoom(value: unknown): RoomState {
     ),
     evidences,
     canViewAttackActivity: Boolean(data.canViewAttackActivity ?? data.can_view_attack_activity),
+    attackActivityHidden: Boolean(data.attackActivityHidden ?? data.attack_activity_hidden),
     attackActivity: ((data.attackActivity ?? data.attack_activity ?? []) as Array<Json>).map((item) => ({
       id: String(item.id),
       killerId: String(item.killerId ?? item.killer_id),
@@ -309,7 +310,6 @@ export async function createOrLoadRoom(code: string, hostName: string) {
 export async function joinOrCreateDemo(
   code: string,
   name: string,
-  reclaimToken?: string,
 ) {
   const normalizedCode = roomCodeValue(code);
   const normalizedName = textValue(name);
@@ -319,7 +319,6 @@ export async function joinOrCreateDemo(
   const { data, error } = await client().rpc("join_room", {
     p_code: normalizedCode,
     p_name: normalizedName,
-    p_reclaim_token: textValue(reclaimToken) || null,
   });
   if (error) throw error;
   const room = asRoom(data);
@@ -335,9 +334,6 @@ export async function joinOrCreateDemo(
   return {
     room,
     playerId: player.id,
-    reclaimToken:
-      textValue((data as Json).reclaimToken ?? (data as Json).reclaim_token) ||
-      undefined,
   };
 }
 

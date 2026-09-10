@@ -5,6 +5,15 @@ the supplied KILLER Balance Playtest v2.4 Hunt Clock specification. Future balan
 experiments in that document are not enabled rules. Existing rooms remain
 `legacy`; see [legacy rules](docs/LEGACY_GAME_RULES.md).
 
+## Current rules and compatible 2.4 rooms
+
+Rules below describe the current 2.4 profile used by rooms started after the
+final-vote revision (`v24.finalVoteRules = true`). Rooms that started before
+that revision keep their existing 2.4 behavior (`finalVoteRules` absent/false):
+they do not end when the original Killer dies, the Wife changes her current role
+to Killer when awakened, and Final voting selects the number of living active
+Killers (one or two). The relevant compatibility behavior is called out below.
+
 ## Setup and schedule
 
 - Default 12 players plus Host: Killer, Wife, Police, Detective, Reporter,
@@ -54,9 +63,11 @@ experiments in that document are not enabled rules. Existing rooms remain
   exactly at deadline counts; Host review time does not move the kill time.
 - Missed Hunt deadline ends the game for City, with deadline recorded as result
   time. A later action cannot rescue a missed clock.
-- After an event first check living active Killers: none means City wins. Then
-  resolve Police succession; no living Active Police means Killer Side wins.
-  Resolve Bomber victims before these checks.
+- After an event, current-rule rooms first check whether the original Killer is
+  alive; if not, City wins. Then check living active Killers: none means City
+  wins. Resolve Police succession next; no living Active Police means Killer
+  Side wins. Resolve Bomber victims before these checks. Earlier 2.4 rooms skip
+  the original-Killer check.
 - At Final, 0–1 confirmed Killer kills gives City victory; 2+ enters secret vote.
   There is no 5+ automatic Killer win.
 - Server scheduler and room RPCs evaluate time idempotently. Browser countdowns
@@ -66,17 +77,21 @@ experiments in that document are not enabled rules. Existing rooms remain
 
 - **Killer:** Killer Side, active, no Heart bar, immune to normal attacks. Bomber
   can kill them. Sees only survived/eliminated attack outcomes, not target secrets.
-- **Wife:** Killer Side, one Heart. First approved hit transforms without death.
-  Public learns only that a second Killer exists. Killers see each other after
-  transformation and share quota/clock. Untransformed Wife votes but is not an
-  active Killer that City must nominate.
+- **Wife:** Killer Side, one Heart. In current-rule rooms, the first approved
+  hit awakens her as an active Killer without death while her current role stays
+  Wife. Public learns only that a second Killer exists. Killers see each other
+  after awakening and share quota/clock. The hit costs one attack, no kill; an
+  explosion does not awaken her. Earlier 2.4 rooms instead change her current
+  role to Killer.
 - **Police:** two Hearts, no Vest; attacks damage normally. One public Reveal
   Badge per Active Police at/before Reveal deadline, without health/protection
   benefit. Sends normal ballot and secret tie ranking.
 - **Detective:** two Hearts, no scan. Privately promotes when Police dies, with
   two Hearts, no Vest, own Reveal Badge and Police voting duties.
 - **Reporter:** two Hearts; one inspection of another living player's initial
-  role before cutoff. Transformed Wife reports Wife, successor reports Detective.
+  role before cutoff, only while more than half of the starting players remain
+  alive (10 players requires 6 alive; 9 requires 5). Transformed Wife reports
+  Wife, successor reports Detective.
   Result private; public sees only ability-use announcement.
 - **Bomber:** two Hearts. Killer-caused death reveals Bomber and pauses resolution.
   Host chooses 0–1 living victim by judging the evidence image. Explosion ignores
@@ -93,13 +108,17 @@ experiments in that document are not enabled rules. Existing rooms remain
 
 ## Secret vote
 
-- Freeze living voter IDs and active Killer count K (1 or 2) at opening.
-  All living players, including Killer Side, submit one ballot choosing exactly
-  K distinct other living players. Host/dead players cannot vote.
+- Current-rule rooms freeze living voter IDs and require every living player,
+  including Killer Side, to submit one ballot choosing exactly one other living
+  player. Host/dead players cannot vote. City wins only when that nominee is the
+  living original Killer, with no extra name.
+- Earlier 2.4 rooms freeze both living voter IDs and active Killer count K (one
+  or two). Each ballot chooses exactly K distinct other living players, and City
+  wins only when the nominees equal the complete living active-Killer set.
 - Submission is immutable; retries cannot replace it. Missing ballots abstain.
   Players cannot see other ballots, live scores or fallback ranking.
-- Each selected name earns one point. Top K become nominees. City wins only
-  when nominees equal the complete living active Killer set with no extra name.
+- Each selected name earns one point. The top required number of names become
+  nominees: one in current-rule rooms, or K in earlier 2.4 rooms.
 - Police ranks every other living player with their ballot. Use ranking only
   within tied scores. Commit a random private fallback permutation before votes
   open. Use fallback if Police ranking is absent. Insert Police at their fallback
@@ -112,10 +131,13 @@ experiments in that document are not enabled rules. Existing rooms remain
 ## Privacy and persistence
 
 - Supabase owns state; actions, ballots, secrets, timestamps and results survive
-  refresh/reconnect/reclaim. Public avatars never encode private roles.
+  refresh/reconnect with the same session. Public avatars never encode private roles.
 - Players see only own hearts/protection/ability counters/ballot. Killer team
   receives permitted shared progress and Hunt/quota metadata. Host sees evidence.
   Private tables are inaccessible directly to client roles.
+- In current-rule rooms, after cutoff and until the game ends, a living player
+  cannot view attack-related history or timestamps. Host and eliminated players
+  retain their permitted views.
 - Realtime emits harmless room signals and recipient-specific generic notices.
   Lock-screen push cannot expose roles, targets, health or inspection information.
 - Existing close-room flow removes evidence images; summaries remain accessible.

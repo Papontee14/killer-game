@@ -99,6 +99,16 @@ export function presentEvent(
         "danger",
         "mask",
       ),
+      "Killer's Wife has awakened. There are now two active Killers.": result(
+        "Killer’s Wife ปลดพลังแล้ว ขณะนี้มีผู้โจมตี 2 คน",
+        "danger",
+        "mask",
+      ),
+      "คุณปลดพลัง Killer’s Wife แล้ว": result(
+        `${subject}ปลดพลัง Killer’s Wife แล้ว และอยู่ Killer Side`,
+        "danger",
+        "mask",
+      ),
       "คุณกลายเป็น Killer แล้ว": result(
         `${subject}เปลี่ยนเป็น Killer แล้ว ขณะนี้${subject}อยู่ Killer Side`,
         "danger",

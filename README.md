@@ -27,6 +27,10 @@ npm run dev
 
 หน้าเว็บรองรับ RPC รุ่นเดิมที่ไม่ส่ง `endGameSummary` ผ่าน `POST /api/room/summary` ด้วย โดยต้องตั้ง `SUPABASE_SERVICE_ROLE_KEY` ใน environment ของเซิร์ฟเวอร์ (ห้ามใช้ prefix `NEXT_PUBLIC_`) เส้นทางนี้ตรวจสมาชิกและสถานะจบเกมด้วย RPC ภายใต้ token ของผู้เรียกก่อนอ่านเฉพาะบทบาทและฝ่าย ไม่มีการเปิดเผยหัวใจหรือหลักฐาน และไม่ cache ผลตอบกลับ หากโหลดไม่สำเร็จ หน้าเว็บจะลองใหม่ในการรีเฟรชสถานะห้องรอบถัดไป
 
+## Player re-entry
+
+Deploy `supabase/migrations/20260910_remove_recovery_tokens.sql` with the frontend release, while no game is in progress. It removes recovery credentials, changes `join_room` to two parameters, and keeps re-entry available only to the same Supabase session. A player using a new device or cleared browser data must choose a different name before the game starts.
+
 ## Server notification queue
 
 รัน `supabase/migrations/20260907_server_notification_queue.sql` หลัง migration ปัจจุบัน แล้ว deploy ก่อนเปิดใช้งาน queue. ตั้งค่า Vercel server environment: `SUPABASE_SERVICE_ROLE_KEY`, `WEB_PUSH_PRIVATE_KEY`, `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY`, `PUSH_DISPATCH_SECRET` และ `NEXT_PUBLIC_SITE_URL`.

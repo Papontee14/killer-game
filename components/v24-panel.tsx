@@ -243,7 +243,8 @@ export function V24Panel({ room, act, busy }: Props) {
       {room.phase === "secret-vote" && (
         <div className="v24-action">
           <p>
-            ห้ามพูดคุยหรือส่งข้อมูลเกมเพิ่มเติม · เลือก {v.nomineeCount} คน ·
+            ห้ามพูดคุยหรือส่งข้อมูลเกมเพิ่มเติม · เลือก {v.nomineeCount} คน
+            {v.finalVoteRules ? " (Killer ตั้งต้นเท่านั้นจึงชนะ)" : ""} ·
             ส่งแล้วแก้ไม่ได้
           </p>
           {!host && !alive && <p>ผู้เสียชีวิตไม่มีสิทธิ์โหวต</p>}

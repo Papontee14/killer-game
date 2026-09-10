@@ -2,7 +2,6 @@
 import {
   BookOpen,
   ChevronRight,
-  Fingerprint,
   QrCode,
   ShieldCheck,
 } from "lucide-react";
@@ -19,8 +18,6 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
   const [view, setView] = useState<"home" | "join" | "host">(initialCode ? "join" : "home");
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState("");
-  const [recovery, setRecovery] = useState(false);
-  const [token, setToken] = useState("");
   const [rules, setRules] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -32,7 +29,6 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
       const next = screen === "join" || screen === "host" ? screen : initialCode && screen !== "home" ? "join" : "home";
       setView(next);
       if (next !== "home") setMode(next);
-      setRecovery(false);
       setScannerOpen(false);
       setBusy(false);
     };
@@ -49,7 +45,6 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
     window.history.pushState({ ...window.history.state, killerEntry: true }, "", `#${next}`);
     setView(next);
     if (next !== "home") setMode(next);
-    setRecovery(false);
     setBusy(false);
   }
   function backToHome() {
@@ -65,7 +60,7 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
     setBusy(true);
     rememberRoomCredentials(
       `${mode === "host" ? "host" : "player"}:${roomCode}`,
-      { name: name.trim(), reclaimToken: recovery ? token : undefined },
+      { name: name.trim() },
     );
     router.push(`/room/${roomCode}${mode === "host" ? "/host" : ""}`);
   }
@@ -122,16 +117,10 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
             <div className="entry-form-body">
             <div className="access-heading">
               <h2>
-                {recovery
-                  ? "กลับมาเป็นคุณคนเดิม"
-                  : mode === "host"
-                    ? "เริ่มเกมของคุณ"
-                    : "เข้าห้องของเพื่อน"}
+                {mode === "host" ? "เริ่มเกมของคุณ" : "เข้าห้องของเพื่อน"}
               </h2>
               <p>
-                {recovery
-                  ? "ใช้รหัสห้อง ชื่อเดิม และรหัสกู้คืนที่บันทึกไว้"
-                  : mode === "host"
+                {mode === "host"
                     ? <>
                         คุณคือ Host ผู้ดูแลเกม
                         <br />
@@ -195,42 +184,17 @@ export function LandingGame({ initialCode = "" }: { initialCode?: string }) {
                   ใช้ชื่อที่เพื่อนรู้จัก · ไม่เกิน 24 ตัวอักษร
                 </span>
               </label>
-              {recovery && (
-                <label>
-                  รหัสกู้คืน
-                  <input
-                    required
-                    value={token}
-                    onChange={(e) => setToken(e.target.value.trim())}
-                    autoComplete="off"
-                    placeholder="รหัสที่บันทึกตอนเข้าร่วมครั้งแรก"
-                  />
-                </label>
-              )}
               <button className="primary-action" type="submit" disabled={busy}>
                 <span>
                   {busy
                     ? "กำลังเข้าห้อง…"
-                    : recovery
-                      ? "กู้คืนตัวละคร"
-                      : mode === "host"
+                    : mode === "host"
                         ? "สร้างห้อง"
                         : "เข้าสู่เกม"}
                 </span>
                 <PixelIcon name="arrow" size={24} />
               </button>
             </form>
-            {mode === "join" && (
-              <button
-                className="recovery-link"
-                onClick={() => setRecovery(!recovery)}
-              >
-                <Fingerprint size={16} />
-                {recovery
-                  ? "กลับไปเข้าร่วมเกม"
-                  : "เคยเข้าร่วมแล้ว? กู้คืนตัวละคร"}
-              </button>
-            )}
             <div className="access-reassurance">
               <ShieldCheck size={18} />
               <p>

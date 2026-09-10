@@ -1,11 +1,11 @@
 ﻿# KILLER — UX/UI implementation
 
-The real application remains on `/`, `/room/[code]`, and `/room/[code]/host`. Room data, private role projections, abilities, evidence approval, and recovery use the existing Supabase RPCs; there is no production demo-data fallback.
+The real application remains on `/`, `/room/[code]`, and `/room/[code]/host`. Room data, private role projections, abilities, and evidence approval use the existing Supabase RPCs; there is no production demo-data fallback.
 
 ## Design system
 
 - `app/redesign.css`: dark green surfaces, muted green borders, neon green primary actions, red danger states, amber pending states; Thai Noto Sans typography; focus styles, 44–52px targets, safe-area navigation, reduced motion.
-- `components/game-ui.tsx`: brand, native modal dialog with focus management, rules for all nine roles, private role reveal and transitions, recovery card, player/Host navigation, network state.
+- `components/game-ui.tsx`: brand, native modal dialog with focus management, rules for all nine roles, private role reveal and transitions, player/Host navigation, network state.
 - Existing shared player rows, hearts, evidence cards, event feed, quota cards, and camera now use the same visual system. Public avatars are neutral initials. Public rows never show role or hearts.
 - Player layouts support 360px/390px; Host uses a desktop sidebar and mobile bottom navigation.
 
@@ -13,8 +13,8 @@ The real application remains on `/`, `/room/[code]`, and `/room/[code]/host`. Ro
 
 | Path | Implementation |
 | --- | --- |
-| Join / create / recover | Entry tabs, 6-character code, 24-character name, optional recovery credentials; same-device resume remains automatic |
-| Lobby → role → play | Live roster, Host name, private recovery card, role reveal, acknowledgment, role-specific actions |
+| Join / create | Entry tabs, 6-character code and 24-character name; same-session resume remains automatic |
+| Lobby → role → play | Live roster, Host name, role reveal, acknowledgment, role-specific actions |
 | Killer evidence | Living non-ally target → rear live camera → preview and two-minute timer → submit → shared status history; no gallery input or historical evidence image for players |
 | Host review | Queue, enlarge private image, captured/submitted timestamps, approval/rejection, duplicate-action lock, quota and phase restrictions |
 | Reporter | Target → confirmation → one-use action → private result in news; original role remains server-authoritative |
@@ -22,7 +22,7 @@ The real application remains on `/`, `/room/[code]`, and `/room/[code]/host`. Ro
 | Role changes | Live private wife-to-Killer and Detective-to-Police dialogs; current-role actions and hearts update |
 | Bomber | Paused state → Host selects 0–2 living players → named consequence review → resolve |
 | End / close | Player outcome and five-second countdown; Host stays to download ZIP and confirm closure |
-| Leave / recover | Name-confirmed departure, recovery explanation, new-device restoration of the same player |
+| Leave | Name-confirmed departure; a new device or cleared browser data cannot restore the same player |
 | System states | Offline/stale data with retry, permission denial, expired photo, empty lists, action errors in Thai, spectator state, closed-room state |
 
 The archive now includes `game-summary.json` alongside evidence images, even if there are no images. A failed close can be retried without forcing another download of already removed images. Archives are Host-only; after the game ends, every authorized player can see the initial role of every player in the result screen.
@@ -34,7 +34,7 @@ Apply `supabase/migrations/20260905_room_closed_state.sql` to the target Supabas
 ## Validation
 
 - `npm test`: rules, projection privacy, concurrent actions, session persistence, service worker privacy.
-- `npm run test:browser`: real SQL fixtures through an intercepted Supabase transport; camera lifecycle, evidence, role abilities, all nine mobile variants, private transformations, recovery, responsive navigation, archive and closure.
+- `npm run test:browser`: real SQL fixtures through an intercepted Supabase transport; camera lifecycle, evidence, role abilities, all nine mobile variants, private transformations, same-session re-entry, responsive navigation, archive and closure.
 - `npm run typecheck`, `npm run lint`, `npm run build`.
 - Browser screenshots are generated in `test-results/redesign-desktop.png`, `redesign-mobile.png`, and `redesign-host.png`. Host review screenshots use consistent Thai names.
 

@@ -2873,7 +2873,7 @@ export function PlayerRoom({
           </div>
         </aside>
       </div>
-      {showRules && <Rules rulesVersion={room.rulesVersion} phase={room.phase} finalVoteRules={room.v24?.finalVoteRules} wifeRevoteRules={room.v24?.wifeRevoteRules} onClose={() => setShowRules(false)} />}
+      {showRules && <Rules rulesVersion={room.rulesVersion} phase={room.phase} finalVoteRules={room.v24?.finalVoteRules} wifeRevoteRules={room.v24?.wifeRevoteRules} tieRunoffRules={room.phase === "lobby" ? true : Boolean(room.v24?.tieRunoffRules)} onClose={() => setShowRules(false)} />}
       {roleOpen && room.phase !== "ended" && (
         <RoleReveal
           rulesVersion={room.rulesVersion}

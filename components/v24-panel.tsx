@@ -120,8 +120,10 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
   const excludedVoterIds = v?.excludedVoterIds ?? [];
   const wifeRevoteRules = Boolean(v?.wifeRevoteRules || v?.voteRound);
   const eligibleVoters = living.filter((p) => !excludedVoterIds.includes(p.id));
-  const choices = eligibleVoters.filter((p) => p.id !== room.playerId);
-  const voterKey = choices.map((p) => p.id).join(",");
+  const runoff = Boolean(v?.tieRunoffRules && (v?.voteRound ?? 1) > 2);
+  const mainRound = (v?.voteRound ?? 1) - (runoff ? 2 : 0);
+  const choices = eligibleVoters.filter((p) => p.id !== room.playerId && (!runoff || v?.runoffCandidates?.includes(p.id)));
+  const voterKey = eligibleVoters.filter((p) => p.id !== room.playerId).map((p) => p.id).join(",");
   const alive = living.some((p) => p.id === room.playerId);
   const names = (ids: string[]) =>
     ids
@@ -391,9 +393,9 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
       {room.phase === "secret-vote" && (
         <div className="v24-action">
           {wifeRevoteRules && (
-            <h3>โหวตลับรอบ {v.voteRound ?? 1}{v.voteRound === 2 ? " · รอบสุดท้าย" : ""}</h3>
+            <h3>โหวตลับรอบ {mainRound}{runoff ? " · แก้เสมอ 1 นาที" : mainRound === 2 ? " · รอบสุดท้าย" : ""}</h3>
           )}
-          {v.voteRound === 2 && v.voteRounds?.some((round) => round.outcome === "wife-revote") && (
+          {mainRound === 2 && v.voteRounds?.some((round) => round.outcome === "wife-revote") && (
             <p role="status">จับเมีย Killer ได้ — โหวตหา Killer ตั้งต้นอีกครั้ง</p>
           )}
           <p>
@@ -401,6 +403,9 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
             {v.finalVoteRules ? " (Killer ตั้งต้นเท่านั้นจึงชนะ)" : ""} ·
             ส่งแล้วแก้ไม่ได้
           </p>
+          {v.tieRunoffRules && <p>{runoff
+            ? `เลือกเฉพาะผู้ที่คะแนนเสมอ: ${names(v.runoffCandidates ?? [])} · หากยังเสมอ Killer Side ชนะ`
+            : "คะแนนสูงสุดเสมอใช้อันดับ Police; หากไม่มีอันดับหรือ Police อยู่ในกลุ่มที่เสมอ เปิดโหวตแก้เสมอ 1 นาทีได้ครั้งเดียว หากยังเสมอ Killer Side ชนะ"}</p>}
           {!host && !alive && <p>ผู้เสียชีวิตไม่มีสิทธิ์โหวต</p>}
           {!host && alive && excludedVoterIds.includes(room.playerId ?? "") && <p role="status">คุณถูกนำออกจากการโหวตแล้ว · รอผลรอบสุดท้าย</p>}
           {!host &&
@@ -437,7 +442,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
                     </label>
                   ))}
                 </fieldset>
-                {me?.currentRole === "police" && (
+                {me?.currentRole === "police" && !runoff && (
                   <fieldset disabled={busy || confirmVote}>
                     <legend>ลำดับตัดสินคะแนนเสมอ · อันดับ 1 สำคัญที่สุด</legend>
                     {ranking.map((id, i) => (
@@ -484,7 +489,7 @@ export function V24Panel({ room, act, busy, durationDraft, onDurationDraftChange
                       onClick={() =>
                         act(() =>
                           wifeRevoteRules
-                            ? submitFinalBallotRound(room.code, v.voteRound ?? 1, selected, me?.currentRole === "police" ? ranking : [])
+                            ? submitFinalBallotRound(room.code, v.voteRound ?? 1, selected, me?.currentRole === "police" && !runoff ? ranking : [])
                             : submitFinalBallot(room.code, selected, me?.currentRole === "police" ? ranking : []),
                         )
                       }

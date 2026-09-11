@@ -137,12 +137,14 @@ export function Rules({
   phase = "lobby",
   finalVoteRules,
   wifeRevoteRules,
+  tieRunoffRules,
 }: {
   onClose: () => void;
   rulesVersion?: "legacy" | "2.4";
   phase?: RoomPhase;
   finalVoteRules?: boolean;
   wifeRevoteRules?: boolean;
+  tieRunoffRules?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<"phases" | "roles">("phases");
   const tabId = useId();
@@ -196,7 +198,7 @@ export function Rules({
       </div>
       <section id={`${tabId}-phases-panel`} role="tabpanel" aria-labelledby={`${tabId}-phases-tab`} hidden={activeTab !== "phases"}>
         <ol className="guide-timeline">
-          {phases.map((guidePhase) => <GuidePhaseCard key={guidePhase.number} phase={guidePhase} latestFinalVoteRules={latestFinalVoteRules} wifeRevoteRules={wifeRevoteRules ?? phase === "lobby"} />)}
+          {phases.map((guidePhase) => <GuidePhaseCard key={guidePhase.number} phase={guidePhase} latestFinalVoteRules={latestFinalVoteRules} wifeRevoteRules={wifeRevoteRules ?? phase === "lobby"} tieRunoffRules={tieRunoffRules ?? phase === "lobby"} />)}
         </ol>
         {rulesVersion === "2.4" && (
           <details className="guide-interruption">
@@ -221,7 +223,7 @@ export function Rules({
   );
 }
 
-function GuidePhaseCard({ phase, latestFinalVoteRules, wifeRevoteRules }: { phase: GuidePhase; latestFinalVoteRules: boolean; wifeRevoteRules: boolean }) {
+function GuidePhaseCard({ phase, latestFinalVoteRules, wifeRevoteRules, tieRunoffRules }: { phase: GuidePhase; latestFinalVoteRules: boolean; wifeRevoteRules: boolean; tieRunoffRules: boolean }) {
   const isVote = phase.number === "05";
   const player = isVote && !latestFinalVoteRules
     ? "ถ้ามีการกำจัดที่ยืนยันแล้วเพียง 0–1 ครั้ง City ชนะทันที ถ้ามี 2 ครั้งขึ้นไป ผู้เล่นที่ยังมีชีวิตทุกฝ่ายหยุดสื่อสารและโหวตลับ เลือกผู้เล่นอื่นให้ครบตามจำนวน Killer ที่ทำงานอยู่ ส่งแล้วแก้ไม่ได้; ไม่ส่งถือว่างดออกเสียง. City ต้องเลือก Killer ที่ทำงานอยู่ให้ครบทุกคน."
@@ -233,7 +235,9 @@ function GuidePhaseCard({ phase, latestFinalVoteRules, wifeRevoteRules }: { phas
     <div className="guide-phase-heading"><h3>{phase.title}</h3><p>{phase.timing}</p></div>
     <div className="guide-phase-content"><h4>ผู้เล่นต้องทำอะไร</h4><p>{player}</p></div>
     {phase.stops && <div className="guide-phase-content guide-phase-stop"><h4>หยุดทำ</h4><p>{phase.stops}</p></div>}
-    {phase.points && <ul>{phase.points.map((point) => <li key={point}>{point}</li>)}</ul>}
+    {phase.points && <ul>{phase.points.map((point) => <li key={point}>{isVote && tieRunoffRules && point.includes("ลำดับสุ่มลับ")
+      ? "คะแนนสูงสุดเสมอใช้อันดับ Police ถ้าไม่มีอันดับหรือ Police อยู่ในกลุ่มที่เสมอ ผู้มีสิทธิ์เดิมโหวตเฉพาะคนที่เสมออีก 1 นาที ห้ามเลือกตัวเอง หากยังเสมอ Killer Side ชนะ รอบแก้เสมอมีได้ครั้งเดียวต่อรอบหลัก และแยกจากรอบจับ Wife ได้"
+      : point}</li>)}</ul>}
     <details><summary>หน้าที่ Host</summary><p>{phase.host}</p></details>
   </li>;
 }

@@ -518,7 +518,9 @@ test("latest migrations retain the rules RPCs and add an end-game timeline proje
       ].map((match) => [match[1], match[0]]),
     );
   const latest = definitions(migration);
-  assert.match(latest.get("get_room_view"), /endGameTimeline/);
+  assert.match(latest.get("get_room_view"), /get_room_view_pre_runoff\(p_code\)/);
+  assert.match(migration, /alter function public\.get_room_view\(text\) rename to get_room_view_pre_runoff/);
+  assert.match(migration, /endGameTimeline/);
   assert.match(latest.get("approve_evidence"), /approve_evidence_legacy/);
   assert.match(latest.get("resolve_police_check"), /'active','police-check'/);
 });

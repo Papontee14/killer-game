@@ -264,6 +264,86 @@ test("new Wife revote excludes the Wife without killing her, then resolves only 
   const ballots = await db.query("select round,count(*)::int count from public.v24_ballots group by round order by round");
   assert.deepEqual(ballots.rows.map((row) => Number(row.round)), [1, 2]);
 });
+async function runoffVoting() {
+  await voting(1);
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true,'wifeRevoteRules',true,'tieRunoffRules',true,'voteRound',1,'voteRounds','[]'::jsonb)");
+}
+const roundBallot = (role, round, target, ranking = []) => f.as(role, "submit_final_ballot_round", ["ABCDEF", round, [f.players[target]], ranking]);
+async function finishVote() {
+  await db.exec("update public.rooms set v24=v24||jsonb_build_object('voteEndsAt',clock_timestamp()-interval '1 second')");
+  return view("host");
+}
+test("missing Police ballot opens a private immutable runoff limited to tied candidates", async () => {
+  await runoffVoting();
+  await roundBallot("villager", 1, "killer");
+  await roundBallot("reporter", 1, "athlete");
+  const runoff = await finishVote();
+  assert.equal(runoff.v24.voteRound, 3);
+  assert.deepEqual(new Set(runoff.v24.runoffCandidates), new Set([f.players.killer, f.players.athlete]));
+  assert.ok(Date.parse(runoff.v24.voteEndsAt)-Date.now() > 55000);
+  assert.ok(Date.parse(runoff.v24.voteEndsAt)-Date.now() <= 60000);
+  assert.equal((await view("villager")).v24.myBallot, null);
+  await assert.rejects(roundBallot("villager", 1, "killer"), /vote unavailable/);
+  await assert.rejects(roundBallot("villager", 3, "reporter"), /invalid ballot/);
+  await assert.rejects(roundBallot("killer", 3, "killer"), /invalid ballot/);
+  await assert.rejects(roundBallot("outsider", 3, "killer"), /vote unavailable/);
+  await assert.rejects(roundBallot("host", 3, "killer"), /vote unavailable/);
+  await roundBallot("villager", 3, "killer");
+  await roundBallot("villager", 3, "athlete");
+  assert.deepEqual((await view("villager")).v24.myBallot.nominees, [f.players.killer]);
+  assert.equal((await view("reporter")).v24.ballots, undefined);
+  assert.equal((await view("reporter")).v24.fallback, undefined);
+  assert.equal((await finishVote()).winner, "city");
+});
+test("Police ranks break a main-round tie unless Police is among the tied candidates", async () => {
+  await runoffVoting();
+  const ranks = [f.players.killer, ...Object.values(f.players).filter(id => ![f.players.killer,f.players.police].includes(id))];
+  await roundBallot("police", 1, "athlete", ranks);
+  await roundBallot("villager", 1, "killer");
+  assert.equal((await finishVote()).winner, "city");
+});
+test("a tie involving Police opens runoff even with ranking; another tie loses without Police tiebreak", async () => {
+  await runoffVoting();
+  const ranks = Object.values(f.players).filter(id => id!==f.players.police);
+  await roundBallot("police", 1, "killer", ranks);
+  await roundBallot("villager", 1, "police");
+  assert.equal((await finishVote()).v24.voteRound, 3);
+  await roundBallot("police", 3, "killer");
+  await roundBallot("villager", 3, "police");
+  const result = await finishVote();
+  assert.equal(result.winner, "killers");
+  assert.deepEqual(result.v24.nominees, []);
+  assert.equal(result.v24.voteRounds.at(-1).tied, true);
+});
+test("Wife selected in runoff opens main round two with its own single runoff", async () => {
+  await runoffVoting();
+  await roundBallot("villager", 1, "killer-wife");
+  await roundBallot("reporter", 1, "athlete");
+  assert.equal((await finishVote()).v24.voteRound, 3);
+  await roundBallot("villager", 3, "killer-wife");
+  const second = await finishVote();
+  assert.equal(second.v24.voteRound, 2);
+  assert.deepEqual(second.v24.runoffCandidates, []);
+  assert.ok(Date.parse(second.v24.voteEndsAt)-Date.now()>175000);
+  await assert.rejects(roundBallot("killer-wife", 2, "killer"), /vote unavailable/);
+  await roundBallot("villager", 2, "killer");
+  await roundBallot("reporter", 2, "athlete");
+  assert.equal((await finishVote()).v24.voteRound, 4);
+  await assert.rejects(roundBallot("killer-wife", 4, "killer"), /vote unavailable/);
+  await roundBallot("villager", 4, "killer");
+  assert.equal((await finishVote()).winner, "city");
+});
+test("all abstentions give one runoff then Killer victory", async () => {
+  await runoffVoting();
+  assert.equal((await finishVote()).v24.voteRound, 3);
+  assert.equal((await finishVote()).winner, "killers");
+});
+test("runoff migration is repeatable and preserves games already in progress", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260912_final_tie_runoff.sql", import.meta.url), "utf8");
+  await db.exec(sql);
+  await db.exec(sql);
+  assert.equal((await view("host")).v24.tieRunoffRules, false);
+});
 test("new rules end for City when a bomb eliminates the original Killer", async () => {
   await db.exec(
     "update public.rooms set v24=v24||jsonb_build_object('finalVoteRules',true,'bombAt',clock_timestamp())",
@@ -417,6 +497,7 @@ test("new room starts with Doctor and configurable schedule, no Sumo", async () 
     { killer: 1, police: 1, doctor: 1 },
   ]);
   assert.equal(result.phase, "active");
+  assert.equal(result.v24.tieRunoffRules, true);
   assert.equal(
     Date.parse(result.v24.finalAt) - Date.parse(result.v24.startedAt),
     300 * 60000,

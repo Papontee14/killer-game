@@ -22,6 +22,7 @@ export const migration = (
       "20260910_remove_recovery_tokens.sql",
       "20260910_killer_target_protection.sql",
       "20260911_wife_revote.sql",
+      "20260912_final_tie_runoff.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),

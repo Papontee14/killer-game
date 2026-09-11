@@ -470,7 +470,7 @@ export function doctorAbility(code: string, targetId: string) { return mutate(co
 export function revealPolice(code: string) { return mutate(code, "reveal_police"); }
 export function resolveV24Action(code: string, actionId: string) { return mutate(code, "v24_apply", { p_action_id: actionId, p_approve: true }); }
 export function submitFinalBallot(code: string, nominees: string[], ranking: string[]) { return mutate(code, "submit_final_ballot", { p_nominees: nominees, p_ranking: ranking }); }
-export function submitFinalBallotRound(code: string, round: 1 | 2, nominees: string[], ranking: string[]) {
+export function submitFinalBallotRound(code: string, round: 1 | 2 | 3 | 4, nominees: string[], ranking: string[]) {
   return mutate(code, "submit_final_ballot_round", { p_round: round, p_nominees: nominees, p_ranking: ranking });
 }
 export function resolveFinal(code: string) { return mutate(code, "resolve_final"); }

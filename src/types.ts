@@ -237,8 +237,10 @@ export type FinalVoteRound = {
   round: 1 | 2;
   nominees: string[];
   resolvedAt: string;
-  outcome: "wife-revote" | "city" | "killers";
+  outcome: "wife-revote" | "tie-runoff" | "city" | "killers";
   wifePlayerId?: string;
+  runoff?: boolean;
+  tied?: boolean;
 };
 export type V24State = {
   durationMinutes?: number; startedAt?: string; cutoffAt?: string;
@@ -253,7 +255,9 @@ export type V24State = {
   finalVoteRules?: boolean;
   /** Present only for games that can reopen Final after selecting the Wife. */
   wifeRevoteRules?: boolean;
-  voteRound?: 1 | 2;
+  tieRunoffRules?: boolean;
+  runoffCandidates?: string[];
+  voteRound?: 1 | 2 | 3 | 4;
   excludedVoterIds?: string[];
   voteRounds?: FinalVoteRound[];
 };

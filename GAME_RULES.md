@@ -118,15 +118,25 @@ Killers (one or two). The relevant compatibility behavior is called out below.
 - Earlier 2.4 rooms freeze both living voter IDs and active Killer count K (one
   or two). Each ballot chooses exactly K distinct other living players, and City
   wins only when the nominees equal the complete living active-Killer set.
-- Submission is immutable within its round; retries cannot replace it. Missing
-  ballots abstain. Each round has its own Police ranking and private fallback.
+- Submission is immutable within its ballot; retries cannot replace it. Missing
+  ballots abstain. Each main round has its own Police ranking.
   Players cannot see other ballots, live scores or fallback ranking.
 - Each selected name earns one point. The top required number of names become
   nominees: one in current-rule rooms, or K in earlier 2.4 rooms.
-- Police ranks every other living player with their ballot. Use ranking only
-  within tied scores. Commit a random private fallback permutation before votes
-  open. Use fallback if Police ranking is absent. Insert Police at their fallback
-  position while preserving the relative order of the other Police-ranked names.
+- New games (`tieRunoffRules=true`): Police ranks every other eligible living
+  player with their main ballot. For a highest-score tie, use that ranking only
+  when submitted and Police is not among the tied candidates. Otherwise open
+  one 60-second runoff among the tied candidates, with the same voters and no
+  self-voting. Communication Lock stays in force. Discard the earlier scores;
+  count only runoff ballots. A unique winner is selected normally; any remaining
+  tie (including all abstaining) gives Killer Side victory, without a nominee.
+  Police ranking is not used in a runoff. No random fallback decides new games.
+- Each main round permits at most one runoff. Selecting Wife in the first main
+  round or its runoff reveals and excludes her, then starts main round two for
+  three minutes, with its own possible runoff. There is no third main round.
+- Games already started retain the previous tie rule: use Police ranking within
+  tied scores, or a private random permutation committed before voting if absent.
+  Police occupies their fallback position, preserving other ranked names' order.
 - Host sees ballots for moderation. Communication after lock can receive a
   recorded warning, without automatic ballot invalidation or voting extension.
 - Publish nominees/winner at deadline. Post-game role summary remains available
@@ -149,8 +159,8 @@ Killers (one or two). The relevant compatibility behavior is called out below.
 ## Defaults beyond the source document
 
 User-selected: configurable composition/duration with fixed cooldowns; retain
-legacy rooms; Host judges Bomber proximity from the evidence image; absent voters abstain and Police ties
-have precommitted fallback. Engineering defaults: two-minute ordering watermark,
+legacy rooms; Host judges Bomber proximity from the evidence image; absent voters abstain;
+new-game ties use the Police/runoff procedure above. Engineering defaults: two-minute ordering watermark,
 stable same-time ordering, minimum three players, maximum 48-hour duration and
 a full three-minute vote after delayed Host resolution. These are explicit
 handling rules, not claims from the document's balance experiments.

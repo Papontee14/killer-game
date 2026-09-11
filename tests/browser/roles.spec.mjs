@@ -58,6 +58,18 @@ test('v24 secret vote submits a private immutable ballot',async({page})=>{
   const reporter=await f.as('reporter','get_room_view',['ABCDEF']); expect(reporter.v24.myBallot).toBeNull(); expect(reporter.v24.ballots).toBeUndefined();
   await page.screenshot({path:test.info().outputPath('v24-vote-390.png'),fullPage:true});
 });
+test('runoff shows only tied candidates and submits a fresh ballot',async({page})=>{
+  await enableV24();
+  const ids=Object.values(f.players);
+  await db.query("update public.rooms set v24=v24||jsonb_build_object('stage','secret-vote','finalVoteRules',true,'wifeRevoteRules',true,'tieRunoffRules',true,'voteRound',3,'cutoffAt',clock_timestamp()-interval '30 minutes','finalAt',clock_timestamp()-interval '1 minute','voteEndsAt',clock_timestamp()+interval '1 minute','nomineeCount',1,'fallback',$1::jsonb,'voters',$1::jsonb,'runoffCandidates',$2::jsonb)",[JSON.stringify(ids),JSON.stringify([f.players.killer,f.players.athlete])]);
+  await openPlayer(page,'villager');
+  await expect(page.getByRole('heading',{name:'โหวตลับรอบ 1 · แก้เสมอ 1 นาที'})).toBeVisible();
+  await expect(page.getByRole('checkbox')).toHaveCount(2);
+  await page.getByRole('checkbox',{name:'killer',exact:true}).check();
+  await page.getByRole('button',{name:'ตรวจ ballot ก่อนส่ง'}).click();
+  await page.getByRole('button',{name:'ส่ง ballot ลับ · แก้ไม่ได้'}).click();
+  await expect(page.getByText(/ส่ง ballot แล้ว: killer/)).toBeVisible();
+});
 test('v24 Host shows ordered queue and settings without legacy schedule',async({page})=>{
   await enableV24(); await page.setViewportSize({width:1440,height:1000}); await openPlayer(page,'host');
   await expect(page.getByRole('heading',{name:'คิวตาม effective time'})).toBeVisible();
@@ -116,6 +128,7 @@ async function openPlayer(
           const orders = {
             create_room: ["p_code", "p_host_name"],
             start_game: ["p_code", "p_role_counts"],
+            submit_final_ballot_round: ["p_code", "p_round", "p_nominees", "p_ranking"],
             get_room_view: ["p_code"],
             resolve_bomb: ["p_code", "p_target_ids"],
             end_game: ["p_code"],

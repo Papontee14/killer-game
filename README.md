@@ -25,6 +25,8 @@ npm run dev
 
 สำหรับฐานข้อมูลเดิม ให้รัน migration ตามลำดับจนถึง `supabase/migrations/20260905_end_game_summary.sql` ก่อนเผยแพร่หน้าเว็บรุ่นที่มีหน้าสรุปเกม (migration นี้ต้องตามหลัง `20260905_anonymous_attack_events.sql`) สมาชิกห้องจะอ่านเฉลยบทบาทและฝ่ายได้เฉพาะเมื่อเกมจบ รวมถึงหลัง Host ปิดห้อง โดยรูปหลักฐานและข้อมูลส่วนตัวอื่นยังใช้สิทธิ์เดิม
 
+สำหรับฐานข้อมูลเดิม ให้รัน `supabase/migrations/20260923_private_realtime_broadcast.sql` หลัง migration ปัจจุบันและก่อน deploy frontend รุ่นที่เปิด Broadcast ค่าเริ่มต้นใช้ Broadcast; หากต้องการกลับไปใช้ Postgres Changes ให้ตั้ง `NEXT_PUBLIC_ROOM_REALTIME_TRANSPORT=postgres` แล้ว deploy ใหม่ ให้คง publication `supabase_realtime` และตาราง `room_signals` ไว้ระหว่าง rollout
+
 หน้าเว็บรองรับ RPC รุ่นเดิมที่ไม่ส่ง `endGameSummary` ผ่าน `POST /api/room/summary` ด้วย โดยต้องตั้ง `SUPABASE_SERVICE_ROLE_KEY` ใน environment ของเซิร์ฟเวอร์ (ห้ามใช้ prefix `NEXT_PUBLIC_`) เส้นทางนี้ตรวจสมาชิกและสถานะจบเกมด้วย RPC ภายใต้ token ของผู้เรียกก่อนอ่านเฉพาะบทบาทและฝ่าย ไม่มีการเปิดเผยหัวใจหรือหลักฐาน และไม่ cache ผลตอบกลับ หากโหลดไม่สำเร็จ หน้าเว็บจะลองใหม่ในการรีเฟรชสถานะห้องรอบถัดไป
 
 ## Player re-entry

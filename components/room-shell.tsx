@@ -50,6 +50,7 @@ import {
   endGame,
   heartbeat,
   joinOrCreateDemo,
+  loadRecentRoomNotifications,
   loadAttackActivityImage,
   loadEndGameStory,
   loadRoom,
@@ -63,7 +64,7 @@ import {
   startGame,
   submitEvidence,
 } from "@/src/room-store";
-import { getSupabaseBrowser } from "@/src/supabase-browser";
+import { ensureAnonymousSession, getSupabaseBrowser } from "@/src/supabase-browser";
 import {
   clearActiveRoom,
   forgetRoomCredentials,
@@ -139,6 +140,7 @@ function useRoom(code: string) {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [stale, setStale] = useState(false);
+  const requestVersion = useRef(0);
   useEffect(() => {
     if (room?.closedAt) clearActiveRoom();
   }, [room?.closedAt]);
@@ -146,53 +148,129 @@ function useRoom(code: string) {
     latestRoom = next;
     setRoom(next);
   }, []);
-  const refresh = useCallback(
-    () =>
-      loadRoom(code)
-        .then((next) => {
-          replaceRoom(next);
-          setStale(false);
-        })
-        .catch(() => setStale(true)),
-    [code, replaceRoom],
-  );
+  const refresh = useCallback(async () => {
+    const version = ++requestVersion.current;
+    try {
+      const next = await loadRoom(code);
+      if (requestVersion.current === version) {
+        replaceRoom(next);
+        setStale(false);
+      }
+    } catch {
+      if (requestVersion.current === version) setStale(true);
+    } finally {
+      if (requestVersion.current === version) setInitialLoadComplete(true);
+    }
+  }, [code, replaceRoom]);
   useEffect(() => {
     let stopped = false;
+    const supabase = getSupabaseBrowser();
+    let roomChannel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+    let fallbackChannel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+    let refreshTimer: number | undefined;
+    let refreshRunning = false;
+    let refreshPending = false;
+    let fallbackStarted = false;
 
-    const refreshIfLive = async () => {
-      try {
-        const next = await loadRoom(code);
-        if (!stopped) {
-          // Realtime updates the open view only. Web Push is the single mobile
-          // notification path, so a delayed push cannot duplicate this update.
-          replaceRoom(next);
-          setStale(false);
+    const refreshNow = () => {
+      if (!stopped) void refresh();
+    };
+    const refreshQueued = () => {
+      if (stopped) return;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = undefined;
+        if (refreshRunning) {
+          refreshPending = true;
+          return;
         }
+        refreshRunning = true;
+        void refresh().finally(() => {
+          refreshRunning = false;
+          if (refreshPending && !stopped) {
+            refreshPending = false;
+            refreshQueued();
+          }
+        });
+      }, 50);
+    };
+    const startPostgresFallback = () => {
+      if (stopped || !supabase || fallbackStarted) return;
+      fallbackStarted = true;
+      if (roomChannel) {
+        void supabase.removeChannel(roomChannel);
+        roomChannel = null;
+      }
+      fallbackChannel = supabase
+        .channel(`room-signal-fallback-${code}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "room_signals" },
+          refreshQueued,
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") refreshNow();
+        });
+    };
+
+    const timer = window.setInterval(refreshQueued, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshNow();
+    };
+    window.addEventListener("online", refreshNow);
+    document.addEventListener("visibilitychange", onVisible);
+
+    const connect = async () => {
+      if (!supabase) {
+        refreshNow();
+        return;
+      }
+      try {
+        const session = await ensureAnonymousSession();
+        if (stopped) return;
+        if (session) await supabase.realtime.setAuth(session.access_token);
+        refreshNow();
+
+        if (process.env.NEXT_PUBLIC_ROOM_REALTIME_TRANSPORT === "postgres") {
+          startPostgresFallback();
+          return;
+        }
+
+        roomChannel = supabase
+          .channel(`room:${code}`, { config: { private: true } })
+          .on("broadcast", { event: "room_changed" }, refreshQueued)
+          .subscribe((status) => {
+            if (stopped) return;
+            if (status === "SUBSCRIBED") refreshNow();
+            else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") startPostgresFallback();
+          });
       } catch {
-        if (!stopped) setStale(true);
-      } finally {
-        if (!stopped) setInitialLoadComplete(true);
+        if (!stopped) {
+          setStale(true);
+          startPostgresFallback();
+        }
       }
     };
-    refreshIfLive();
-    const timer = window.setInterval(() => void refreshIfLive(), 15000);
-    const supabase = getSupabaseBrowser();
-    const channel = supabase
-      ?.channel(`room-signal-${code}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "room_signals" },
-        () => void refreshIfLive(),
-      )
-      .subscribe();
+    void connect();
+
     return () => {
       stopped = true;
       window.clearInterval(timer);
-      if (channel) supabase?.removeChannel(channel);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      window.removeEventListener("online", refreshNow);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (roomChannel) void supabase?.removeChannel(roomChannel);
+      if (fallbackChannel) void supabase?.removeChannel(fallbackChannel);
     };
-  }, [code, replaceRoom]);
+  }, [code, refresh]);
   const run = useCallback(
-    (operation: Promise<RoomState>) => operation.then(replaceRoom),
+    (operation: Promise<RoomState>) => {
+      const version = ++requestVersion.current;
+      return operation.then((next) => {
+        if (requestVersion.current === version) replaceRoom(next);
+        return next;
+      });
+    },
     [replaceRoom],
   );
   return [room, refresh, run, replaceRoom, initialLoadComplete, stale] as const;
@@ -841,8 +919,6 @@ function EndGameReasonPanel({ room }: { room: RoomState }) {
   );
 }
 
-type ForegroundNotification = { id: string; kind: "generic" | "evidence" | "police-reminder"; created_at: string };
-
 function useRoomNotifications(code: string, onNotice: (message: string) => void, refresh: () => void) {
   const seen = useRef(new Set<string>());
   const connectedOnce = useRef(false);
@@ -850,28 +926,72 @@ function useRoomNotifications(code: string, onNotice: (message: string) => void,
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
     let stopped = false;
-    const message = (item: ForegroundNotification) => item.kind === "police-reminder"
+    const message = (item: Awaited<ReturnType<typeof loadRecentRoomNotifications>>[number]) => item.kind === "police-reminder"
       ? "ตำรวจจะทำการชี้ตัวใน 3 นาที" : item.kind === "evidence"
         ? "มีหลักฐานใหม่รอตรวจสอบ" : "มีเหตุการณ์ใหม่ในห้อง";
-    const receive = (item: ForegroundNotification, announce: boolean) => {
-      if (seen.current.has(item.id)) return;
+    const receive = (item: Awaited<ReturnType<typeof loadRecentRoomNotifications>>[number], announce: boolean) => {
+      if (item.room_code !== code || Date.parse(item.due_at) > Date.now() || seen.current.has(item.id)) return;
       seen.current.add(item.id);
       if (announce && Date.now() - Date.parse(item.created_at) <= 30_000) onNotice(message(item));
       refresh();
     };
     const catchUp = async (announce: boolean) => {
-      const { data } = await supabase.from("room_notifications").select("id,kind,created_at")
-        .gte("created_at", new Date(Date.now() - 30_000).toISOString());
-      if (!stopped) (data || []).forEach((item) => receive(item as ForegroundNotification, announce));
+      try {
+        const rows = await loadRecentRoomNotifications(code);
+        if (!stopped) rows.forEach((item) => receive(item, announce));
+      } catch { /* The room refresh/polling path remains available. */ }
     };
-    const channel = supabase.channel(`room-notification-${code}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_notifications" }, (payload) => receive(payload.new as ForegroundNotification, true))
-      .subscribe((status) => {
-        if (status !== "SUBSCRIBED") return;
-        void catchUp(connectedOnce.current);
-        connectedOnce.current = true;
-      });
-    return () => { stopped = true; supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let fallback: ReturnType<typeof supabase.channel> | null = null;
+    let fallbackStarted = false;
+    const startPostgresFallback = () => {
+      if (stopped || fallbackStarted) return;
+      fallbackStarted = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+        channel = null;
+      }
+      fallback = supabase.channel(`room-notification-fallback-${code}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_notifications" }, () => void catchUp(true))
+        .subscribe((status) => {
+          if (status !== "SUBSCRIBED") return;
+          void catchUp(connectedOnce.current);
+          connectedOnce.current = true;
+        });
+    };
+    const connect = async () => {
+      try {
+        const session = await ensureAnonymousSession();
+        if (stopped || !session) return;
+        await supabase.realtime.setAuth(session.access_token);
+        if (process.env.NEXT_PUBLIC_ROOM_REALTIME_TRANSPORT === "postgres") {
+          startPostgresFallback();
+          return;
+        }
+        channel = supabase.channel(`user:${session.user.id}`, { config: { private: true } })
+          .on("broadcast", { event: "room_notification" }, ({ payload }) => {
+            receive(payload as Awaited<ReturnType<typeof loadRecentRoomNotifications>>[number], true);
+          })
+          .on("broadcast", { event: "host_room_changed" }, ({ payload }) => {
+            if ((payload as { roomCode?: string }).roomCode === code) refresh();
+          })
+          .subscribe((status) => {
+            if (stopped) return;
+            if (status === "SUBSCRIBED") {
+              void catchUp(connectedOnce.current);
+              connectedOnce.current = true;
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") startPostgresFallback();
+          });
+      } catch {
+        if (!stopped) startPostgresFallback();
+      }
+    };
+    void connect();
+    return () => {
+      stopped = true;
+      if (channel) void supabase.removeChannel(channel);
+      if (fallback) void supabase.removeChannel(fallback);
+    };
   }, [code, onNotice, refresh]);
 }
 

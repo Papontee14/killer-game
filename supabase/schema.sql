@@ -941,7 +941,7 @@ begin
 end $$;
 
 create or replace function public.submit_evidence(p_code text,p_target_id uuid,p_storage_path text,p_captured_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
-declare r public.rooms; me uuid; eid uuid; t timestamptz:=clock_timestamp(); protection_until timestamptz;
+declare r public.rooms; me uuid; eid uuid; t timestamptz:=clock_timestamp();
 begin
  select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
  if r.rules_version='2.4' and exists(select 1 from public.players where room_id=r.id and user_id=auth.uid()) then
@@ -953,8 +953,6 @@ begin
  select p.id into me from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=r.id and p.user_id=auth.uid() and p.health<>'dead' and s.is_active_killer;
  if me is null or r.phase not in ('active','bomb-resolution') or t>=(r.v24->>'cutoffAt')::timestamptz or p_captured_at is null or p_captured_at>t or p_captured_at<t-interval '2 minutes' or p_captured_at<(r.v24->>'startedAt')::timestamptz or p_captured_at<=coalesce((r.v24->>'lastResolvedAt')::timestamptz,'-infinity') then raise exception 'evidence is not allowed, missing, or stale'; end if;
  if not exists(select 1 from public.players p join public.player_secrets s on s.player_id=p.id where p.id=p_target_id and p.room_id=r.id and p.id<>me and p.health<>'dead' and not s.is_active_killer) then raise exception 'invalid target'; end if;
- select s.protection_until into protection_until from public.player_secrets s where s.player_id=p_target_id;
- if protection_until>t or protection_until>p_captured_at then raise exception 'target protected; reject evidence'; end if;
  if p_storage_path is null or p_storage_path not like auth.uid()::text||'/%' or not exists(select 1 from storage.objects where bucket_id='evidence' and name=p_storage_path and metadata->>'mimetype' like 'image/%' and metadata->>'size' ~ '^[1-9][0-9]*$') then raise exception 'missing evidence image'; end if;
  if (select count(*) from public.v24_actions where room_id=r.id and actor_id=me and kind='attack' and status='pending')>=2 then raise exception 'pending evidence limit reached'; end if;
  if (select count(*) from public.v24_actions where room_id=r.id and kind='attack' and status in ('pending','approved') and effective_at>p_captured_at-interval '60 minutes')>=3 then raise exception 'rolling attack reservations full'; end if;
@@ -1097,7 +1095,6 @@ end $$;
 notify pgrst,'reload schema';
 commit;
 
-
 -- Remove the pre-game Bomber proximity rule. Host judges the closest player
 -- from the submitted image during bomb resolution.
 begin;
@@ -1181,8 +1178,6 @@ create or replace function public.get_room_view(p_code text) returns jsonb
 language plpgsql security definer set search_path=public as $$
 declare result jsonb; r public.rooms; me public.players; allowed boolean := false; activity jsonb := '[]'::jsonb;
 begin
-  -- endGameTimeline remains in the base projection; this wrapper only narrows
-  -- live protection and attack-history visibility.
   result := public.get_room_view_attack_activity_base(p_code);
   if result is null then return null; end if;
   select * into r from public.rooms where code=upper(trim(p_code));
@@ -1214,50 +1209,194 @@ grant execute on function public.get_room_view(text) to authenticated;
 notify pgrst,'reload schema';
 commit;
 
--- BEGIN END GAME STORY
+-- The post-game story is a member-only audit projection.  It keeps player ids
+-- alongside display data so the client can filter without guessing from text.
 begin;
+
 create table if not exists public.end_game_story_events (
- id uuid primary key default gen_random_uuid(), room_id uuid not null references public.rooms(id) on delete cascade,
- source_type text not null, source_id text not null, kind text not null, occurred_at timestamptz not null,
- actor_player_id uuid references public.players(id), target_player_id uuid references public.players(id),
- affected_player_ids uuid[] not null default '{}'::uuid[], result jsonb not null default '{}'::jsonb,
- created_at timestamptz not null default clock_timestamp(), unique(room_id,source_type,source_id)
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  source_type text not null,
+  source_id text not null,
+  kind text not null,
+  occurred_at timestamptz not null,
+  actor_player_id uuid references public.players(id),
+  target_player_id uuid references public.players(id),
+  affected_player_ids uuid[] not null default '{}'::uuid[],
+  result jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default clock_timestamp(),
+  unique(room_id, source_type, source_id)
 );
-create index if not exists end_game_story_events_room_time_idx on public.end_game_story_events(room_id,occurred_at,created_at,id);
+create index if not exists end_game_story_events_room_time_idx
+  on public.end_game_story_events(room_id, occurred_at, created_at, id);
 alter table public.end_game_story_events enable row level security;
-revoke all on public.end_game_story_events from public,anon,authenticated;
-create or replace function public.record_end_game_story(p_room_id uuid,p_source_type text,p_source_id text,p_kind text,p_occurred_at timestamptz,p_actor uuid default null,p_target uuid default null,p_affected uuid[] default '{}'::uuid[],p_result jsonb default '{}'::jsonb) returns void language sql security definer set search_path=public as $$
- insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result) values(p_room_id,p_source_type,p_source_id,p_kind,p_occurred_at,p_actor,p_target,coalesce(p_affected,'{}'::uuid[]),coalesce(p_result,'{}'::jsonb)) on conflict(room_id,source_type,source_id) do nothing
+revoke all on public.end_game_story_events from public, anon, authenticated;
+
+create or replace function public.record_end_game_story(
+  p_room_id uuid, p_source_type text, p_source_id text, p_kind text,
+  p_occurred_at timestamptz, p_actor uuid default null, p_target uuid default null,
+  p_affected uuid[] default '{}'::uuid[], p_result jsonb default '{}'::jsonb
+) returns void language sql security definer set search_path=public as $$
+  insert into public.end_game_story_events(
+    room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result
+  ) values(
+    p_room_id,p_source_type,p_source_id,p_kind,p_occurred_at,p_actor,p_target,coalesce(p_affected,'{}'::uuid[]),coalesce(p_result,'{}'::jsonb)
+  ) on conflict(room_id,source_type,source_id) do nothing
 $$;
-revoke all on function public.record_end_game_story(uuid,text,text,text,timestamptz,uuid,uuid,uuid[],jsonb) from public,anon,authenticated;
-create or replace function public.capture_story_room_event() returns trigger language plpgsql security definer set search_path=public as $$ begin
- perform public.record_end_game_story(new.room_id,'room-event',new.id::text,case when new.type in ('system','ability','bomb','winner') then new.type else 'event' end,new.created_at,new.visible_to_player_id,null,case when new.visible_to_player_id is null then '{}'::uuid[] else array[new.visible_to_player_id] end,jsonb_build_object('message',new.message)); return new;
+revoke all on function public.record_end_game_story(uuid,text,text,text,timestamptz,uuid,uuid,uuid[],jsonb) from public, anon, authenticated;
+
+-- These triggers capture future activity in the same transaction as its source.
+create or replace function public.capture_story_room_event() returns trigger
+language plpgsql security definer set search_path=public as $$
+begin
+  perform public.record_end_game_story(new.room_id,'room-event',new.id::text,
+    case when new.type in ('system','ability','bomb','winner') then new.type else 'event' end,
+    new.created_at,new.visible_to_player_id,null,
+    case when new.visible_to_player_id is null then '{}'::uuid[] else array[new.visible_to_player_id] end,
+    jsonb_build_object('message',new.message));
+  return new;
 end $$;
 drop trigger if exists end_game_story_room_event on public.room_events;
-create trigger end_game_story_room_event after insert on public.room_events for each row execute function public.capture_story_room_event();
-create or replace function public.capture_story_evidence() returns trigger language plpgsql security definer set search_path=public as $$ begin
- if new.status='approved' and (tg_op='INSERT' or old.status is distinct from 'approved') then perform public.record_end_game_story(new.room_id,'evidence',new.id::text,'attack',new.captured_at,new.killer_id,new.target_id,array[new.target_id],jsonb_build_object('storagePath',new.storage_path,'capturedAt',new.captured_at,'decisionAt',new.decision_at,'result',new.attack_result)); end if; return new;
+create trigger end_game_story_room_event after insert on public.room_events
+  for each row execute function public.capture_story_room_event();
+
+create or replace function public.capture_story_evidence() returns trigger
+language plpgsql security definer set search_path=public as $$
+begin
+  if new.status='approved' and (tg_op='INSERT' or old.status is distinct from 'approved') then
+    perform public.record_end_game_story(new.room_id,'evidence',new.id::text,'attack',new.captured_at,
+      new.killer_id,new.target_id,array[new.target_id],
+      jsonb_build_object('storagePath',new.storage_path,'capturedAt',new.captured_at,
+        'decisionAt',new.decision_at,'result',new.attack_result));
+  end if;
+  return new;
 end $$;
 drop trigger if exists end_game_story_evidence on public.evidence;
-create trigger end_game_story_evidence after insert or update on public.evidence for each row execute function public.capture_story_evidence();
-create or replace function public.capture_story_v24_action() returns trigger language plpgsql security definer set search_path=public as $$ begin
- if new.kind='heal' and new.status='approved' and (tg_op='INSERT' or old.status is distinct from 'approved') then perform public.record_end_game_story(new.room_id,'v24-action',new.id::text,'heal',new.effective_at,new.actor_id,new.target_id,array[new.target_id],jsonb_build_object('healed',new.healed)); end if; return new;
+create trigger end_game_story_evidence after insert or update on public.evidence
+  for each row execute function public.capture_story_evidence();
+
+create or replace function public.capture_story_v24_action() returns trigger
+language plpgsql security definer set search_path=public as $$
+begin
+  if new.kind='heal' and new.status='approved' and (tg_op='INSERT' or old.status is distinct from 'approved') then
+    perform public.record_end_game_story(new.room_id,'v24-action',new.id::text,'heal',new.effective_at,
+      new.actor_id,new.target_id,array[new.target_id],jsonb_build_object('healed',new.healed));
+  end if;
+  return new;
 end $$;
 drop trigger if exists end_game_story_v24_action on public.v24_actions;
-create trigger end_game_story_v24_action after insert or update on public.v24_actions for each row execute function public.capture_story_v24_action();
-create or replace function public.sync_end_game_story(p_room_id uuid) returns void language plpgsql security definer set search_path=public as $$ declare r public.rooms; begin
- select * into r from public.rooms where id=p_room_id; if r.id is null then return; end if;
- perform public.record_end_game_story(r.id,'room','start','game-start',coalesce(nullif(r.v24->>'startedAt','')::timestamptz,(select min(e.created_at) from public.room_events e where e.room_id=r.id and e.message like 'เกมเริ่มแล้ว%'),r.created_at),null,null,'{}'::uuid[],jsonb_build_object('message','เกมเริ่มแล้ว'));
- insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result) select e.room_id,'evidence',e.id::text,'attack',e.captured_at,e.killer_id,e.target_id,array[e.target_id],jsonb_build_object('storagePath',e.storage_path,'capturedAt',e.captured_at,'decisionAt',e.decision_at,'result',e.attack_result) from public.evidence e where e.room_id=r.id and e.status='approved' on conflict(room_id,source_type,source_id) do nothing;
- insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result) select a.room_id,'v24-action',a.id::text,'heal',a.effective_at,a.actor_id,a.target_id,array[a.target_id],jsonb_build_object('healed',a.healed) from public.v24_actions a where a.room_id=r.id and a.kind='heal' and a.status='approved' on conflict(room_id,source_type,source_id) do nothing;
- insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,affected_player_ids,result) select e.room_id,'room-event',e.id::text,case when e.type in ('system','ability','bomb','winner') then e.type else 'event' end,e.created_at,e.visible_to_player_id,case when e.visible_to_player_id is null then '{}'::uuid[] else array[e.visible_to_player_id] end,jsonb_build_object('message',e.message) from public.room_events e where e.room_id=r.id and e.type in ('system','ability','bomb','winner') on conflict(room_id,source_type,source_id) do nothing;
- if r.end_game_result is not null then perform public.record_end_game_story(r.id,'game-end',r.id::text,'game-ended',coalesce(nullif(r.end_game_result->>'occurredAt','')::timestamptz,clock_timestamp()),nullif(r.end_game_result->>'actorPlayerId','')::uuid,nullif(r.end_game_result->>'targetPlayerId','')::uuid,coalesce(array(select jsonb_array_elements_text(r.end_game_result->'affectedPlayerIds')::uuid),'{}'::uuid[]),r.end_game_result); end if;
+create trigger end_game_story_v24_action after insert or update on public.v24_actions
+  for each row execute function public.capture_story_v24_action();
+
+create or replace function public.capture_story_game_end() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare at_time timestamptz;
+begin
+  if new.phase='ended' and old.phase is distinct from 'ended' then
+    at_time:=coalesce(nullif(new.end_game_result->>'occurredAt','')::timestamptz,clock_timestamp());
+    perform public.record_end_game_story(new.id,'game-end',new.id::text,'game-ended',at_time,
+      nullif(new.end_game_result->>'actorPlayerId','')::uuid,
+      nullif(new.end_game_result->>'targetPlayerId','')::uuid,
+      coalesce(array(select jsonb_array_elements_text(new.end_game_result->'affectedPlayerIds')::uuid),'{}'::uuid[]),
+      coalesce(new.end_game_result,'{}'::jsonb));
+  end if;
+  return new;
 end $$;
-create or replace function public.get_end_game_story(p_code text) returns jsonb language plpgsql security definer set search_path=public as $$ declare r public.rooms; member boolean; entries jsonb; begin
- select * into r from public.rooms where code=upper(trim(p_code)); if r.id is null or auth.uid() is null then raise exception 'room not found'; end if; member:=r.host_user_id=auth.uid() or exists(select 1 from public.players p where p.room_id=r.id and p.user_id=auth.uid()); if not member then raise exception 'not allowed'; end if; if r.phase<>'ended' then raise exception 'story is available after the game ends'; end if;
- perform public.sync_end_game_story(r.id); select coalesce(jsonb_agg(jsonb_build_object('id',s.id,'kind',s.kind,'occurredAt',s.occurred_at,'actorPlayerId',s.actor_player_id,'targetPlayerId',s.target_player_id,'affectedPlayerIds',to_jsonb(s.affected_player_ids),'result',s.result) order by s.occurred_at,s.created_at,s.id),'[]'::jsonb) into entries from public.end_game_story_events s where s.room_id=r.id; return jsonb_build_object('entries',entries,'incomplete',not exists(select 1 from public.room_events e where e.room_id=r.id and e.message like 'เกมเริ่มแล้ว%'));
+drop trigger if exists end_game_story_game_end on public.rooms;
+create trigger end_game_story_game_end after update of phase on public.rooms
+  for each row execute function public.capture_story_game_end();
+
+-- The backfill deliberately uses only facts that already exist.  It does not
+-- infer private targets from historic display strings.
+create or replace function public.sync_end_game_story(p_room_id uuid) returns void
+language plpgsql security definer set search_path=public as $$
+declare r public.rooms; started_at timestamptz; vote_counts jsonb;
+begin
+  select * into r from public.rooms where id=p_room_id;
+  if r.id is null then return; end if;
+  started_at:=coalesce(nullif(r.v24->>'startedAt','')::timestamptz,
+    (select min(e.created_at) from public.room_events e where e.room_id=r.id and e.message like 'เกมเริ่มแล้ว%'),r.created_at);
+  perform public.record_end_game_story(r.id,'room','start','game-start',started_at,null,null,'{}'::uuid[],jsonb_build_object('message','เกมเริ่มแล้ว'));
+
+  insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result)
+  select e.room_id,'evidence',e.id::text,'attack',e.captured_at,e.killer_id,e.target_id,array[e.target_id],
+    jsonb_build_object('storagePath',e.storage_path,'capturedAt',e.captured_at,'decisionAt',e.decision_at,'result',e.attack_result)
+  from public.evidence e where e.room_id=r.id and e.status='approved'
+  on conflict(room_id,source_type,source_id) do nothing;
+
+  insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,target_player_id,affected_player_ids,result)
+  select a.room_id,'v24-action',a.id::text,'heal',a.effective_at,a.actor_id,a.target_id,array[a.target_id],jsonb_build_object('healed',a.healed)
+  from public.v24_actions a where a.room_id=r.id and a.kind='heal' and a.status='approved'
+  on conflict(room_id,source_type,source_id) do nothing;
+
+  insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,target_player_id,affected_player_ids,result)
+  select r.id,'milestone',ord::text,
+    case when value->>'kind'='game-ended' then 'game-ended' else 'milestone' end,
+    (value->>'occurredAt')::timestamptz,nullif(value->>'targetPlayerId','')::uuid,
+    case when nullif(value->>'targetPlayerId','') is null then '{}'::uuid[] else array[(value->>'targetPlayerId')::uuid] end,
+    value
+  from jsonb_array_elements(coalesce(r.v24->'milestones','[]'::jsonb)) with ordinality item(value,ord)
+  on conflict(room_id,source_type,source_id) do nothing;
+
+  insert into public.end_game_story_events(room_id,source_type,source_id,kind,occurred_at,actor_player_id,affected_player_ids,result)
+  select e.room_id,'room-event',e.id::text,
+    case when e.type in ('system','ability','bomb','winner') then e.type else 'event' end,
+    e.created_at,e.visible_to_player_id,
+    case when e.visible_to_player_id is null then '{}'::uuid[] else array[e.visible_to_player_id] end,
+    jsonb_build_object('message',e.message)
+  from public.room_events e where e.room_id=r.id and e.type in ('system','ability','bomb','winner')
+  on conflict(room_id,source_type,source_id) do nothing;
+
+  if r.end_game_result is not null then
+    perform public.record_end_game_story(r.id,'game-end',r.id::text,'game-ended',
+      coalesce(nullif(r.end_game_result->>'occurredAt','')::timestamptz,clock_timestamp()),
+      nullif(r.end_game_result->>'actorPlayerId','')::uuid,nullif(r.end_game_result->>'targetPlayerId','')::uuid,
+      coalesce(array(select jsonb_array_elements_text(r.end_game_result->'affectedPlayerIds')::uuid),'{}'::uuid[]),r.end_game_result);
+  end if;
+  if r.rules_version='2.4' and r.v24 ? 'nominees' then
+    select coalesce(jsonb_object_agg(p.id::text,coalesce(v.count,0)),'{}'::jsonb) into vote_counts
+    from unnest(coalesce(array(select jsonb_array_elements_text(r.v24->'nominees')::uuid),'{}'::uuid[])) p(id)
+    left join lateral (select count(*)::int from public.v24_ballots b where b.room_id=r.id and p.id=any(b.nominees)) v on true;
+    perform public.record_end_game_story(r.id,'vote',r.id::text,'vote-summary',
+      coalesce(nullif(r.v24->>'voteEndsAt','')::timestamptz,nullif(r.end_game_result->>'occurredAt','')::timestamptz,clock_timestamp()),
+      null,null,coalesce(array(select jsonb_array_elements_text(r.v24->'nominees')::uuid),'{}'::uuid[]),jsonb_build_object('counts',vote_counts));
+  end if;
 end $$;
-create or replace function public.can_read_attack_activity_evidence(p_path text) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from public.evidence e join public.rooms r on r.id=e.room_id left join public.players p on p.room_id=r.id and p.user_id=auth.uid() where e.storage_path=p_path and (r.host_user_id=auth.uid() or (e.status='approved' and (p.health='dead' or r.phase='ended')))) $$;
+
+create or replace function public.get_end_game_story(p_code text) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare r public.rooms; member boolean; entries jsonb; incomplete boolean;
+begin
+  select * into r from public.rooms where code=upper(trim(p_code));
+  if r.id is null or auth.uid() is null then raise exception 'room not found'; end if;
+  member:=r.host_user_id=auth.uid() or exists(select 1 from public.players p where p.room_id=r.id and p.user_id=auth.uid());
+  if not member then raise exception 'not allowed'; end if;
+  if r.phase<>'ended' then raise exception 'story is available after the game ends'; end if;
+  perform public.sync_end_game_story(r.id);
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',s.id,'kind',s.kind,'occurredAt',s.occurred_at,'actorPlayerId',s.actor_player_id,
+    'targetPlayerId',s.target_player_id,'affectedPlayerIds',to_jsonb(s.affected_player_ids),'result',s.result
+  ) order by s.occurred_at,s.created_at,s.id),'[]'::jsonb) into entries
+  from public.end_game_story_events s where s.room_id=r.id;
+  incomplete:=not exists(
+    select 1 from public.room_events e
+    where e.room_id=r.id and e.message like 'เกมเริ่มแล้ว%'
+  );
+  return jsonb_build_object('entries',entries,'incomplete',incomplete);
+end $$;
+
+-- Approved evidence becomes public to room members only after the game ends.
+create or replace function public.can_read_attack_activity_evidence(p_path text) returns boolean
+language sql stable security definer set search_path=public as $$
+  select exists(
+    select 1 from public.evidence e join public.rooms r on r.id=e.room_id
+    left join public.players p on p.room_id=r.id and p.user_id=auth.uid()
+    where e.storage_path=p_path and (
+      r.host_user_id=auth.uid() or (e.status='approved' and (p.health='dead' or r.phase='ended'))
+    )
+  )
+$$;
+
 revoke all on function public.get_end_game_story(text) from public,anon;
 grant execute on function public.get_end_game_story(text) to authenticated;
 notify pgrst,'reload schema';
@@ -1497,8 +1636,71 @@ begin;
 
 create or replace function public.get_room_view(p_code text) returns jsonb
 language plpgsql security definer set search_path=public as $$
+declare result jsonb; r public.rooms; me public.players; allowed boolean := false; hidden boolean := false; activity jsonb := '[]'::jsonb; filtered_events jsonb;
+begin
+  result := public.get_room_view_attack_activity_base(p_code);
+  if result is null then return null; end if;
+  select * into r from public.rooms where code=upper(trim(p_code));
+  if r.id is null or auth.uid() is null then return result; end if;
+  if r.host_user_id=auth.uid() then allowed:=true;
+  else select * into me from public.players where room_id=r.id and user_id=auth.uid(); allowed:=me.id is not null and me.health='dead'; end if;
+  hidden:=coalesce((r.v24->>'finalVoteRules')::boolean,false) and r.rules_version='2.4' and r.phase<>'ended' and not (r.host_user_id=auth.uid()) and me.id is not null and me.health<>'dead' and clock_timestamp()>=(r.v24->>'cutoffAt')::timestamptz;
+  if hidden then
+    select coalesce(jsonb_agg(value order by ord),'[]'::jsonb) into filtered_events
+    from jsonb_array_elements(coalesce(result->'events','[]'::jsonb)) with ordinality event(value,ord)
+    where not ((value->>'type') in ('attack','bomb') or ((value->>'type')='warning' and ((value->>'message')='คุณถูกโจมตีและเสียหัวใจ 1 ดวง' or (value->>'message') like '% ถูกกำจัด')) or ((value->>'type')='ability' and (value->>'message') in ('Killer''s Wife has awakened. There are now two active Killers.','คุณปลดพลัง Killer’s Wife แล้ว','Killer has eliminated Killer''s Wife. There are now two Killers.','คุณกลายเป็น Killer แล้ว')));
+    result:=result||jsonb_build_object('events',filtered_events);
+  end if;
+  if allowed then
+    select coalesce(jsonb_agg(jsonb_build_object('id',e.id,'killerId',e.killer_id,'targetId',e.target_id,'storagePath',e.storage_path,'capturedAt',e.captured_at,'decisionAt',e.decision_at,'result',e.attack_result) order by e.captured_at desc,e.id desc),'[]'::jsonb) into activity from public.evidence e where e.room_id=r.id and e.status='approved';
+  end if;
+  if coalesce(jsonb_typeof(result->'privateStates'), 'null') <> 'object' then
+    result := result || jsonb_build_object('privateStates', '{}'::jsonb);
+  end if;
+  return result||jsonb_build_object('canViewAttackActivity',allowed,'attackActivity',activity,'attackActivityHidden',hidden);
+end $$;
+
+revoke all on function public.get_room_view(text) from public,anon;
+grant execute on function public.get_room_view(text) to authenticated;
+
+notify pgrst,'reload schema';
+commit;
+
+-- Active Killers need a narrowly scoped view of target protection before they
+-- take a photo. The RPC remains the authority for every client.
+begin;
+
+create or replace function public.submit_evidence(p_code text,p_target_id uuid,p_storage_path text,p_captured_at timestamptz) returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.rooms; me uuid; eid uuid; t timestamptz:=clock_timestamp(); protection_until timestamptz;
+begin
+ select * into r from public.rooms where code=upper(trim(p_code)) and closed_at is null for update;
+ if r.rules_version='2.4' and exists(select 1 from public.players where room_id=r.id and user_id=auth.uid()) then
+  perform public.v24_tick(r.id); select * into r from public.rooms where id=r.id;
+  if r.phase='ended' then return public.get_room_view(p_code)||jsonb_build_object('actionError','game_ended'); end if;
+ end if;
+ t:=clock_timestamp();
+ if r.rules_version<>'2.4' then return public.submit_evidence_pre24(p_code,p_target_id,p_storage_path,p_captured_at); end if;
+ select p.id into me from public.players p join public.player_secrets s on s.player_id=p.id where p.room_id=r.id and p.user_id=auth.uid() and p.health<>'dead' and s.is_active_killer;
+ if me is null or r.phase not in ('active','bomb-resolution') or t>=(r.v24->>'cutoffAt')::timestamptz or p_captured_at is null or p_captured_at>t or p_captured_at<t-interval '2 minutes' or p_captured_at<(r.v24->>'startedAt')::timestamptz or p_captured_at<=coalesce((r.v24->>'lastResolvedAt')::timestamptz,'-infinity') then raise exception 'evidence is not allowed, missing, or stale'; end if;
+ if not exists(select 1 from public.players p join public.player_secrets s on s.player_id=p.id where p.id=p_target_id and p.room_id=r.id and p.id<>me and p.health<>'dead' and not s.is_active_killer) then raise exception 'invalid target'; end if;
+ select s.protection_until into protection_until from public.player_secrets s where s.player_id=p_target_id;
+ -- A photo taken before protection expires is invalid even if the upload waits
+ -- until after expiry. Equality is allowed: protection has ended at that instant.
+ if protection_until>t or protection_until>p_captured_at then raise exception 'target protected; reject evidence'; end if;
+ if p_storage_path is null or p_storage_path not like auth.uid()::text||'/%' or not exists(select 1 from storage.objects where bucket_id='evidence' and name=p_storage_path and metadata->>'mimetype' like 'image/%' and metadata->>'size' ~ '^[1-9][0-9]*$') then raise exception 'missing evidence image'; end if;
+ if (select count(*) from public.v24_actions where room_id=r.id and actor_id=me and kind='attack' and status='pending')>=2 then raise exception 'pending evidence limit reached'; end if;
+ if (select count(*) from public.v24_actions where room_id=r.id and kind='attack' and status in ('pending','approved') and effective_at>p_captured_at-interval '60 minutes')>=3 then raise exception 'rolling attack reservations full'; end if;
+ insert into public.evidence(room_id,killer_id,target_id,storage_path,captured_at) values(r.id,me,p_target_id,p_storage_path,p_captured_at) returning id into eid;
+ insert into public.v24_actions(room_id,actor_id,target_id,kind,effective_at,evidence_id) values(r.id,me,p_target_id,'attack',p_captured_at,eid);
+ return public.get_room_view(p_code);
+end $$;
+
+create or replace function public.get_room_view(p_code text) returns jsonb
+language plpgsql security definer set search_path=public as $$
 declare result jsonb; r public.rooms; me public.players; allowed boolean := false; hidden boolean := false; activity jsonb := '[]'::jsonb; filtered_events jsonb; target_protection jsonb := '{}'::jsonb; show_target_protection boolean := false;
 begin
+  -- endGameTimeline remains in the base projection; this wrapper only narrows
+  -- live protection and attack-history visibility.
   result := public.get_room_view_attack_activity_base(p_code);
   if result is null then return null; end if;
   select * into r from public.rooms where code=upper(trim(p_code));
@@ -1528,11 +1730,9 @@ begin
   return result||jsonb_build_object('canViewAttackActivity',allowed,'attackActivity',activity,'attackActivityHidden',hidden);
 end $$;
 
-revoke all on function public.get_room_view(text) from public,anon;
-grant execute on function public.get_room_view(text) to authenticated;
-
 notify pgrst,'reload schema';
 commit;
+
 -- A current-rule Final can give City one final ballot when it finds the Wife.
 -- Existing rooms intentionally do not receive wifeRevoteRules.
 begin;
@@ -1843,5 +2043,195 @@ end $$;
 revoke all on function public.v24_resolve_vote_pre_runoff(uuid),public.submit_final_ballot_round_pre_runoff(text,integer,uuid[],uuid[]),public.start_game_pre_runoff(text,jsonb),public.get_room_view_pre_runoff(text),public.v24_resolve_vote(uuid) from public,anon,authenticated;
 revoke all on function public.submit_final_ballot_round(text,integer,uuid[],uuid[]),public.start_game(text,jsonb),public.get_room_view(text) from public,anon;
 grant execute on function public.submit_final_ballot_round(text,integer,uuid[],uuid[]),public.start_game(text,jsonb),public.get_room_view(text) to authenticated;
+notify pgrst,'reload schema';
+commit;
+
+-- Deliver harmless room invalidations and recipient-specific notices over
+-- private Supabase Broadcast channels. Postgres Changes remains available as
+-- the client fallback during rollout.
+begin;
+
+create or replace function public.can_receive_room_broadcast(p_topic text)
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists (
+    select 1 from public.rooms r
+    where p_topic='room:'||r.code
+      and (r.host_user_id=auth.uid() or exists (
+        select 1 from public.players p where p.room_id=r.id and p.user_id=auth.uid()
+      ))
+  )
+$$;
+revoke all on function public.can_receive_room_broadcast(text) from public,anon;
+grant execute on function public.can_receive_room_broadcast(text) to authenticated;
+
+create or replace function public.can_receive_user_broadcast(p_topic text)
+returns boolean language sql stable security definer set search_path=public as $$
+  select auth.uid() is not null and p_topic='user:'||auth.uid()::text
+$$;
+revoke all on function public.can_receive_user_broadcast(text) from public,anon;
+grant execute on function public.can_receive_user_broadcast(text) to authenticated;
+
+drop policy if exists "room members receive private room broadcasts" on realtime.messages;
+create policy "room members receive private room broadcasts"
+  on realtime.messages for select to authenticated
+  using (
+    realtime.messages.extension='broadcast'
+    and public.can_receive_room_broadcast((select realtime.topic()))
+  );
+
+drop policy if exists "users receive their private notices" on realtime.messages;
+create policy "users receive their private notices"
+  on realtime.messages for select to authenticated
+  using (
+    realtime.messages.extension='broadcast'
+    and public.can_receive_user_broadcast((select realtime.topic()))
+  );
+
+create or replace function public.emit_private_broadcast(
+  p_topic text, p_event text, p_payload jsonb
+) returns void language plpgsql security definer set search_path=public as $$
+begin
+  -- Keep game mutations healthy if Realtime is unavailable or its SQL helper
+  -- is absent in a local/test database. The existing signal row and polling
+  -- fallback remain the recovery path.
+  if to_regprocedure('realtime.send(jsonb,text,text,boolean)') is null then return; end if;
+  execute 'select realtime.send($1,$2,$3,$4)'
+    using coalesce(p_payload,'{}'::jsonb),p_event,p_topic,true;
+exception when others then
+  return;
+end $$;
+revoke all on function public.emit_private_broadcast(text,text,jsonb) from public,anon,authenticated;
+
+create or replace function public.broadcast_room_signal()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare room_code text;
+begin
+  if tg_op='UPDATE' and new.changed_at is not distinct from old.changed_at then return new; end if;
+  select code into room_code from public.rooms where id=new.room_id;
+  if room_code is not null then
+    perform public.emit_private_broadcast(
+      'room:'||room_code,'room_changed',jsonb_build_object('changedAt',new.changed_at)
+    );
+  end if;
+  return new;
+end $$;
+revoke all on function public.broadcast_room_signal() from public,anon,authenticated;
+drop trigger if exists room_signals_broadcast on public.room_signals;
+create trigger room_signals_broadcast after insert or update on public.room_signals
+  for each row execute function public.broadcast_room_signal();
+
+-- Do not fan out heartbeat-only writes or no-op updates. `now()` is stable for
+-- a transaction, so the room signal row also coalesces repeated changes made
+-- by one game RPC into a single Broadcast invalidation.
+create or replace function public.touch_room_signal_room()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if tg_op='UPDATE' and to_jsonb(new)=to_jsonb(old) then return new; end if;
+  insert into public.room_signals(room_id,changed_at) values(new.id,now())
+  on conflict(room_id) do update set changed_at=excluded.changed_at;
+  return new;
+end $$;
+
+create or replace function public.touch_room_signal_child()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if tg_op='UPDATE' then
+    if tg_table_name='players' and (to_jsonb(new)-'last_seen_at')=(to_jsonb(old)-'last_seen_at') then return new; end if;
+    if to_jsonb(new)=to_jsonb(old) then return new; end if;
+  end if;
+  insert into public.room_signals(room_id,changed_at) values(new.room_id,now())
+  on conflict(room_id) do update set changed_at=excluded.changed_at;
+  return new;
+end $$;
+
+create or replace function public.touch_room_signal_secret()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if tg_op='UPDATE' and to_jsonb(new)=to_jsonb(old) then return new; end if;
+  insert into public.room_signals(room_id,changed_at)
+    select room_id,now() from public.players where id=new.player_id
+  on conflict(room_id) do update set changed_at=excluded.changed_at;
+  return new;
+end $$;
+
+create or replace function public.broadcast_v24_action_change()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare room_code text;
+begin
+  if tg_op='UPDATE' and to_jsonb(new)=to_jsonb(old) then return new; end if;
+  if exists (select 1 from public.room_signals where room_id=new.room_id and changed_at=transaction_timestamp()) then return new; end if;
+  select code into room_code from public.rooms where id=new.room_id;
+  if room_code is not null then
+    perform public.emit_private_broadcast('room:'||room_code,'room_changed','{}'::jsonb);
+  end if;
+  return new;
+end $$;
+revoke all on function public.broadcast_v24_action_change() from public,anon,authenticated;
+drop trigger if exists v24_actions_broadcast on public.v24_actions;
+create trigger v24_actions_broadcast after insert or update on public.v24_actions
+  for each row execute function public.broadcast_v24_action_change();
+
+create or replace function public.broadcast_v24_ballot_to_host()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare room_code text; host_id uuid;
+begin
+  select code,host_user_id into room_code,host_id from public.rooms where id=new.room_id;
+  if room_code is not null and host_id is not null then
+    perform public.emit_private_broadcast(
+      'user:'||host_id::text,'host_room_changed',jsonb_build_object('roomCode',room_code)
+    );
+  end if;
+  return new;
+end $$;
+revoke all on function public.broadcast_v24_ballot_to_host() from public,anon,authenticated;
+drop trigger if exists v24_ballots_broadcast on public.v24_ballots;
+create trigger v24_ballots_broadcast after insert or update on public.v24_ballots
+  for each row execute function public.broadcast_v24_ballot_to_host();
+
+create or replace function public.broadcast_room_notification()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare room_code text;
+begin
+  select code into room_code from public.rooms where id=new.room_id;
+  if room_code is not null then
+    perform public.emit_private_broadcast(
+      'user:'||new.recipient_user_id::text,
+      'room_notification',
+      jsonb_build_object('id',new.id,'kind',new.kind,'created_at',new.created_at,
+        'room_code',room_code,'due_at',new.due_at)
+    );
+  end if;
+  return new;
+end $$;
+revoke all on function public.broadcast_room_notification() from public,anon,authenticated;
+drop trigger if exists room_notifications_broadcast on public.room_notifications;
+create trigger room_notifications_broadcast after insert on public.room_notifications
+  for each row execute function public.broadcast_room_notification();
+
+create or replace function public.get_recent_room_notifications(
+  p_code text, p_since timestamptz default (clock_timestamp()-interval '30 seconds')
+) returns table(id uuid,kind text,created_at timestamptz,room_code text,due_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare normalized_code text:=upper(trim(coalesce(p_code,'')));
+begin
+  if auth.uid() is null or normalized_code='' then raise exception 'not allowed'; end if;
+  if not exists (
+    select 1 from public.rooms r where r.code=normalized_code
+      and (r.host_user_id=auth.uid() or exists (
+        select 1 from public.players p where p.room_id=r.id and p.user_id=auth.uid()
+      ))
+  ) then raise exception 'not allowed'; end if;
+  return query
+    select n.id,n.kind,n.created_at,r.code,n.due_at
+    from public.room_notifications n join public.rooms r on r.id=n.room_id
+    where r.code=normalized_code and n.recipient_user_id=auth.uid()
+      and n.created_at>=greatest(coalesce(p_since,clock_timestamp()-interval '30 seconds'),clock_timestamp()-interval '1 hour')
+      and n.created_at<=clock_timestamp() and n.due_at<=clock_timestamp()
+      and n.expires_at>clock_timestamp() and n.state<>'cancelled'
+    order by n.created_at desc limit 100;
+end $$;
+revoke all on function public.get_recent_room_notifications(text,timestamptz) from public,anon;
+grant execute on function public.get_recent_room_notifications(text,timestamptz) to authenticated;
+
 notify pgrst,'reload schema';
 commit;

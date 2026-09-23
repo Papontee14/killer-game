@@ -413,6 +413,15 @@ test("upgrade applies to existing schema and is repeatable without resetting roo
   const room = await view("host");
   assert.equal(room.rulesVersion, "2.4");
   assert.equal(room.v24.finalVoteRules, undefined);
+  // This shared database began with the current schema. Restore the later
+  // additive migrations after checking the historical upgrade boundary.
+  for (const file of [
+    "20260910_killer_target_protection.sql",
+    "20260911_wife_revote.sql",
+    "20260912_final_tie_runoff.sql",
+  ]) {
+    await db.exec(await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8"));
+  }
 });
 test("migration upgrades a genuine pre-v24 active database without changing its game", async () => {
   const oldDb = new PGlite();

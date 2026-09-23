@@ -489,6 +489,26 @@ export async function heartbeat(code: string) {
   if (error) throw error;
 }
 
+export type RoomForegroundNotification = {
+  id: string;
+  kind: "generic" | "evidence" | "police-reminder";
+  created_at: string;
+  room_code: string;
+  due_at: string;
+};
+
+export async function loadRecentRoomNotifications(code: string) {
+  const normalizedCode = roomCodeValue(code);
+  if (!normalizedCode) throw new Error("ไม่พบรหัสห้อง");
+  await ensureAnonymousSession();
+  const { data, error } = await client().rpc("get_recent_room_notifications", {
+    p_code: normalizedCode,
+    p_since: new Date(Date.now() - 30_000).toISOString(),
+  });
+  if (error) throw error;
+  return (data || []) as RoomForegroundNotification[];
+}
+
 function imageExtension(image: Blob) {
   const subtype = image.type.toLowerCase().split("/")[1];
   const extensions: Record<string, string> = {

@@ -23,6 +23,7 @@ export const migration = (
       "20260910_killer_target_protection.sql",
       "20260911_wife_revote.sql",
       "20260912_final_tie_runoff.sql",
+      "20260923_private_realtime_broadcast.sql",
     ].map((file) =>
       readFile(
         new URL("../supabase/migrations/" + file, import.meta.url),
@@ -43,7 +44,7 @@ export async function database() {
 export async function initializeDatabase(db, native = false, schemaSql = schema) {
   await db.exec(`
     create role anon; create role authenticated;
-    create schema auth; create schema storage;
+    create schema auth; create schema storage; create schema realtime;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$
       select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid
@@ -51,6 +52,17 @@ export async function initializeDatabase(db, native = false, schemaSql = schema)
     grant usage on schema auth,storage to authenticated,anon;
     create table storage.buckets(id text primary key,name text,public boolean);
     create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb,unique(bucket_id,name));
+    create table realtime.messages(id bigint generated always as identity,extension text,topic text,event text,payload jsonb,is_private boolean);
+    create table realtime.broadcast_log(id bigint generated always as identity,topic text,event text,payload jsonb,is_private boolean);
+    alter table realtime.messages enable row level security;
+    create function realtime.topic() returns text language sql stable as $$
+      select nullif(current_setting('realtime.topic',true),'')
+    $$;
+    create function realtime.send(jsonb,text,text,boolean) returns void language sql security definer as $$
+      insert into realtime.broadcast_log(topic,event,payload,is_private) values($3,$2,$1,$4)
+    $$;
+    grant usage on schema realtime to authenticated,anon;
+    grant select on realtime.messages to authenticated,anon;
     alter table storage.objects enable row level security;
     grant select,insert,delete on storage.objects to authenticated;
     create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1,'/') $$;

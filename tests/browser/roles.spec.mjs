@@ -70,9 +70,9 @@ test('runoff shows only tied candidates and submits a fresh ballot',async({page}
   await page.getByRole('button',{name:'ส่ง ballot ลับ · แก้ไม่ได้'}).click();
   await expect(page.getByText(/ส่ง ballot แล้ว: killer/)).toBeVisible();
 });
-test('v24 Host shows ordered queue and settings without legacy schedule',async({page})=>{
+test('v24 Host shows its ordered queue and hides the legacy schedule',async({page})=>{
   await enableV24(); await page.setViewportSize({width:1440,height:1000}); await openPlayer(page,'host');
-  await expect(page.getByRole('heading',{name:'คิวตาม effective time'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'คิวตามเวลาที่เกิดเหตุ'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'ตั้งเวลาตำรวจชี้ตัว'})).not.toBeVisible();
   await page.screenshot({path:test.info().outputPath('v24-host-1440.png'),fullPage:true});
 });
